@@ -23,6 +23,10 @@ gen-apps/**/artifacts/
 gen-apps/**/broadcast/
 gen-apps/**/*.log
 
+# Auto-installed browser binaries (Playwright / Scrapling, used by fetch_web.py)
+.cache/ms-playwright/
+.cache/scrapling/
+
 # Secrets (per-tree .env; .env.example stays tracked)
 .env
 .env.*
