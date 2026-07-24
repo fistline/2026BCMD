@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>코퍼스 그래프 · 위임의 지도</title>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c" aria-label="디지털자산 법안이 기존 법률에 위임하는 관계를 그린 힘-방향 그래프"></canvas>
+
+  <header id="head">
+    <div class="eyebrow">LOCAL CORPUS GRAPH</div>
+    <h1>법령·문서 관계 그래프</h1>
+    <p class="sub">코퍼스에 색인된 문서(법안·법령·신고서)를 노드로, 문서 사이의 참조·의존 관계를 엣지로 그린다.
+       색은 문서 종류, 선이 굵을수록 강한 관계다.
+       기본은 관계가 연결된 노드만 보여주며, 우하단 <b>고립 표시</b>로 관계 없는 문서까지 모두 본다.</p>
+  </header>
+
+  <div id="dbbar" hidden>
+    <span class="live" title="그래프 DB가 바뀌면 자동으로 갱신됩니다"><i></i>LIVE</span>
+    <label class="pick"><span>그래프 DB</span>
+      <select id="dbsel" aria-label="그래프 데이터베이스 선택"></select>
+    </label>
+  </div>
+  <div id="toast" hidden></div>
+
+  <aside id="detail" aria-live="polite">
+    <div class="d-empty"><div class="d-hint">노드에 마우스를 올리면 상세가 여기에.</div></div>
+  </aside>
+
+  <div id="legend">
+    <div class="lg-row"><span class="dot" data-k="document"></span>법안 · 문서</div>
+    <div class="lg-row"><span class="dot" data-k="statute"></span>기존 법률</div>
+    <div class="lg-row"><span class="dot" data-k="symbol"></span>코드 심볼</div>
+    <div class="lg-row"><span class="dot" data-k="module"></span>모듈</div>
+    <div class="lg-sep"></div>
+    <div class="lg-weight"><span>강한 관계</span><i class="wbar"></i><span>약한 관계</span></div>
+  </div>
+
+  <div id="toolbar" role="toolbar" aria-label="그래프 보기 제어">
+    <button id="btnLabels" type="button">핵심 라벨</button>
+    <button id="btnIso"    type="button">고립 표시</button>
+    <button id="btnMotion" type="button">모션 정지</button>
+    <button id="btnReset"  type="button">보기 초기화</button>
+  </div>
+
+  <footer id="foot">
+    <span class="tag" id="cnt-n">— 노드</span><span class="tag" id="cnt-e">— 엣지</span>
+    <span class="muted">제로 의존성 Canvas · 오프라인 자립형 · 실데이터</span>
+  </footer>
+</div>
+
+<style>
+  :root{
+    --bg:#e9edf3; --panel:rgba(255,255,255,.72); --hair:#c4cedd;
+    --ink:#26324a; --muted:#5f6f8c;
+    --node-document:#1f7ae0; --node-statute:#c9821a; --node-symbol:#12a67a; --node-module:#7a52d6;
+    --edge-faint:rgba(40,60,90,.20); --edge-a:#1f7ae0; --edge-b:#c9821a;
+    --label-ink:#1a2540; --label-halo:rgba(233,237,243,.92); --glow:.28;
+    --accent:#1f7ae0; --shadow:0 10px 40px rgba(24,40,72,.14);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0a0e16; --panel:rgba(14,20,32,.66); --hair:#1d2840;
+      --ink:#c7d2e0; --muted:#7a8aa5;
+      --node-document:#5bb0f5; --node-statute:#f2b13c; --node-symbol:#43d6a0; --node-module:#b08cff;
+      --edge-faint:rgba(150,170,200,.16); --edge-a:#5bb0f5; --edge-b:#f2b13c;
+      --label-ink:#e9f0fa; --label-halo:rgba(6,10,18,.86); --glow:.95;
+      --accent:#5bb0f5; --shadow:0 12px 48px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#e9edf3; --panel:rgba(255,255,255,.72); --hair:#c4cedd;
+    --ink:#26324a; --muted:#5f6f8c;
+    --node-document:#1f7ae0; --node-statute:#c9821a; --node-symbol:#12a67a; --node-module:#7a52d6;
+    --edge-faint:rgba(40,60,90,.20); --edge-a:#1f7ae0; --edge-b:#c9821a;
+    --label-ink:#1a2540; --label-halo:rgba(233,237,243,.92); --glow:.28; --accent:#1f7ae0;
+    --shadow:0 10px 40px rgba(24,40,72,.14);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0a0e16; --panel:rgba(14,20,32,.66); --hair:#1d2840;
+    --ink:#c7d2e0; --muted:#7a8aa5;
+    --node-document:#5bb0f5; --node-statute:#f2b13c; --node-symbol:#43d6a0; --node-module:#b08cff;
+    --edge-faint:rgba(150,170,200,.16); --edge-a:#5bb0f5; --edge-b:#f2b13c;
+    --label-ink:#e9f0fa; --label-halo:rgba(6,10,18,.86); --glow:.95; --accent:#5bb0f5;
+    --shadow:0 12px 48px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  #stage{position:fixed; inset:0; overflow:hidden}
+  #stage::before{
+    content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(60% 45% at 38% 26%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+      radial-gradient(50% 40% at 82% 78%, color-mix(in srgb, var(--node-statute) 10%, transparent), transparent 72%);
+  }
+  #c{position:absolute; inset:0; z-index:1; display:block; width:100%; height:100%; touch-action:none; cursor:grab}
+  #c.grabbing{cursor:grabbing}
+
+  #head{position:absolute; z-index:3; top:26px; left:28px; max-width:min(48ch,54vw); pointer-events:auto; user-select:text}
+  #head .eyebrow, #head h1, #head .sub{ user-select:text; cursor:text }
+  .eyebrow{font:600 11px/1 ui-monospace,"SF Mono",Menlo,monospace; letter-spacing:.22em; color:var(--muted); text-transform:uppercase}
+  #head h1{margin:.5rem 0 .35rem; font-size:clamp(1.5rem,3.4vw,2.5rem); font-weight:650; letter-spacing:-.015em; line-height:1.05; text-wrap:balance}
+  #head .sub{margin:0; font-size:.86rem; line-height:1.5; color:var(--muted); max-width:42ch}
+  #head .sub b{color:var(--ink); font-weight:600}
+  #head .sub i{color:var(--accent); font-style:normal; font-weight:600}
+
+  #dbbar{position:absolute; z-index:4; top:22px; left:50%; transform:translateX(-50%);
+    display:flex; align-items:center; gap:14px; padding:8px 13px;
+    background:var(--panel); border:1px solid var(--hair); border-radius:12px; backdrop-filter:blur(12px); box-shadow:var(--shadow)}
+  #dbbar .live{display:inline-flex; align-items:center; gap:7px; font:600 10.5px ui-monospace,Menlo,monospace; letter-spacing:.12em; color:var(--muted)}
+  #dbbar .live i{width:8px; height:8px; border-radius:50%; background:#31c48d; animation:pulse 2.6s infinite}
+  #dbbar .live.flash i{background:var(--accent); animation:none}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(49,196,141,.5)}70%{box-shadow:0 0 0 7px rgba(49,196,141,0)}100%{box-shadow:0 0 0 0 rgba(49,196,141,0)}}
+  #dbbar .pick{display:inline-flex; align-items:center; gap:9px; color:var(--muted)}
+  #dbbar .pick span{font:600 10px ui-monospace,Menlo,monospace; letter-spacing:.08em; text-transform:uppercase}
+  #dbbar select{font:600 12.5px -apple-system,"Apple SD Gothic Neo",sans-serif; color:var(--ink);
+    background:transparent; border:1px solid var(--hair); border-radius:8px; padding:5px 9px; cursor:pointer}
+  #toast{position:absolute; z-index:5; top:72px; left:50%; transform:translateX(-50%);
+    padding:8px 14px; border-radius:10px; background:var(--panel); border:1px solid var(--hair);
+    box-shadow:var(--shadow); backdrop-filter:blur(12px); font-size:.78rem; color:var(--ink)}
+
+  #detail{position:absolute; z-index:3; top:24px; right:24px; width:288px; padding:16px 16px 14px;
+    background:var(--panel); border:1px solid var(--hair); border-radius:14px; backdrop-filter:blur(12px); box-shadow:var(--shadow)}
+  .d-hint{font-size:.8rem; color:var(--muted); line-height:1.5}
+  .d-hubs{margin-top:12px; display:flex; flex-direction:column; gap:7px}
+  .hub{display:flex; align-items:center; gap:9px; font-size:.8rem}
+  .hub .hb{width:26px; text-align:right; font:600 .78rem ui-monospace,Menlo,monospace; color:var(--muted); font-variant-numeric:tabular-nums}
+  .hub .hn{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .d-title{font-size:1.02rem; font-weight:650; letter-spacing:-.01em; line-height:1.25; margin:0 0 8px; word-break:keep-all}
+  .badge{display:inline-flex; align-items:center; gap:6px; font:600 10.5px/1 ui-monospace,Menlo,monospace; letter-spacing:.06em;
+    text-transform:uppercase; padding:4px 8px; border-radius:999px; border:1px solid var(--hair)}
+  .badge .bd{width:8px; height:8px; border-radius:50%}
+  .d-meta{margin:10px 0 12px; display:flex; gap:16px; font-size:.78rem; color:var(--muted)}
+  .d-meta b{display:block; font:650 1.15rem/1 ui-monospace,Menlo,monospace; color:var(--ink); font-variant-numeric:tabular-nums; margin-bottom:2px}
+  .d-links{border-top:1px solid var(--hair); padding-top:10px; display:flex; flex-direction:column; gap:6px; max-height:230px; overflow:auto}
+  .d-link{font-size:.79rem; line-height:1.35; display:flex; gap:7px; align-items:baseline}
+  .d-link .rel{font:600 10px ui-monospace,Menlo,monospace; color:var(--accent); flex:none; opacity:.9}
+  .d-link .to{color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .d-none{font-size:.78rem; color:var(--muted)}
+
+  #legend{position:absolute; z-index:3; left:28px; bottom:26px; padding:13px 15px; font-size:.8rem;
+    background:var(--panel); border:1px solid var(--hair); border-radius:14px; backdrop-filter:blur(12px); box-shadow:var(--shadow)}
+  .lg-row{display:flex; align-items:center; gap:9px; padding:2px 0; color:var(--ink)}
+  .lg-row .dot{width:11px; height:11px; border-radius:50%}
+  .dot[data-k="document"]{background:var(--node-document)}
+  .dot[data-k="statute"]{background:var(--node-statute)}
+  .dot[data-k="symbol"]{background:var(--node-symbol)}
+  .dot[data-k="module"]{background:var(--node-module)}
+  .lg-sep{height:1px; background:var(--hair); margin:9px 0 8px}
+  .lg-weight{display:flex; align-items:center; gap:8px; font:600 10.5px ui-monospace,Menlo,monospace; color:var(--muted)}
+  .wbar{flex:1; height:8px; border-radius:4px; background:linear-gradient(90deg,var(--edge-a),var(--edge-b)); clip-path:polygon(0 42%,100% 0,100% 100%,0 58%)}
+
+  #toolbar{position:absolute; z-index:3; right:24px; bottom:26px; display:flex; gap:8px}
+  #toolbar button{
+    font:600 12px/1 -apple-system,"Apple SD Gothic Neo",sans-serif; color:var(--ink);
+    background:var(--panel); border:1px solid var(--hair); border-radius:10px; padding:9px 12px; cursor:pointer;
+    backdrop-filter:blur(12px); box-shadow:var(--shadow); transition:border-color .15s, color .15s, transform .1s}
+  #toolbar button:hover{border-color:var(--accent); color:var(--accent)}
+  #toolbar button:active{transform:translateY(1px)}
+  #toolbar button[aria-pressed="true"]{border-color:var(--accent); color:var(--accent)}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  #foot{position:absolute; z-index:3; left:50%; bottom:20px; transform:translateX(-50%);
+    display:flex; align-items:center; gap:10px; font-size:.72rem; color:var(--muted);
+    pointer-events:none; flex-wrap:wrap; justify-content:center; max-width:92vw}
+  #foot .tag, #foot .muted{ pointer-events:auto; user-select:text }
+  .tag{font:600 10.5px ui-monospace,Menlo,monospace; letter-spacing:.04em; color:var(--ink);
+    border:1px solid var(--hair); border-radius:999px; padding:3px 9px; background:var(--panel)}
+  #detail, #legend{ user-select:text }
+  .d-pinhint{margin-top:9px; font:600 10px ui-monospace,Menlo,monospace; letter-spacing:.04em; color:var(--accent); opacity:.8}
+
+  @media (max-width:860px){ #detail{display:none} #head{max-width:74vw} #foot .muted{display:none} }
+  @media (prefers-reduced-motion: reduce){ #dbbar .live i{animation:none} }
+</style>
+
+<script>
+const INLINE = /*RAWDATA*/;
+const CFG = window.__VIZ_BOOT__ || null;
+
+/* ---------- palette from CSS (theme-aware single source of truth) ---------- */
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let PAL = {};
+function readPalette(){
+  PAL = {
+    document: cssv('--node-document'), statute: cssv('--node-statute'),
+    symbol: cssv('--node-symbol'), module: cssv('--node-module'),
+    edgeFaint: cssv('--edge-faint'), edgeA: cssv('--edge-a'), edgeB: cssv('--edge-b'),
+    labelInk: cssv('--label-ink'), labelHalo: cssv('--label-halo'),
+    glow: parseFloat(cssv('--glow')) || 0.3, accent: cssv('--accent'),
+  };
+}
+readPalette();
+
+/* ---------- graph state (reassignable so data can be swapped live) ---------- */
+let NODES=[], EDGES=[], BYID=new Map(), OUT=new Map(), IN=new Map(), ADJ=new Map();
+let alpha=1.0;
+let _prevPos=new Map();
+let showIsolated=false, _lastRaw=null;
+const RING = {statute:300, document:150, symbol:250, module:40};
+
+function pretty(n){
+  let s = n.label || n.id;
+  if(n.kind === 'statute') return s.replace(/-/g,' ').replace(/ㆍ/g,'·');
+  s = s.replace(/\.(hwp|hwpx|pdf|md|py|txt)$/i,'');
+  const m = s.match(/^\d{2}_(.+)$/);
+  if(m) return m[1].replace(/_/g,' · ');
+  return s;
+}
+function snapshotPositions(){ _prevPos = new Map(NODES.map(n => [n.id,{x:n.x,y:n.y,vx:n.vx,vy:n.vy}])); }
+
+function ingest(raw, keepView){
+  _lastRaw = raw;
+  hover=null; drag=null; panning=false; selNode=null;
+  const prev = _prevPos;
+  const allNodes = (raw && raw.nodes) || [];
+  const allEdges = (raw && raw.edges) || [];
+  let useNodes = allNodes;
+  if(!showIsolated){
+    const conn = new Set();
+    allEdges.forEach(e => { conn.add(e.source); conn.add(e.target); });
+    useNodes = allNodes.filter(n => conn.has(n.id));
+  }
+  const hidden = allNodes.length - useNodes.length;
+  NODES = useNodes.map(n => ({...n, deg:(n.ind||0)+(n.outd||0)}));
+  BYID = new Map(NODES.map(n => [n.id, n]));
+  EDGES = allEdges.map((e,i) => ({...e, i})).filter(e => BYID.has(e.source) && BYID.has(e.target));
+  EDGES.forEach(e => { e.s = BYID.get(e.source); e.t = BYID.get(e.target); });
+  OUT=new Map(); IN=new Map(); ADJ=new Map();
+  NODES.forEach(n => { OUT.set(n.id,[]); IN.set(n.id,[]); ADJ.set(n.id,new Set()); });
+  EDGES.forEach(e => { OUT.get(e.source).push(e); IN.get(e.target).push(e); ADJ.get(e.source).add(e.target); ADJ.get(e.target).add(e.source); });
+  NODES.forEach(n => n.name = pretty(n));
+  NODES.forEach((n,idx) => {
+    const p = prev.get(n.id);
+    if(p){ n.x=p.x; n.y=p.y; n.vx=p.vx||0; n.vy=p.vy||0; }
+    else {
+      const a=idx*2.399963, r=(RING[n.kind]||180)*(0.75+0.45*((idx*97)%100)/100);
+      n.x=Math.cos(a)*r; n.y=Math.sin(a)*r; n.vx=0; n.vy=0;
+    }
+    n.pin=false;
+  });
+  alpha=1.0;
+  const ticks = keepView ? 24 : 90;
+  for(let i=0;i<ticks;i++) tick();
+  if(!keepView) fitView();
+  _prevPos = new Map(NODES.map(n => [n.id,{x:n.x,y:n.y,vx:n.vx,vy:n.vy}]));
+  document.getElementById('cnt-n').textContent = NODES.length + ' 노드' + (hidden>0 ? ` (+${hidden} 고립)` : '');
+  document.getElementById('cnt-e').textContent = EDGES.length + ' 엣지';
+  updateLegend(); buildHubs(); showDetail(null);
+}
+function updateLegend(){
+  const present = new Set(NODES.map(n => n.kind));
+  document.querySelectorAll('#legend .lg-row').forEach(row => {
+    const dot = row.querySelector('.dot');
+    if(dot) row.style.display = present.has(dot.getAttribute('data-k')) ? '' : 'none';
+  });
+}
+
+/* ---------- canvas & camera ---------- */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W=0, H=0, DPR=1;
+const cam = {x:0, y:0, scale:1};
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.clientWidth; H = canvas.clientHeight;
+  canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+const project = n => ({ x:(n.x-cam.x)*cam.scale + W/2, y:(n.y-cam.y)*cam.scale + H/2 });
+const unproject = (sx,sy) => ({ x:(sx-W/2)/cam.scale + cam.x, y:(sy-H/2)/cam.scale + cam.y });
+
+/* ---------- force simulation ---------- */
+function tick(){
+  if(alpha < 0.006 || !NODES.length) return;
+  const N = NODES.length;
+  for(let i=0;i<N;i++){ NODES[i].fx=0; NODES[i].fy=0; }
+  for(let i=0;i<N;i++){
+    const a = NODES[i];
+    for(let j=i+1;j<N;j++){
+      const b = NODES[j];
+      let dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy+0.01;
+      const f=2600/d2, d=Math.sqrt(d2), ux=dx/d, uy=dy/d;
+      a.fx+=ux*f; a.fy+=uy*f; b.fx-=ux*f; b.fy-=uy*f;
+    }
+  }
+  for(const e of EDGES){
+    const a=e.s,b=e.t;
+    let dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy)+0.01;
+    const L=74+(1-e.weight)*70, f=(d-L)*0.045, ux=dx/d, uy=dy/d;
+    a.fx+=ux*f; a.fy+=uy*f; b.fx-=ux*f; b.fy-=uy*f;
+  }
+  for(const n of NODES){ n.fx += -n.x*0.012; n.fy += -n.y*0.012; }
+  const MAX=26;
+  for(const n of NODES){
+    if(n.pin) continue;
+    n.vx=(n.vx+n.fx)*0.86; n.vy=(n.vy+n.fy)*0.86;
+    n.x += Math.max(-MAX,Math.min(MAX,n.vx*alpha));
+    n.y += Math.max(-MAX,Math.min(MAX,n.vy*alpha));
+  }
+  alpha *= 0.985;
+}
+function wake(a=0.5){ alpha = Math.max(alpha, a); }
+
+/* ---------- geometry ---------- */
+const radius = n => Math.max(3.2, Math.min(46, (5 + 3.1*Math.sqrt(n.deg||0)) * cam.scale));
+function ctrlPoint(A,B,idx){
+  const mx=(A.x+B.x)/2, my=(A.y+B.y)/2, dx=B.x-A.x, dy=B.y-A.y;
+  const len=Math.hypot(dx,dy)||1, off=(idx%2?1:-1)*Math.min(len*0.16, 60);
+  return {x:mx + (-dy/len)*off, y:my + (dx/len)*off};
+}
+const qbez = (A,C,B,t)=>({ x:(1-t)*(1-t)*A.x+2*(1-t)*t*C.x+t*t*B.x, y:(1-t)*(1-t)*A.y+2*(1-t)*t*C.y+t*t*B.y });
+
+/* ---------- interaction state ---------- */
+let hover=null, drag=null, panning=false, last=null, moved=false, selNode=null;
+let labelsAll=false;
+let motion = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function pick(sx,sy){
+  let best=null, bd=Infinity;
+  for(const n of NODES){
+    const p=project(n), r=radius(n)+6, d=Math.hypot(p.x-sx,p.y-sy);
+    if(d<r && d<bd){ bd=d; best=n; }
+  }
+  return best;
+}
+
+/* ---------- render ---------- */
+function frame(now){
+  tick();
+  ctx.clearRect(0,0,W,H);
+  const hi = hover ? ADJ.get(hover.id) : null;
+  const isLit = n => !hover || n===hover || (hi && hi.has(n.id));
+  const edgeLit = e => !hover || e.source===hover.id || e.target===hover.id;
+
+  const order = [...EDGES].sort((a,b)=>a.weight-b.weight);
+  for(const e of order){
+    const A=project(e.s), B=project(e.t), C=ctrlPoint(A,B,e.i);
+    const lit=edgeLit(e), strong=e.weight>=0.5;
+    ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.quadraticCurveTo(C.x,C.y,B.x,B.y);
+    if(strong){
+      const g=ctx.createLinearGradient(A.x,A.y,B.x,B.y);
+      g.addColorStop(0,PAL[e.s.kind]||PAL.edgeA); g.addColorStop(1,PAL[e.t.kind]||PAL.edgeB);
+      ctx.strokeStyle=g;
+    } else ctx.strokeStyle=PAL.edgeFaint;
+    ctx.globalAlpha = lit ? (strong?0.9:0.6) : 0.08;
+    ctx.lineWidth=(0.6+e.weight*2.4); ctx.lineCap='round'; ctx.stroke();
+    if(lit){
+      const p1=qbez(A,C,B,0.90), p0=qbez(A,C,B,0.84), ang=Math.atan2(p1.y-p0.y,p1.x-p0.x);
+      const rT=radius(e.t), tip=qbez(A,C,B,1-(rT+3)/Math.max(Math.hypot(B.x-A.x,B.y-A.y),1)), s=4+e.weight*3;
+      ctx.globalAlpha = strong?0.85:0.4; ctx.fillStyle = strong ? (PAL[e.t.kind]||PAL.edgeB) : PAL.edgeFaint;
+      ctx.beginPath(); ctx.moveTo(tip.x,tip.y);
+      ctx.lineTo(tip.x-Math.cos(ang-0.4)*s, tip.y-Math.sin(ang-0.4)*s);
+      ctx.lineTo(tip.x-Math.cos(ang+0.4)*s, tip.y-Math.sin(ang+0.4)*s);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.globalAlpha=1;
+
+  if(motion){
+    const t=(now||0)/1000;
+    for(const e of order){
+      if(e.weight<0.5) continue;
+      if(hover && !edgeLit(e)) continue;
+      const A=project(e.s), B=project(e.t), C=ctrlPoint(A,B,e.i), ph=(t*0.22 + (e.i%10)/10);
+      for(let k=0;k<2;k++){
+        const tt=((ph+k*0.5)%1), p=qbez(A,C,B,tt);
+        ctx.beginPath(); ctx.arc(p.x,p.y,1.7,0,7);
+        ctx.fillStyle=PAL.edgeB; ctx.globalAlpha=0.55*(1-Math.abs(tt-0.5)*0.7); ctx.fill();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+
+  for(const n of NODES){
+    const p=project(n), r=radius(n), lit=isLit(n), col=PAL[n.kind]||PAL.accent;
+    ctx.save(); ctx.globalAlpha = lit?1:0.28;
+    ctx.shadowColor=col; ctx.shadowBlur=(10+r*0.9)*PAL.glow*(n===hover?1.6:1);
+    const rg=ctx.createRadialGradient(p.x-r*0.3,p.y-r*0.3,r*0.15,p.x,p.y,r);
+    rg.addColorStop(0, mix(col,'#ffffff',0.55)); rg.addColorStop(1, col);
+    ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,7); ctx.fill();
+    ctx.shadowBlur=0; ctx.lineWidth=n===hover?2:1; ctx.strokeStyle=mix(col,'#ffffff',0.35);
+    ctx.globalAlpha=lit?0.9:0.22; ctx.stroke(); ctx.restore();
+  }
+
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const n of NODES){
+    const show = labelsAll || n.deg>=3 || n===hover || (hi && hi.has(n.id));
+    if(!show) continue;
+    const p=project(n), r=radius(n), big=n.deg>=5||n===hover;
+    ctx.font = `${big?600:500} ${big?12.5:11}px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif`;
+    ctx.globalAlpha = (!hover || isLit(n))?1:0.25;
+    let s=n.name; if(s.length>18 && n!==hover) s=s.slice(0,17)+'…';
+    const y=p.y - r - 7;
+    ctx.lineWidth=3.2; ctx.strokeStyle=PAL.labelHalo; ctx.lineJoin='round'; ctx.strokeText(s,p.x,y);
+    ctx.fillStyle=PAL.labelInk; ctx.fillText(s,p.x,y);
+  }
+  ctx.globalAlpha=1;
+  requestAnimationFrame(frame);
+}
+function mix(a,b,t){ const pa=hx(a),pb=hx(b),c=i=>Math.round(pa[i]+(pb[i]-pa[i])*t); return `rgb(${c(0)},${c(1)},${c(2)})`; }
+function hx(s){
+  s=s.trim();
+  if(s[0]==='#'){ if(s.length===4) s='#'+[...s.slice(1)].map(c=>c+c).join(''); return [parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16)]; }
+  const m=s.match(/(\d+\.?\d*)/g); return m?[+m[0],+m[1],+m[2]]:[120,140,170];
+}
+
+/* ---------- detail panel ---------- */
+const KIND_KO={document:'법안 · 문서', statute:'기존 법률', symbol:'코드 심볼', module:'모듈'};
+const REL_KO={delegates_to:'위임', mentions:'언급', defines:'정의', depends_on:'의존', references:'참조', uses:'사용', imports:'임포트'};
+const detail=document.getElementById('detail');
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let EMPTY='';
+function showDetail(n){
+  if(!n){ detail.innerHTML = EMPTY; return; }
+  const outs=OUT.get(n.id)||[], ins=IN.get(n.id)||[], col=PAL[n.kind]||PAL.accent;
+  const link = e => {
+    const other = e.source===n.id ? e.t : e.s, dir = e.source===n.id ? '→' : '←';
+    return `<div class="d-link"><span class="rel">${dir} ${REL_KO[e.relation]||e.relation}</span><span class="to">${esc(other.name)}</span></div>`;
+  };
+  const rows=[...outs,...ins].map(link).join('') || '<div class="d-none">연결된 엣지 없음 (색인상 고립 노드)</div>';
+  detail.innerHTML = `
+    <h2 class="d-title">${esc(n.name)}</h2>
+    <span class="badge"><span class="bd" style="background:${col}"></span>${KIND_KO[n.kind]||n.kind}</span>
+    <div class="d-meta"><div><b>${n.outd||0}</b>나감</div><div><b>${n.ind||0}</b>들어옴</div><div><b>${n.deg}</b>차수</div></div>
+    <div class="d-links">${rows}</div>
+    ${selNode===n ? '<div class="d-pinhint">고정됨 · 빈 곳을 클릭하면 해제</div>' : ''}`;
+}
+function buildHubs(){
+  const hubs=[...NODES].sort((a,b)=>b.deg-a.deg).slice(0,6);
+  const rows=hubs.map(n=>`<div class="hub"><span class="hb">${n.deg}</span><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${PAL[n.kind]}"></span><span class="hn">${esc(n.name)}</span></div>`).join('');
+  EMPTY = `<div class="d-empty"><div class="d-hint">노드에 올리면 상세, <b>클릭하면 고정</b>되어 복사할 수 있다.<br>가장 많이 연결된 노드:</div><div class="d-hubs">${rows}</div></div>`;
+  detail.innerHTML = EMPTY;
+}
+
+/* ---------- events ---------- */
+function evPos(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+canvas.addEventListener('pointermove', e=>{
+  const p=evPos(e);
+  if(drag){ const w=unproject(p.x,p.y); drag.x=w.x; drag.y=w.y; drag.pin=true; wake(0.35); moved=true; return; }
+  if(panning){ cam.x-=(p.x-last.x)/cam.scale; cam.y-=(p.y-last.y)/cam.scale; last=p; moved=true; return; }
+  const n=pick(p.x,p.y);
+  if(n!==hover){ hover=n; if(!selNode) showDetail(n); canvas.style.cursor = n?'pointer':'grab'; }
+});
+canvas.addEventListener('pointerdown', e=>{
+  const p=evPos(e); last=p; moved=false;
+  const n=pick(p.x,p.y);
+  if(n){ drag=n; } else { panning=true; canvas.classList.add('grabbing'); }
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointerup', e=>{
+  if(!moved){                                   // a click, not a drag: pin/unpin the detail
+    if(drag){ selNode=drag; showDetail(drag); }
+    else { selNode=null; showDetail(hover); }
+  }
+  if(drag && !moved) drag.pin=false;
+  drag=null; panning=false; canvas.classList.remove('grabbing');
+});
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const p=evPos(e), w=unproject(p.x,p.y), f=Math.exp(-e.deltaY*0.0012);
+  cam.scale=Math.max(0.25,Math.min(4,cam.scale*f));
+  const w2=unproject(p.x,p.y); cam.x+=w.x-w2.x; cam.y+=w.y-w2.y;
+},{passive:false});
+
+const bL=document.getElementById('btnLabels'), bM=document.getElementById('btnMotion'), bR=document.getElementById('btnReset'), bI=document.getElementById('btnIso');
+bL.addEventListener('click',()=>{ labelsAll=!labelsAll; bL.textContent=labelsAll?'전체 라벨':'핵심 라벨'; bL.setAttribute('aria-pressed',labelsAll); });
+bI.addEventListener('click',()=>{ showIsolated=!showIsolated; bI.textContent=showIsolated?'고립 숨김':'고립 표시'; bI.setAttribute('aria-pressed',showIsolated); if(_lastRaw) ingest(_lastRaw, true); });
+bI.setAttribute('aria-pressed','false');
+bM.addEventListener('click',()=>{ motion=!motion; bM.textContent=motion?'모션 정지':'모션 재생'; bM.setAttribute('aria-pressed',!motion); });
+bR.addEventListener('click',()=>{ fitView(); wake(0.6); });
+bL.setAttribute('aria-pressed','false'); bM.setAttribute('aria-pressed', String(!motion));
+if(!motion) bM.textContent='모션 재생';
+
+function fitView(){
+  if(!NODES.length) return;
+  let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+  for(const n of NODES){ minx=Math.min(minx,n.x); miny=Math.min(miny,n.y); maxx=Math.max(maxx,n.x); maxy=Math.max(maxy,n.y); }
+  const bw=maxx-minx||1, bh=maxy-miny||1;
+  cam.scale=Math.max(0.3,Math.min(2.2, Math.min(W/(bw+120), H/(bh+160))));
+  cam.x=(minx+maxx)/2; cam.y=(miny+maxy)/2;
+}
+
+const mo=new MutationObserver(()=>{ readPalette(); if(NODES.length) buildHubs(); });
+mo.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{ readPalette(); if(NODES.length) buildHubs(); });
+
+/* ---------- toast ---------- */
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false;
+  clearTimeout(t._h); t._h=setTimeout(()=>{ t.hidden=true; }, 2000);
+}
+function flashLive(){ const l=document.querySelector('#dbbar .live'); if(!l) return; l.classList.add('flash'); setTimeout(()=>l.classList.remove('flash'),900); }
+
+/* ---------- live mode (server) ---------- */
+async function jget(u){ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error(u+' '+r.status); return r.json(); }
+async function liveBoot(cfg){
+  const api = cfg.endpoint || '/api';
+  const bar=document.getElementById('dbbar'), sel=document.getElementById('dbsel');
+  let sources=[];
+  try{ sources = await jget(api+'/sources'); }catch(e){ toast('소스 목록을 불러오지 못했습니다'); }
+  if(!sources.length){ toast('그래프 DB가 없습니다 — make build 후 다시'); return; }
+  bar.hidden=false;
+  sel.innerHTML = sources.map(s=>`<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('');
+  let CUR = (sources.find(s=>s.default)||sources[0]).id;
+  sel.value = CUR;
+  let VER=null;
+  async function load(keep){
+    try{
+      const g = await jget(api+'/graph?source='+encodeURIComponent(CUR));
+      if(keep) snapshotPositions();
+      ingest(g, keep);
+    }catch(e){ toast('그래프를 불러오지 못했습니다'); return; }
+    try{ VER=(await jget(api+'/version?source='+encodeURIComponent(CUR))).version; }catch(e){}
+  }
+  sel.addEventListener('change', ()=>{ CUR=sel.value; VER=null; _prevPos=new Map(); load(false); });
+  await load(false);
+  setInterval(async ()=>{
+    try{
+      const v=(await jget(api+'/version?source='+encodeURIComponent(CUR))).version;
+      if(VER!==null && v!==VER){ VER=v; await load(true); flashLive(); toast('그래프가 갱신되었습니다 · '+new Date().toLocaleTimeString()); }
+      else if(VER===null) VER=v;
+    }catch(e){}
+  }, 2500);
+}
+
+/* ---------- boot ---------- */
+const ro=new ResizeObserver(()=>{ resize(); });
+ro.observe(canvas);
+resize();
+requestAnimationFrame(frame);
+if(CFG && CFG.mode==='live') liveBoot(CFG);
+else ingest(INLINE || {nodes:[],edges:[]}, false);
+</script>
+</body>
+</html>

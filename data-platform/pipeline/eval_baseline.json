@@ -1,0 +1,153 @@
+{
+  "arms": {
+    "fused": {
+      "mrr_at_10": 0.6538,
+      "p_at_1": 0.5385,
+      "r_at_10": 0.7692,
+      "r_at_5": 0.7692
+    },
+    "keyword": {
+      "mrr_at_10": 0.4744,
+      "p_at_1": 0.3846,
+      "r_at_10": 0.6154,
+      "r_at_5": 0.5385
+    },
+    "vector": {
+      "mrr_at_10": 0.6009,
+      "p_at_1": 0.3846,
+      "r_at_10": 0.9231,
+      "r_at_5": 0.8462
+    }
+  },
+  "by_kind": {
+    "cross_bill": {
+      "mrr_at_10": 0.8333,
+      "p_at_1": 0.6667,
+      "r_at_10": 1.0,
+      "r_at_5": 1.0
+    },
+    "negative": {
+      "n": 2,
+      "returned_rank1": 2
+    },
+    "particle_glue": {
+      "mrr_at_10": 0.1667,
+      "p_at_1": 0.0,
+      "r_at_10": 0.3333,
+      "r_at_5": 0.3333
+    },
+    "synonym_gap": {
+      "mrr_at_10": 0.5,
+      "p_at_1": 0.3333,
+      "r_at_10": 0.6667,
+      "r_at_5": 0.6667
+    },
+    "vocabulary_match": {
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0,
+      "r_at_10": 1.0,
+      "r_at_5": 1.0
+    }
+  },
+  "chunk_count": 3526,
+  "graded": 15,
+  "per_query": [
+    {
+      "id": "q01",
+      "kind": "synonym_gap",
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
+    },
+    {
+      "id": "q02",
+      "kind": "synonym_gap",
+      "mrr_at_10": 0.5,
+      "p_at_1": 0.0
+    },
+    {
+      "id": "q03",
+      "kind": "synonym_gap",
+      "mrr_at_10": 0.0,
+      "p_at_1": 0.0
+    },
+    {
+      "id": "q04",
+      "kind": "vocabulary_match",
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
+    },
+    {
+      "id": "q05",
+      "kind": "vocabulary_match",
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
+    },
+    {
+      "id": "q06",
+      "kind": "vocabulary_match",
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
+    },
+    {
+      "id": "q07",
+      "kind": "particle_glue",
+      "mrr_at_10": 0.0,
+      "p_at_1": 0.0
+    },
+    {
+      "id": "q08",
+      "kind": "particle_glue",
+      "mrr_at_10": 0.5,
+      "p_at_1": 0.0
+    },
+    {
+      "id": "q09",
+      "kind": "particle_glue",
+      "mrr_at_10": 0.0,
+      "p_at_1": 0.0
+    },
+    {
+      "id": "q10",
+      "kind": "cross_bill",
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
+    },
+    {
+      "id": "q11",
+      "kind": "cross_bill",
+      "mrr_at_10": 0.5,
+      "p_at_1": 0.0
+    },
+    {
+      "id": "q12",
+      "kind": "cross_bill",
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
+    },
+    {
+      "id": "q13",
+      "kind": "vocabulary_match",
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
+    },
+    {
+      "id": "q14",
+      "kind": "negative",
+      "returned_rank1": 1
+    },
+    {
+      "id": "q15",
+      "kind": "negative",
+      "returned_rank1": 1
+    }
+  ],
+  "settings": {
+    "alias_expansion": true,
+    "embedding_provider": "onnx_int8",
+    "keyword_weight": 1.0,
+    "rrf_k": 60,
+    "vector_weight": 1.0
+  },
+  "source_sha": "e31e8790eb871efaf9d8de3a95d6a68f98d3f8ae",
+  "unresolved": []
+}

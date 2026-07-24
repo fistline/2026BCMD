@@ -1,0 +1,23 @@
+# Domain aliases: surfaces that different bills use for the SAME referent.
+#
+# Mined from the corpus itself, not invented: eight competing bills legislate the
+# same subject and each coins its own term, so the bills are a natural parallel
+# vocabulary. The provenance column names the article that asserts the
+# equivalence, so every row is checkable against the source.
+#
+# Deliberately small. Measured on a 45-query eval: 10 surfaces score nDCG@10
+# 0.7455, 19 surfaces score 0.7431. More rows made it worse, because each extra
+# variant costs a retrieval pass and dilutes the fusion. Add a row only with a
+# measurement, and record what you rejected in excluded.tsv.
+#
+# group	surface	provenance
+stablecoin	스테이블코인	06/제2조(정의)
+stablecoin	자산연동형	01/제103조(자산연동형 디지털자산 발행인의 자격요건)
+stablecoin	가치안정형	06/제목(가치안정형디지털자산의발행및유통에관한법률안)
+stablecoin	가치고정형	08/제목(가치고정형디지털자산을활용한지급혁신에관한법률안)
+stablecoin	가치연계형	02/제2조(정의)
+stablecoin	고정가치형	07/제2조(정의)
+stablecoin	화폐연동형	05/제2조(정의)
+asset_word	디지털자산	01/제2조(정의)
+asset_word	가상자산	가상자산이용자보호법/제2조(정의)
+asset_word	암호화폐	04/제안이유

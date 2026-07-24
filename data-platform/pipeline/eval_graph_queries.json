@@ -1,0 +1,45 @@
+{
+  "_comment": "Graph-reachability judgments. Anchored on node SLUGS + relation type (never on transient degree/rank). Fixture judgments (g01-g02) resolve on any build; legal judgments (g03-g05) resolve once the bills are indexed. relevant = the nodes graph_query MUST reach from start_node within max_depth. See pipeline/eval_graph.py.",
+  "queries": [
+    {
+      "id": "g01",
+      "kind": "code_multihop",
+      "start_node": "service_api",
+      "direction": "downstream",
+      "max_depth": 3,
+      "relevant": ["search_core", "vector_store"]
+    },
+    {
+      "id": "g02",
+      "kind": "doc_reach",
+      "start_node": "architecture-overview",
+      "direction": "downstream",
+      "max_depth": 2,
+      "relevant": ["ingestion-pipeline", "serving-index", "chunking-rules"]
+    },
+    {
+      "id": "g03",
+      "kind": "reference",
+      "start_node": "01_디지털자산기본법안_민병덕-hwp",
+      "direction": "downstream",
+      "max_depth": 1,
+      "relevant": ["은행법", "금융위원회의-설치-등에-관한-법률"]
+    },
+    {
+      "id": "g04",
+      "kind": "reference",
+      "start_node": "02_디지털자산시장의혁신과성장에관한법률안_이강일-hwp",
+      "direction": "downstream",
+      "max_depth": 1,
+      "relevant": ["은행법", "한국은행법", "금융위원회의-설치-등에-관한-법률"]
+    },
+    {
+      "id": "g05",
+      "kind": "delegation_upstream",
+      "start_node": "은행법",
+      "direction": "upstream",
+      "max_depth": 1,
+      "relevant": ["01_디지털자산기본법안_민병덕-hwp", "02_디지털자산시장의혁신과성장에관한법률안_이강일-hwp"]
+    }
+  ]
+}

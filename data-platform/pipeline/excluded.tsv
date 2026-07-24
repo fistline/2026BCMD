@@ -1,0 +1,9 @@
+# Equivalences that LOOK minable but must never be added to aliases.tsv.
+#
+# Recorded so the next person does not rediscover them, add them, and quietly
+# make retrieval worse. Each row says what was rejected and why.
+#
+# surfaces	reason
+인가 / 등록 / 신고	Distinct legal regimes with distinct penalties. 무인가 and 미등록 are separately punished offences, so merging them would retrieve the wrong penalty article for a query about the other regime.
+대주주 / 임원	A 0.76 Jaccard artifact: both definitions are bare pointers to 「금융회사의 지배구조에 관한 법률」, so they co-occur without being synonyms.
+발행자 / 발행인	Same referent, but every bill uses 발행인 consistently; the character bigram overlap (발행) already bridges them, so a row here buys nothing and costs a retrieval pass.

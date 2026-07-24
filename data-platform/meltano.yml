@@ -1,0 +1,95 @@
+default_environment: spoke
+project_id: local-agent-platform
+send_anonymous_usage_stats: false
+
+# ---------------------------------------------------------------------------
+# Spoke and hub differ ONLY by the config below (§3): same plugins, same code,
+# same models. Switch with `meltano --environment=hub run el-inbox`.
+# ---------------------------------------------------------------------------
+environments:
+- name: spoke
+  env:
+    PLATFORM_NODE_ROLE: spoke
+    SQLMESH_GATEWAY: spoke
+  config:
+    plugins:
+      loaders:
+      - name: target-ducklake-local
+        config:
+          target_schema: raw
+          batch_size_rows: 1000
+- name: hub
+  env:
+    PLATFORM_NODE_ROLE: hub
+    SQLMESH_GATEWAY: hub
+  config:
+    plugins:
+      loaders:
+      - name: target-ducklake-local
+        config:
+          target_schema: raw
+          batch_size_rows: 10000
+
+plugins:
+  extractors:
+  # Custom Meltano SDK tap defined in this repo (pipeline/tap_inbox_documents.py).
+  # `pip_url: -e .` installs this project into the plugin venv; `executable`
+  # resolves to the console script declared in pyproject.toml.
+  - name: tap-inbox-documents
+    namespace: tap_inbox_documents
+    pip_url: -e .
+    executable: tap-inbox-documents
+    capabilities:
+    - catalog
+    - discover
+    - state
+    settings:
+    - name: raw_dir
+      description: Immutable raw zone to read. Never written to by this tap.
+    - name: file_extensions
+      kind: array
+      description: File suffixes to ingest.
+    config:
+      raw_dir: data/raw/documents
+      # `file_extensions` is deliberately NOT set. Leaving it unset makes
+      # pipeline/chunking.py SUPPORTED_SUFFIXES the single source of truth, so
+      # adding a format cannot be half-done: a list here that drifted from the
+      # code would silently skip documents the parser can read.
+    select:
+    - documents.*
+    - chunks.*
+    - relations.*
+    # The immutable raw zone is re-read in full on every run, and the loader
+    # truncates and reloads to match. That is what keeps a rebuild idempotent.
+    metadata:
+      '*':
+        replication-method: FULL_TABLE
+
+  loaders:
+  # Project-local Meltano SDK target (pipeline/target_ducklake.py), NOT a Hub
+  # plugin. NOTE: no Singer target for DuckLake exists on PyPI, and the
+  # documented fallback loader (target-duckdb 0.8.0) silently drops the first
+  # record of every stream against DuckDB >= 1.x. See README "NOTE: loader".
+  - name: target-ducklake-local
+    namespace: target_ducklake_local
+    pip_url: -e .
+    executable: target-ducklake-local
+    settings:
+    - name: catalog_path
+      description: DuckLake catalog file. The catalog and its DATA_PATH are created by pipeline/run.py.
+    - name: target_schema
+      description: Schema inside the DuckLake catalog that raw Singer streams land in.
+    - name: add_record_metadata
+      kind: boolean
+    - name: batch_size_rows
+      kind: integer
+      description: Records buffered before a batch is written. Read by the Meltano SDK sink.
+    config:
+      catalog_path: data/processed/catalog.ducklake
+      target_schema: raw
+      add_record_metadata: false
+
+jobs:
+- name: el-inbox
+  tasks:
+  - tap-inbox-documents target-ducklake-local

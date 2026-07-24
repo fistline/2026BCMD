@@ -1,0 +1,51 @@
+# SQLMesh project configuration.
+#
+# Spoke and hub are two gateways over the SAME models (§3). Nothing below
+# branches the code: only paths and concurrency differ. Select a gateway with
+# SQLMESH_GATEWAY, which meltano.yml also sets per environment.
+#
+# `lake` is the only catalog, so it is the default: every model without an
+# explicit catalog is materialised into DuckLake. Meltano lands raw Singer
+# streams into `lake.raw.*` in the same catalog, and the bronze layer reads
+# them from there.
+#
+# DATA_PATH is deliberately absent. pipeline/run.py creates the catalog and
+# fixes its data path exactly once; a second process re-declaring DATA_PATH is
+# how DuckLake ends up rejecting an attach for a path mismatch.
+project: local_agent_platform
+
+model_defaults:
+  dialect: duckdb
+  start: 2026-01-01
+  cron: '@hourly'
+
+default_gateway: "{{ env_var('SQLMESH_GATEWAY', 'spoke') }}"
+
+gateways:
+  spoke:
+    connection:
+      type: duckdb
+      concurrent_tasks: 1
+      extensions:
+      - ducklake
+      catalogs:
+        lake:
+          type: ducklake
+          path: "{{ env_var('PLATFORM_PROCESSED_DIR', 'data/processed') }}/catalog.ducklake"
+    state_connection:
+      type: duckdb
+      database: "{{ env_var('PLATFORM_PROCESSED_DIR', 'data/processed') }}/sqlmesh_state.duckdb"
+
+  hub:
+    connection:
+      type: duckdb
+      concurrent_tasks: 4
+      extensions:
+      - ducklake
+      catalogs:
+        lake:
+          type: ducklake
+          path: "{{ env_var('PLATFORM_PROCESSED_DIR', 'data/processed') }}/catalog.ducklake"
+    state_connection:
+      type: duckdb
+      database: "{{ env_var('PLATFORM_PROCESSED_DIR', 'data/processed') }}/sqlmesh_state.duckdb"

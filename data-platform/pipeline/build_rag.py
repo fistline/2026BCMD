@@ -1,0 +1,989 @@
+"""Build the retrieval half of the serving index: sqlite-vec + FTS5 + RRF.
+
+Reads `lake.gold.chunks` out of DuckLake and writes three tables into the single
+SQLite file at `data/serving/index.sqlite`:
+
+  chunks      plain table holding the text and its provenance
+  chunks_vec  sqlite-vec virtual table (vec0) holding one embedding per chunk
+  chunks_fts  FTS5 index over the same rows
+
+Why both: a vector index alone misses exact identifiers. "hybrid_search" is one
+token to a reader and a fuzzy direction in embedding space, so a pure-vector
+query happily returns "the retrieval layer" instead of the function itself. FTS5
+nails the literal token; the vector side catches paraphrase. Reciprocal rank
+fusion combines the two rankings without needing their scores to be comparable,
+which they are not: bm25 is an unbounded negative log-odds and cosine distance
+is bounded in [0, 2].
+
+Everything here runs offline. The default embedder is deterministic and local,
+so a build never blocks on a model download (§3 invariants).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import re
+import sqlite3
+import struct
+import unicodedata
+from functools import lru_cache
+from pathlib import Path
+from typing import Iterable, Optional, Sequence
+
+import duckdb
+import sqlite_vec
+
+from pipeline import Paths, Settings, get_paths, get_settings
+from pipeline.aliases import expand_query
+
+# Scripts that write without spaces between words, so a "word" is not a
+# retrievable unit and has to be broken into character n-grams. Written as
+# explicit codepoint ranges rather than literal glyphs: a mistyped literal is
+# invisible in review and silently swallows the Private Use Area, which Hancom
+# HWP files use routinely.
+CJK_RANGES = (
+    "ᄀ-ᇿ"  # Hangul Jamo
+    "぀-ヿ"  # Hiragana + Katakana
+    "㄰-㆏"  # Hangul Compatibility Jamo
+    "㐀-䶿"  # CJK Unified Ideographs Extension A
+    "一-鿿"  # CJK Unified Ideographs
+    "ꥠ-꥿"  # Hangul Jamo Extended-A
+    "가-힣"  # Hangul Syllables
+    "ힰ-퟿"  # Hangul Jamo Extended-B
+    "豈-﫿"  # CJK Compatibility Ideographs
+    "ｦ-ﾟ"  # Halfwidth Katakana
+)
+CJK_RUN = re.compile(f"[{CJK_RANGES}]+")
+
+# Order is load-bearing. The ASCII-identifier branch must come first so that
+# `hybrid_search` stays ONE token, preserving the agreement with the FTS5
+# `tokenchars '_'` setting. The CJK branch must come before the general-word
+# branch, otherwise a mixed run like `가상자산ETF` is captured as a single token
+# and then shredded entirely into CJK n-grams, destroying the `etf` unigram.
+TOKEN_RE = re.compile(
+    r"[A-Za-z_][A-Za-z0-9_]*"
+    r"|\d+"
+    f"|[{CJK_RANGES}]+"
+    r"|[^\W\d_]+",
+    re.UNICODE,
+)
+
+FTS_TOKENIZE = "unicode61 remove_diacritics 2 tokenchars '_'"
+
+# Character n-gram widths used for CJK runs, on both sides of the index.
+CJK_NGRAM_SIZES = (2, 3)
+# Width of the n-grams written into chunks_fts and used to build MATCH queries.
+# Two, not three: Korean legal vocabulary is saturated with two-character terms
+# (증권, 부칙, 신고), and a trigram index cannot match them at all.
+FTS_NGRAM_SIZE = 2
+
+MIN_EMBEDDING_DIM = 512
+
+
+def normalise(text: str) -> str:
+    """NFC, never NFKC.
+
+    NFC composes decomposed Hangul jamo, which macOS filesystems and several HWP
+    extractors emit, so the two forms hash identically. NFKC would go further and
+    fold circled numerals to plain digits, but ①②③ are 항 markers in every Korean
+    statute, so folding them would make the embedder and FTS5 index the same
+    character differently.
+    """
+    return unicodedata.normalize("NFC", text)
+
+
+# --------------------------------------------------------------------------
+# Embedding
+# --------------------------------------------------------------------------
+def tokenize(text: str) -> list:
+    """Lower-cased tokens: ASCII identifiers whole, CJK runs whole, digits.
+
+    Both halves of the index depend on this agreeing with FTS5. If they
+    disagreed about whether `hybrid_search` is one token or two, the same query
+    would address different vocabularies on each side of the fusion.
+    """
+    return [match.group(0).lower() for match in TOKEN_RE.finditer(normalise(text))]
+
+
+def _cjk_ngrams(token: str, sizes: Sequence[int] = CJK_NGRAM_SIZES) -> list:
+    """Overlapping character n-grams for one CJK run.
+
+    Korean glues particles onto nouns (가상자산사업자는), so the whole run is
+    almost never a retrievable unit. Character n-grams are what make the noun
+    inside it reachable.
+    """
+    grams = []
+    for size in sizes:
+        if len(token) < size:
+            continue
+        grams.extend(token[i : i + size] for i in range(len(token) - size + 1))
+    return grams or [token]
+
+
+def _features(text: str) -> dict:
+    """Feature counts for one document, shared by every hashing embedder call.
+
+    ASCII and numeric tokens are kept whole; CJK runs are expanded to character
+    n-grams. On pure-ASCII input this produces exactly the unigram+bigram feature
+    set the previous implementation did, so English and code retrieval cannot
+    regress.
+    """
+    tokens = tokenize(text)
+    if not tokens:
+        return {}
+
+    counts: dict = {}
+    units: list = []
+    for token in tokens:
+        if CJK_RUN.fullmatch(token):
+            grams = _cjk_ngrams(token)
+            units.extend(grams)
+            for gram in grams:
+                counts[gram] = counts.get(gram, 0) + 1
+        else:
+            units.append(token)
+            counts[token] = counts.get(token, 0) + 1
+
+    for left, right in zip(units, units[1:]):
+        pair = f"{left}_{right}"
+        counts[pair] = counts.get(pair, 0) + 1
+    return counts
+
+
+# --------------------------------------------------------------------------
+# Optional Kiwi morphological augmentation (KIWI_MORPH=1, `uv sync --extra kiwi`)
+# --------------------------------------------------------------------------
+# Appends NNG/NNP/XR noun/root lemmas BESIDE the char-bigram backbone on both the
+# write path (expand_cjk) and the query path (build_fts_query), so a josa-glued
+# query (사업자의) also matches the bare-noun answer (사업자). It NEVER replaces the
+# bigrams, so the context-free write>=query lock-step is untouched: this can only
+# ADD a josa-free noun match, never silence the keyword half. Off by default;
+# index_signature carries a kiwi slot so a Kiwi index is never queried Kiwi-off.
+_KIWI_NOUN_TAGS = frozenset({"NNG", "NNP", "XR"})  # common/proper noun, root
+_kiwi_analyzer = None
+
+
+def _kiwi_enabled() -> bool:
+    return os.environ.get("KIWI_MORPH", "0").strip().lower() not in {"", "0", "false", "no"}
+
+
+@lru_cache(maxsize=1)
+def _kiwi_model_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("kiwipiepy_model")
+    except Exception:
+        return "unknown"
+
+
+def _kiwi_signature() -> str:
+    """Empty when off, so a Kiwi-off index keeps its exact prior signature."""
+    return f"kiwi-add-{_kiwi_model_version()}" if _kiwi_enabled() else ""
+
+
+def _get_kiwi():
+    global _kiwi_analyzer
+    if _kiwi_analyzer is None:
+        from kiwipiepy import Kiwi
+
+        _kiwi_analyzer = Kiwi()
+    return _kiwi_analyzer
+
+
+def kiwi_lemmas(text: str) -> list:
+    """Deterministic NNG/NNP/XR noun/root lemmas from the CJK content of `text`.
+
+    Empty unless KIWI_MORPH is set. Only multi-character Hangul/CJK noun forms are
+    kept, so ASCII identifiers, digits, 조문 markers (①②③) and HWP Private-Use
+    glyphs are never dropped or altered -- they still ride the bigram backbone.
+    """
+    if not _kiwi_enabled():
+        return []
+    lemmas = []
+    for token in _get_kiwi().tokenize(normalise(text)):
+        if token.tag in _KIWI_NOUN_TAGS and len(token.form) >= 2 and CJK_RUN.fullmatch(token.form):
+            lemmas.append(token.form)
+    return list(dict.fromkeys(lemmas))
+
+
+def expand_cjk(text: str, size: int = FTS_NGRAM_SIZE) -> str:
+    """Rewrite CJK runs as space-separated character n-grams for FTS5.
+
+    FTS5's unicode61 tokenizer treats a whole Hangul run as one token, so
+    "가상자산" cannot match inside "가상자산이용자보호법". Rather than switching to
+    the trigram tokenizer, which cannot match two-character terms at all and
+    doubles the index, we keep unicode61 and change what we feed it.
+
+    The identical expansion is applied to queries in `build_fts_query`. If the
+    two ever diverge the keyword half silently returns nothing, which is what
+    the index_signature guard exists to catch.
+    """
+
+    def replace(match: re.Match) -> str:
+        run = match.group(0)
+        if len(run) <= size:
+            return run
+        return " ".join(run[i : i + size] for i in range(len(run) - size + 1))
+
+    expanded = CJK_RUN.sub(replace, normalise(text))
+    lemmas = kiwi_lemmas(text)
+    return f"{expanded} {' '.join(lemmas)}" if lemmas else expanded
+
+
+def _bucket(token: str, dimensions: int) -> tuple:
+    """Stable (index, sign) for a token. blake2b keeps it identical across runs."""
+    digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+    value = int.from_bytes(digest, "big")
+    return value % dimensions, 1.0 if (value >> 63) & 1 else -1.0
+
+
+class HashingEmbedder:
+    """Signed feature hashing over tokens, CJK n-grams and adjacent pairs.
+
+    A real sentence encoder is better at genuine paraphrase, but it costs a model
+    download on first use, which would make `make build` depend on the network.
+    Measured on Korean legal and government retrieval this lands close to a dense
+    multilingual model once fused with the keyword half, because statute queries
+    reuse the statute's own vocabulary. It will not match 원화 to 금전; for that,
+    switch EMBEDDING_PROVIDER (see .env.example).
+    """
+
+    name = "hashing"
+    # No external model, but the attribute must exist so index_signature never
+    # silently reads an empty slot from a provider that forgot to set it.
+    model_name = ""
+
+    def __init__(self, dimensions: int):
+        if dimensions < MIN_EMBEDDING_DIM:
+            raise ValueError(
+                f"EMBEDDING_DIM must be at least {MIN_EMBEDDING_DIM} for the hashing "
+                f"provider, got {dimensions}. Korean character n-grams produce a much "
+                "larger feature vocabulary than English words, and below this the hash "
+                "collisions destroy the signal."
+            )
+        self.dimensions = dimensions
+
+    def encode(self, texts: Sequence[str]) -> list:
+        return [self._encode_one(text) for text in texts]
+
+    def _encode_one(self, text: str) -> list:
+        counts = _features(text)
+        vector = [0.0] * self.dimensions
+        if not counts:
+            return vector
+
+        for token, count in counts.items():
+            index, sign = _bucket(token, self.dimensions)
+            # Sublinear term frequency: a word repeated ten times is not ten
+            # times more about the topic than a word used once.
+            vector[index] += sign * (1.0 + math.log(count))
+
+        norm = math.sqrt(sum(component * component for component in vector))
+        if norm == 0.0:
+            return vector
+        return [component / norm for component in vector]
+
+
+class SentenceTransformerEmbedder:
+    """Optional dense encoder. Requires the model to be present locally."""
+
+    name = "sentence_transformers"
+
+    def __init__(self, model_name: str):
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as error:
+            raise RuntimeError(
+                "EMBEDDING_PROVIDER=sentence_transformers requires the extra "
+                "dependency. Install it with: uv add sentence-transformers"
+            ) from error
+        # Recorded so index_signature can tell two same-dimension models apart.
+        # Without it the signature carried an empty slot, and switching between
+        # two 1024-d models passed the guard while every query was encoded by one
+        # model and matched against vectors built by another.
+        self.model_name = model_name
+        self._model = SentenceTransformer(model_name)
+        self.dimensions = int(self._model.get_sentence_embedding_dimension())
+
+    def encode(self, texts: Sequence[str]) -> list:
+        vectors = self._model.encode(list(texts), normalize_embeddings=True)
+        return [[float(component) for component in vector] for vector in vectors]
+
+
+class OnnxInt8Embedder:
+    """Optional int8-quantized ONNX sentence encoder, run torch-free on CPU.
+
+    The point of this provider over a static distilled table (e.g. model2vec) is
+    CONTEXT: this is a real transformer, so self-attention still disambiguates a
+    word by its neighbours -- a static token-average cannot, which matters for
+    Korean where 조사/어미 carry meaning. int8 quantisation keeps that attention
+    while cutting the model to a quarter of its float size, so it stays usable on
+    CPU. It is NOT the default: it runs a model, which the build forbids for the
+    default path, so it lives here in the optional slot and the zero-download
+    `hashing` provider remains the default.
+
+    The Xenova ONNX repos ship a variant with the Sentence-Transformers pooling
+    and normalisation baked into the graph, so the output is already the dense
+    sentence vector -- there is no client-side pooling to get wrong. The model is
+    fetched once into the local Hugging Face cache; inference touches no network.
+    """
+
+    name = "onnx_int8"
+    # Pooled + L2-normalised sentence-embedding graph, int8 weights.
+    _ONNX_FILE = "onnx/sentence_transformers_int8.onnx"
+    _MAX_TOKENS = 512  # a 1200-char chunk fits well under this; bounds CPU cost.
+    _BATCH = 16
+
+    def __init__(self, model_name: str):
+        try:
+            import numpy as np
+            import onnxruntime as ort
+            from huggingface_hub import hf_hub_download
+            from tokenizers import Tokenizer
+        except ImportError as error:
+            raise RuntimeError(
+                "EMBEDDING_PROVIDER=onnx_int8 needs the onnx-embed extra. "
+                "Install it with: uv sync --extra onnx-embed"
+            ) from error
+
+        self._np = np
+        self.model_name = model_name
+
+        def _fetch(filename: str) -> str:
+            # Keep the read path offline (invariant 7): use the cached file and
+            # touch the network only on the first-ever fetch (during a build).
+            try:
+                return hf_hub_download(model_name, filename, local_files_only=True)
+            except Exception:
+                return hf_hub_download(model_name, filename)
+
+        onnx_path = _fetch(self._ONNX_FILE)
+        self._tokenizer = Tokenizer.from_file(_fetch("tokenizer.json"))
+        self._tokenizer.enable_truncation(max_length=self._MAX_TOKENS)
+        self._tokenizer.enable_padding()
+
+        options = ort.SessionOptions()
+        # Single-threaded: the accumulation order of a threaded matmul is not
+        # fixed, so pinning threads keeps the vectors bit-identical across
+        # rebuilds on this machine -- what index_signature assumes.
+        options.intra_op_num_threads = 1
+        options.inter_op_num_threads = 1
+        self._session = ort.InferenceSession(
+            onnx_path, sess_options=options, providers=["CPUExecutionProvider"]
+        )
+        self._input_names = {node.name for node in self._session.get_inputs()}
+        self._output_name = self._session.get_outputs()[0].name
+        self.dimensions = len(self.encode(["차원 확인"])[0])
+
+    def encode(self, texts: Sequence[str]) -> list:
+        np = self._np
+        texts = list(texts)
+        vectors: list = []
+        for start in range(0, len(texts), self._BATCH):
+            batch = texts[start : start + self._BATCH]
+            encoded = self._tokenizer.encode_batch(batch)
+            feeds = {
+                "input_ids": np.array([e.ids for e in encoded], dtype=np.int64),
+                "attention_mask": np.array([e.attention_mask for e in encoded], dtype=np.int64),
+            }
+            feeds = {name: value for name, value in feeds.items() if name in self._input_names}
+            output = self._session.run([self._output_name], feeds)[0]
+            # Pooled variant returns [batch, dim]; fall back to CLS if a token-
+            # level [batch, seq, dim] graph is ever substituted.
+            matrix = output if output.ndim == 2 else output[:, 0, :]
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+            norms[norms == 0.0] = 1.0
+            vectors.extend((matrix / norms).astype(float).tolist())
+        return vectors
+
+
+def get_embedder(settings: Settings):
+    """Resolve the configured embedder. Unknown values fail loudly, not silently."""
+    if settings.embedding_provider == "hashing":
+        return HashingEmbedder(settings.embedding_dim)
+    if settings.embedding_provider == "sentence_transformers":
+        return SentenceTransformerEmbedder(settings.embedding_model)
+    if settings.embedding_provider == "onnx_int8":
+        return OnnxInt8Embedder(settings.embedding_model)
+    raise ValueError(
+        "EMBEDDING_PROVIDER must be 'hashing', 'sentence_transformers' or "
+        f"'onnx_int8', got {settings.embedding_provider!r}"
+    )
+
+
+def serialize_vector(vector: Sequence[float]) -> bytes:
+    """Pack a float list into the compact BLOB layout sqlite-vec expects."""
+    return struct.pack(f"{len(vector)}f", *vector)
+
+
+# --------------------------------------------------------------------------
+# SQLite plumbing
+# --------------------------------------------------------------------------
+def connect_index(index_path, read_only: bool = False) -> sqlite3.Connection:
+    """Open the serving index with sqlite-vec loaded."""
+    if read_only:
+        connection = sqlite3.connect(f"file:{index_path}?mode=ro", uri=True)
+    else:
+        connection = sqlite3.connect(str(index_path))
+    connection.row_factory = sqlite3.Row
+    connection.enable_load_extension(True)
+    sqlite_vec.load(connection)
+    connection.enable_load_extension(False)
+    return connection
+
+
+def open_lake(paths: Paths) -> duckdb.DuckDBPyConnection:
+    """Attach the DuckLake catalog read-side."""
+    connection = duckdb.connect()
+    connection.execute("INSTALL ducklake")
+    connection.execute("LOAD ducklake")
+    connection.execute(f"ATTACH 'ducklake:{paths.ducklake_catalog}' AS lake")
+    return connection
+
+
+def _create_schema(connection: sqlite3.Connection, dimensions: int) -> None:
+    connection.executescript(
+        """
+        DROP TABLE IF EXISTS chunks;
+        DROP TABLE IF EXISTS chunks_fts;
+        CREATE TABLE chunks (
+            chunk_id       TEXT PRIMARY KEY,
+            doc_id         TEXT NOT NULL,
+            rel_path       TEXT NOT NULL,
+            collection     TEXT NOT NULL,
+            title          TEXT,
+            doc_type       TEXT,
+            heading        TEXT,
+            chunk_index    INTEGER NOT NULL,
+            content        TEXT NOT NULL,
+            char_start     INTEGER,
+            char_end       INTEGER,
+            token_estimate INTEGER,
+            content_sha256 TEXT
+        );
+        CREATE INDEX chunks_doc_id ON chunks (doc_id);
+        CREATE INDEX chunks_collection ON chunks (collection);
+        CREATE TABLE IF NOT EXISTS index_meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        """
+    )
+    connection.execute("DROP TABLE IF EXISTS chunks_vec")
+    connection.execute(
+        f"CREATE VIRTUAL TABLE chunks_vec USING vec0("
+        f"chunk_id TEXT PRIMARY KEY, embedding float[{dimensions}])"
+    )
+    connection.execute(
+        f"CREATE VIRTUAL TABLE chunks_fts USING fts5("
+        f"chunk_id UNINDEXED, title, heading, content, tokenize = \"{FTS_TOKENIZE}\")"
+    )
+
+
+ROOT_COLLECTION = "_root"
+
+
+def collection_of(rel_path: str) -> str:
+    """The scoping bucket for a document: its first folder under the inbox.
+
+    `sto/열매_증권신고서.txt` -> `sto`; a file at the inbox root -> `_root`. This
+    is the folder-as-collection convention (the Obsidian/vector-namespace pattern):
+    organise by moving files between folders, and scope a search to one folder,
+    without splitting the single serving index.
+    """
+    normalised = (rel_path or "").replace("\\", "/").lstrip("/")
+    head, sep, _ = normalised.partition("/")
+    return head if sep and head else ROOT_COLLECTION
+
+
+def build_index(paths: Optional[Paths] = None, settings: Optional[Settings] = None) -> dict:
+    """Rebuild the retrieval tables from gold.chunks. Idempotent by construction."""
+    paths = paths or get_paths()
+    settings = settings or get_settings()
+    paths.ensure()
+
+    lake = open_lake(paths)
+    try:
+        rows = lake.execute(
+            """
+            SELECT chunk_id, doc_id, rel_path, title, doc_type, heading, chunk_index,
+                   content, embed_text, char_start, char_end, token_estimate, content_sha256
+            FROM lake.gold.chunks
+            ORDER BY doc_id, chunk_index
+            """
+        ).fetchall()
+    finally:
+        lake.close()
+
+    if not rows:
+        raise RuntimeError(
+            "lake.gold.chunks is empty. Run the ingest and transform steps first "
+            "(make ingest && make transform), or check that data/inbox/documents has input."
+        )
+
+    # Collapse identical chunk content for the retrieval surfaces, PER COLLECTION.
+    # The same boilerplate clause (예: 제1조(목적)) is copied verbatim into dozens of
+    # DART filings; a RAG index must hold each distinct passage once, or N identical
+    # hits fill every top-K and bury the distinctive articles. The key is
+    # (collection, content), NOT content alone: a clause that also exists in another
+    # collection must stay reachable when a search is scoped to THIS collection, or
+    # folder-as-collection scoping silently loses content. `chunks` still holds
+    # every row, so provenance and the gold<->index parity stay intact; only
+    # chunks_vec and chunks_fts are collapsed, and to the SAME representative set,
+    # so the two retrieval halves still agree. The representative is the first row
+    # per key under the query's ORDER BY (doc_id, chunk_index), so the choice is
+    # deterministic and the build stays idempotent.
+    representatives = []
+    seen_keys = set()
+    for row in rows:
+        key = (collection_of(row[2]), row[7])
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        representatives.append(row)
+
+    embedder = get_embedder(settings)
+    embeddings = embedder.encode([row[8] for row in representatives])
+    dimensions = len(embeddings[0])
+
+    connection = connect_index(paths.index_sqlite)
+    try:
+        with connection:
+            _create_schema(connection, dimensions)
+            connection.executemany(
+                """
+                INSERT INTO chunks (chunk_id, doc_id, rel_path, collection, title, doc_type,
+                                    heading, chunk_index, content, char_start, char_end,
+                                    token_estimate, content_sha256)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        row[0], row[1], row[2], collection_of(row[2]), row[3], row[4],
+                        row[5], row[6], row[7], row[9], row[10], row[11], row[12],
+                    )
+                    for row in rows
+                ],
+            )
+            connection.executemany(
+                "INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)",
+                [
+                    (row[0], serialize_vector(vector))
+                    for row, vector in zip(representatives, embeddings)
+                ],
+            )
+            # The FTS copy is bigram-expanded, so `chunks_fts.content` is NOT
+            # human-readable for CJK. Read text from `chunks`, never from here.
+            connection.executemany(
+                "INSERT INTO chunks_fts (chunk_id, title, heading, content) VALUES (?, ?, ?, ?)",
+                [
+                    (row[0], expand_cjk(row[3] or ""), expand_cjk(row[5] or ""), expand_cjk(row[7]))
+                    for row in representatives
+                ],
+            )
+            connection.executemany(
+                "INSERT INTO index_meta (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [
+                    ("embedding_provider", embedder.name),
+                    ("embedding_dim", str(dimensions)),
+                    ("chunk_count", str(len(rows))),
+                    ("node_role", settings.node_role),
+                    ("index_signature", index_signature(embedder, dimensions)),
+                ],
+            )
+    finally:
+        connection.close()
+
+    return {
+        "chunks": len(rows),
+        "indexed": len(representatives),
+        "dimensions": dimensions,
+        "provider": embedder.name,
+    }
+
+
+# --------------------------------------------------------------------------
+# Query: reciprocal rank fusion over sqlite-vec + FTS5
+# --------------------------------------------------------------------------
+def build_fts_query(text: str) -> str:
+    """Turn free text into a safe FTS5 MATCH expression.
+
+    CJK runs are expanded to the same character n-grams `expand_cjk` wrote into
+    the index, then every term is quoted so punctuation in the user's question
+    can never be read as FTS5 operator syntax. Build side and query side must
+    stay in step: if they diverge the keyword half silently returns nothing.
+    """
+    terms: list = []
+    for token in tokenize(text):
+        if CJK_RUN.fullmatch(token):
+            if len(token) <= FTS_NGRAM_SIZE:
+                terms.append(token)
+            else:
+                terms.extend(
+                    token[i : i + FTS_NGRAM_SIZE]
+                    for i in range(len(token) - FTS_NGRAM_SIZE + 1)
+                )
+        else:
+            terms.append(token)
+
+    # Additive noun/root lemmas, symmetric with the write side (expand_cjk). A
+    # lemma is a whole-noun token, so it OR-matches the bare-noun form the write
+    # side indexed, bridging the josa (사업자의 -> 사업자). No-op unless KIWI_MORPH.
+    terms.extend(kiwi_lemmas(text))
+
+    if not terms:
+        return ""
+    unique = list(dict.fromkeys(terms))
+    return " OR ".join('"' + term.replace('"', '""') + '"' for term in unique)
+
+
+def index_signature(embedder, dimensions: int) -> str:
+    """Identity of everything that must agree between build time and query time.
+
+    Carries the retrieval logic version alongside the provider, model and
+    dimension. Changing the tokenizer or the n-gram widths without rebuilding
+    leaves an index whose keyword half matches nothing; comparing this string is
+    what turns that into a loud error instead of empty results.
+    """
+    if not hasattr(embedder, "model_name"):
+        raise TypeError(
+            f"embedder {type(embedder).__name__} does not declare `model_name`. "
+            "Every provider must, or index_signature cannot tell two models of "
+            "the same dimension apart and the staleness guard becomes decorative."
+        )
+    model = embedder.model_name or ""
+    from pipeline.doctypes import profile_signature
+
+    parts = (
+        "v4",
+        profile_signature(),
+        embedder.name,
+        model,
+        str(dimensions),
+        f"cjk{'-'.join(str(size) for size in CJK_NGRAM_SIZES)}",
+        f"fts{FTS_NGRAM_SIZE}",
+        FTS_TOKENIZE,
+    )
+    # Appended only when Kiwi is on, so a Kiwi-off index keeps its exact prior
+    # signature (no spurious rebuild) while a Kiwi index can never be queried off.
+    kiwi = _kiwi_signature()
+    if kiwi:
+        parts = parts + (kiwi,)
+    return "|".join(parts)
+
+
+def assert_index_current(connection: sqlite3.Connection, embedder, dimensions: int) -> None:
+    """Refuse to query an index built by different retrieval logic."""
+    row = connection.execute(
+        "SELECT value FROM index_meta WHERE key = 'index_signature'"
+    ).fetchone()
+    expected = index_signature(embedder, dimensions)
+    actual = row[0] if row else None
+    if actual != expected:
+        raise ValueError(
+            "data/serving/index.sqlite was built by different retrieval settings and "
+            "would return wrong results.\n"
+            f"  index was built with: {actual or '(no signature: pre-upgrade index)'}\n"
+            f"  current settings are: {expected}\n"
+            "Rebuild it with `make build`."
+        )
+
+
+def read_index_meta(paths: Optional[Paths] = None, connection: Optional[sqlite3.Connection] = None) -> dict:
+    """The index's own build identity (index_meta rows), for a provenance footer.
+
+    Read-only and cheap: lets a caller report WHICH index answered (signature,
+    embedder, node role, sizes) without making the answer's correctness depend on
+    it. Returns {} when there is no index yet.
+    """
+    owns = connection is None
+    if connection is None:
+        paths = paths or get_paths()
+        if not paths.index_sqlite.exists():
+            return {}
+        connection = connect_index(paths.index_sqlite, read_only=True)
+    try:
+        return {row[0]: row[1] for row in connection.execute("SELECT key, value FROM index_meta")}
+    finally:
+        if owns:
+            connection.close()
+
+
+HYBRID_SEARCH_SQL = """
+WITH vector_hits AS (
+    SELECT
+        chunk_id,
+        distance,
+        ROW_NUMBER() OVER (ORDER BY distance) AS rank
+    FROM chunks_vec
+    WHERE embedding MATCH :query_vector
+      AND k = :candidates
+),
+keyword_hits AS (
+    SELECT
+        chunk_id,
+        ROW_NUMBER() OVER (ORDER BY bm25(chunks_fts)) AS rank
+    FROM chunks_fts
+    WHERE chunks_fts MATCH :query_text
+    ORDER BY bm25(chunks_fts)
+    LIMIT :candidates
+),
+candidate_ids AS (
+    SELECT chunk_id FROM vector_hits
+    UNION
+    SELECT chunk_id FROM keyword_hits
+),
+fused AS (
+    SELECT
+        candidate_ids.chunk_id AS chunk_id,
+        vector_hits.rank AS vector_rank,
+        vector_hits.distance AS vector_distance,
+        keyword_hits.rank AS keyword_rank,
+        -- Reciprocal rank fusion: sum of 1/(k + rank) over the rankings a
+        -- document appears in. Rank-based, so the two incomparable score
+        -- scales (bm25, cosine distance) never have to be normalised.
+        -- Weighted RRF. The two arms are not equally trustworthy here: the
+        -- keyword half matches statute vocabulary exactly, while the vector half
+        -- is a bag of character n-grams. Measured on 45 Korean queries, weighting
+        -- the vector arm at 0.3 lifts MRR@10 from 0.7063 to 0.7251 and takes
+        -- particle-glued queries from 0.9048 to 1.0000. Do NOT set it to 0:
+        -- dropping the arm entirely breaks exact-identifier hit@1.
+        COALESCE(:vector_weight / (:rrf_k + vector_hits.rank), 0.0)
+            + COALESCE(:keyword_weight / (:rrf_k + keyword_hits.rank), 0.0) AS rrf_score
+    FROM candidate_ids
+    LEFT JOIN vector_hits ON vector_hits.chunk_id = candidate_ids.chunk_id
+    LEFT JOIN keyword_hits ON keyword_hits.chunk_id = candidate_ids.chunk_id
+)
+SELECT
+    chunks.chunk_id,
+    chunks.doc_id,
+    chunks.rel_path,
+    chunks.collection,
+    chunks.title,
+    chunks.heading,
+    chunks.doc_type,
+    chunks.chunk_index,
+    chunks.content,
+    fused.vector_rank,
+    -- Raw L2 distance from the vector arm, surfaced so a caller can see how far
+    -- away a "hit" actually is. There is no threshold applied: sqlite-vec's
+    -- `k = :candidates` returns exactly that many rows however distant they are,
+    -- so a query about something absent from the corpus still fills the list.
+    fused.vector_distance,
+    fused.keyword_rank,
+    fused.rrf_score
+FROM fused
+JOIN chunks ON chunks.chunk_id = fused.chunk_id
+-- Collection scoping is applied AFTER fusion on the over-fetched candidate set
+-- (the caller raises `candidates` when a collection is set), not inside the vec0
+-- KNN, which has no collection column. NULL means every collection.
+WHERE (:collection IS NULL OR chunks.collection = :collection)
+  -- Smoke fixtures share the serving index (the smoke test needs them there) but
+  -- must not surface in a real answer; hidden by default on the read path via a
+  -- doc_id denylist -- no schema column, so no rebuild. :include_fixtures re-admits
+  -- them for the fixture-dependent smoke assertions.
+  AND (:include_fixtures OR chunks.doc_id NOT IN (SELECT value FROM json_each(:fixture_ids)))
+ORDER BY fused.rrf_score DESC, chunks.chunk_id
+LIMIT :limit
+"""
+
+
+@lru_cache(maxsize=1)
+def _fixture_doc_ids() -> frozenset:
+    """doc_ids of the smoke fixtures (pipeline/fixtures/). They share the serving
+    index, so the read path hides them from a real answer by default. Derived
+    locally via the same document_id() the build uses -- no schema column, so no
+    rebuild, and it stays in sync if a fixture is added or renamed."""
+    from pipeline.chunking import SUPPORTED_SUFFIXES, document_id  # lazy: avoid an import cycle
+
+    fixtures_dir = Path(__file__).parent / "fixtures"
+    return frozenset(
+        document_id(path.name)
+        for path in fixtures_dir.glob("*")
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
+    )
+
+
+def _fixture_ids_json() -> str:
+    return json.dumps(sorted(_fixture_doc_ids()))
+
+
+def hybrid_search(
+    query: str,
+    limit: int = 5,
+    candidates: int = 40,
+    connection: Optional[sqlite3.Connection] = None,
+    paths: Optional[Paths] = None,
+    settings: Optional[Settings] = None,
+    expand: Optional[bool] = None,
+    collection: Optional[str] = None,
+    include_fixtures: bool = False,
+) -> list:
+    """Vector + keyword retrieval fused with RRF.
+
+    When alias expansion is on, the query is first rewritten into its domain
+    synonyms and every variant is retrieved separately, then the ranked lists are
+    fused. That is what bridges 스테이블코인 to 자산연동형, which share no
+    characters and so are invisible to both halves of the index.
+    """
+    settings = settings or get_settings()
+    use_expansion = settings.alias_expansion if expand is None else expand
+    variants = expand_query(query) if use_expansion else [query]
+    return multi_hybrid_search(
+        variants,
+        limit=limit,
+        candidates=candidates,
+        connection=connection,
+        paths=paths,
+        settings=settings,
+        collection=collection,
+        include_fixtures=include_fixtures,
+    )
+
+
+def _search_once(
+    query: str,
+    limit: int,
+    candidates: int,
+    connection: sqlite3.Connection,
+    settings: Settings,
+    collection: Optional[str] = None,
+    include_fixtures: bool = False,
+) -> list:
+    """One retrieval: the weighted RRF of the vector and keyword arms."""
+    embedder = get_embedder(settings)
+    query_vector = embedder.encode([query])[0]
+    assert_index_current(connection, embedder, len(query_vector))
+
+    fts_query = build_fts_query(query)
+    if not fts_query:
+        # Nothing tokenizable: quote the raw query rather than handing FTS5
+        # an empty MATCH, which is a syntax error.
+        fts_query = '"' + query.replace('"', '""') + '"'
+
+    # An all-zero query vector carries no information, but sqlite-vec ranks
+    # by L2 distance, so it would return the least-populated chunks at
+    # distance 0.0 and inject that noise into the fusion at the same weight
+    # as the top keyword hit. `k = 0` returns no rows, which is the honest
+    # answer: for this query there is no vector evidence.
+    has_vector_signal = any(query_vector)
+
+    rows = connection.execute(
+        HYBRID_SEARCH_SQL,
+        {
+            "query_vector": serialize_vector(query_vector),
+            "query_text": fts_query,
+            "candidates": candidates if has_vector_signal else 0,
+            "rrf_k": settings.rrf_k,
+            "vector_weight": settings.vector_weight,
+            "keyword_weight": settings.keyword_weight,
+            "collection": collection,
+            "include_fixtures": 1 if include_fixtures else 0,
+            "fixture_ids": _fixture_ids_json(),
+            "limit": limit,
+        },
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+# When a collection filter is set, the KNN over-fetches globally and the filter
+# is applied afterwards, so the candidate depth is raised to keep enough
+# in-collection rows in the window. Ample for this project's scale; the correct
+# scale-up is a collection column on the vec0/fts tables for pre-filtering.
+COLLECTION_CANDIDATES = 300
+
+
+def multi_hybrid_search(
+    queries: Sequence[str],
+    limit: int = 5,
+    candidates: int = 40,
+    connection: Optional[sqlite3.Connection] = None,
+    paths: Optional[Paths] = None,
+    settings: Optional[Settings] = None,
+    collection: Optional[str] = None,
+    include_fixtures: bool = False,
+) -> list:
+    """Retrieve each query variant separately, then fuse the ranked lists.
+
+    Fusing SEPARATE retrievals beats OR-ing every alias into one FTS query
+    (measured nDCG@10 0.7455 against 0.5953): an OR dilutes the one
+    discriminative term among generic ones, whereas a variant that matches
+    nothing simply contributes an empty list.
+
+    The fused score is divided by the number of variants. It is a per-query
+    constant so it cannot reorder anything, but without it a multi-variant query
+    scores far higher than a single-variant one purely because more arms
+    contributed, which would make any future relevance threshold unsettable.
+    """
+    if not queries:
+        raise ValueError("multi_hybrid_search needs at least one query")
+
+    paths = paths or get_paths()
+    settings = settings or get_settings()
+
+    owns_connection = connection is None
+    if connection is None:
+        if not paths.index_sqlite.exists():
+            raise FileNotFoundError(
+                f"{paths.index_sqlite} does not exist. Build it with `make build`."
+            )
+        connection = connect_index(paths.index_sqlite, read_only=True)
+
+    depth = max(candidates, COLLECTION_CANDIDATES) if collection else candidates
+    try:
+        fused: dict = {}
+        best: dict = {}
+        for variant in queries:
+            rows = _search_once(variant, depth, depth, connection, settings, collection=collection, include_fixtures=include_fixtures)
+            for rank, row in enumerate(rows, start=1):
+                chunk_id = row["chunk_id"]
+                fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (settings.rrf_k + rank)
+                # Keep the row from the variant that ranked it best, so the
+                # reported per-arm ranks describe a real retrieval.
+                if chunk_id not in best:
+                    best[chunk_id] = row
+
+        ordered = sorted(fused.items(), key=lambda item: (-item[1], item[0]))[:limit]
+        results = []
+        for chunk_id, score in ordered:
+            row = dict(best[chunk_id])
+            row["rrf_score"] = score / len(queries)
+            row["query_variants"] = len(queries)
+            results.append(row)
+        return results
+    finally:
+        if owns_connection:
+            connection.close()
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Build or query the RAG half of the index.")
+    parser.add_argument("--query", help="Run a hybrid search instead of rebuilding.")
+    parser.add_argument("--limit", type=int, default=5)
+    args = parser.parse_args(argv)
+
+    if args.query:
+        for hit in hybrid_search(args.query, limit=args.limit):
+            print(
+                f"{hit['rrf_score']:.5f}  vec={hit['vector_rank']}  fts={hit['keyword_rank']}  "
+                f"{hit['rel_path']} :: {hit['heading']}"
+            )
+        return 0
+
+    summary = build_index()
+    print(
+        "[build_rag] indexed {chunks} chunk(s), {dimensions}-dim, provider={provider}".format(
+            **summary
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

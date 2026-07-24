@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# DATA PLANE - never committed.
+#
+# Git carries logic; S3/DVC carries bytes. If both claimed ownership of data/,
+# a multi-PC sync would produce binary merge conflicts and the two planes would
+# silently diverge. The bundled sample fixtures live in pipeline/fixtures/ (which
+# IS tracked) and are copied into data/inbox/documents/ by `make build`.
+# ---------------------------------------------------------------------------
+data/
+
+# Lakehouse and serving artefacts, wherever they land
+*.duckdb
+*.duckdb.wal
+*.ducklake
+*.sqlite
+*.sqlite3
+
+# Meltano working state (plugin venvs, run logs, systemdb)
+.meltano/
+
+# SQLMesh working state. `logs/` is written at the project root by the CLI.
+transform/.cache/
+.sqlmesh/
+logs/
+
+# Secrets. .env.example is tracked; .env is not.
+.env
+.env.*
+!.env.example
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.uv-cache/
+.cache/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local scratch / working notes not part of the platform (spreadsheets,
+# checklists). Kept out of the repo the same way data/ is: personal working
+# state, not logic. The corpus proper lives in source/, which IS tracked.
+temp/
+
+# Agent memory is stored OUTSIDE this repo (in ~/.claude/projects/.../memory/)
+# so it can never be committed; this line is a belt-and-suspenders guard in case
+# a memory dir is ever created inside the tree.
+.claude/memory/
+memory/

@@ -1,0 +1,375 @@
+"""Retrieval evaluation: turn the next tuning question into a measurement.
+
+Every retrieval number this project has claimed — the vector arm at 0.3, the
+alias table, the rejection of morphological tokenization — came from eval sets
+built outside the repo and thrown away. That made each one unreproducible and
+the next change unmeasurable. This is the smallest thing that fixes that.
+
+It is a REGRESSION FLOOR, not a benchmark. Fifteen judgments over one Korean
+bill corpus say nothing in absolute terms; what they do is tell you whether the
+change you just made helped or quietly broke a category.
+
+Three arms are reported separately, because the fused number hides the trade:
+a change can lift the keyword arm and lose more in fusion. Morphological
+tokenization did exactly that under the OLD regime (hashing embedder, vector_weight
+0.3): +0.078 keyword R@10 but -0.022 fused MRR. Re-measured on the current
+onnx_int8 / vector_weight 1.0 regime, ADDITIVE Kiwi noun lemmas (KIWI_MORPH=1,
+`uv sync --extra kiwi`; lemmas appended beside the char-bigram backbone, never
+replacing it) instead lift BOTH — keyword +0.039, fused 0.654->0.692, cross_bill
+0.833->1.000, synonym_gap +0.056 — while holding vocabulary_match at 1.000. So it
+ships as an opt-in (default stays model-free), NOT a rejection. Caveat: it is a
+general keyword-arm gain, not a particle_glue fix — that kind regressed -0.056
+(common lemmas like 신고/자산 broaden the match), so per-kind still rules.
+
+    make eval                 report
+    make eval-baseline        record the current numbers as the floor
+    uv run python -m pipeline.eval_retrieval --assert-baseline
+
+Skips cleanly when the judgments do not match the indexed corpus, so a fresh
+clone with only the bundled fixtures still has a green build.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Optional
+
+from pipeline import Paths, Settings, get_paths, get_settings
+from pipeline.build_rag import (
+    build_fts_query,
+    connect_index,
+    get_embedder,
+    hybrid_search,
+    serialize_vector,
+)
+
+QUERY_FILE = Path(__file__).with_name("eval_queries.json")
+BASELINE_FILE = Path(__file__).with_name("eval_baseline.json")
+DEPTH = 10
+# Below this share of judgments resolvable against the index, the corpus is not
+# the one these judgments describe and the numbers would be noise.
+MIN_RESOLVABLE = 0.6
+
+
+def load_queries(path: Optional[Path] = None) -> list:
+    payload = json.loads((path or QUERY_FILE).read_text(encoding="utf-8"))
+    return payload["queries"]
+
+
+def _matching_chunk_ids(connection, patterns: list) -> set:
+    """Resolve heading regexes to chunk ids against the CURRENT index.
+
+    Heading-anchored on purpose: chunk ids are positional, so any change to
+    sectioning re-points them while every id still resolves.
+    """
+    if not patterns:
+        return set()
+    rows = connection.execute("SELECT chunk_id, heading FROM chunks").fetchall()
+    compiled = [re.compile(re.escape(pattern)) for pattern in patterns]
+    return {
+        row["chunk_id"]
+        for row in rows
+        if row["heading"] and any(pattern.search(row["heading"]) for pattern in compiled)
+    }
+
+
+def _vector_only(query: str, connection, settings: Settings, depth: int) -> list:
+    embedder = get_embedder(settings)
+    vector = embedder.encode([query])[0]
+    if not any(vector):
+        return []
+    rows = connection.execute(
+        "SELECT chunk_id FROM chunks_vec WHERE embedding MATCH ? AND k = ? ORDER BY distance",
+        (serialize_vector(vector), depth),
+    ).fetchall()
+    return [row["chunk_id"] for row in rows]
+
+
+def _keyword_only(query: str, connection, depth: int) -> list:
+    match = build_fts_query(query)
+    if not match:
+        return []
+    rows = connection.execute(
+        "SELECT chunk_id FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT ?",
+        (match, depth),
+    ).fetchall()
+    return [row["chunk_id"] for row in rows]
+
+
+def _score(ranked: list, relevant: set, depth: int = DEPTH) -> dict:
+    """Hit-rate style metrics. Recall@k is 'at least one relevant in top k'.
+
+    Chosen over |retrieved ∩ relevant| / |relevant| because several judgments
+    have many relevant chunks across bills, under which Recall@1 would be capped
+    by the label count and would measure the judgments rather than the retriever.
+    """
+    hits = [position for position, chunk_id in enumerate(ranked[:depth]) if chunk_id in relevant]
+    first = hits[0] if hits else None
+    return {
+        "p_at_1": 1.0 if (ranked[:1] and ranked[0] in relevant) else 0.0,
+        "r_at_5": 1.0 if any(position < 5 for position in hits) else 0.0,
+        "r_at_10": 1.0 if hits else 0.0,
+        "mrr_at_10": (1.0 / (first + 1)) if first is not None else 0.0,
+    }
+
+
+def _mean(values: list) -> float:
+    return round(sum(values) / len(values), 4) if values else 0.0
+
+
+def _source_sha() -> str:
+    """The commit this eval ran against, so a recorded number is bound to a SHA.
+
+    Empty string outside a git repo -- the eval must still run on a fresh clone.
+    Stored in the result (and thus in eval_baseline.json), which is tracked, so git
+    history becomes the append-only telemetry log without a second file to rot.
+    """
+    import subprocess
+
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=Path(__file__).parent,
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+    except Exception:  # noqa: BLE001 -- not a repo / no git: telemetry is best-effort
+        return ""
+
+
+def evaluate(paths: Optional[Paths] = None, settings: Optional[Settings] = None) -> Optional[dict]:
+    """Run all three arms. Returns None when the corpus does not match."""
+    paths = paths or get_paths()
+    settings = settings or get_settings()
+    if not paths.index_sqlite.exists():
+        print("[eval] no index; run `make build` first.", file=sys.stderr)
+        return None
+
+    queries = load_queries()
+    connection = connect_index(paths.index_sqlite, read_only=True)
+    try:
+        chunk_count = connection.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        graded = []
+        unresolved = []
+        for query in queries:
+            relevant = _matching_chunk_ids(connection, query.get("relevant", []))
+            if query.get("relevant") and not relevant:
+                unresolved.append(query["id"])
+                continue
+            graded.append((query, relevant))
+
+        answerable = [item for item in graded if item[1]]
+        expected = [query for query in queries if query.get("relevant")]
+        if expected and len(answerable) < MIN_RESOLVABLE * len(expected):
+            print(
+                f"[eval] SKIPPED: only {len(answerable)}/{len(expected)} judgments resolve "
+                "against this index. These judgments describe the Korean bill corpus; "
+                "load it, or write judgments for the corpus you have.",
+                file=sys.stderr,
+            )
+            return None
+
+        arms = {"vector": {}, "keyword": {}, "fused": {}}
+        by_kind: dict = {}
+        per_query: list = []
+        for query, relevant in graded:
+            kind = query.get("kind", "unlabelled")
+            ranked = {
+                "vector": _vector_only(query["query"], connection, settings, DEPTH),
+                "keyword": _keyword_only(query["query"], connection, DEPTH),
+                "fused": [
+                    hit["chunk_id"]
+                    for hit in hybrid_search(
+                        query["query"], limit=DEPTH, connection=connection, settings=settings
+                    )
+                ],
+            }
+            if kind == "negative":
+                # Nothing to score positively; record how many arms returned a
+                # top hit at all, which is what a future abstention rule needs.
+                by_kind.setdefault(kind, {"n": 0, "returned_rank1": 0})
+                by_kind[kind]["n"] += 1
+                returned = int(bool(ranked["fused"]))
+                by_kind[kind]["returned_rank1"] += returned
+                per_query.append({"id": query["id"], "kind": kind, "returned_rank1": returned})
+                continue
+
+            for arm, ids in ranked.items():
+                scored = _score(ids, relevant)
+                for metric, value in scored.items():
+                    arms[arm].setdefault(metric, []).append(value)
+                if arm == "fused":
+                    bucket = by_kind.setdefault(kind, {})
+                    for metric, value in scored.items():
+                        bucket.setdefault(metric, []).append(value)
+                    per_query.append({
+                        "id": query["id"],
+                        "kind": kind,
+                        "p_at_1": scored["p_at_1"],
+                        "mrr_at_10": scored["mrr_at_10"],
+                    })
+    finally:
+        connection.close()
+
+    result = {
+        "arms": {
+            arm: {metric: _mean(values) for metric, values in metrics.items()}
+            for arm, metrics in arms.items()
+        },
+        "by_kind": {
+            kind: (
+                bucket
+                if "n" in bucket
+                else {metric: _mean(values) for metric, values in bucket.items()}
+            )
+            for kind, bucket in by_kind.items()
+        },
+        "graded": len(graded),
+        "chunk_count": chunk_count,
+        "source_sha": _source_sha(),
+        "per_query": per_query,
+        "unresolved": unresolved,
+        "settings": {
+            "vector_weight": settings.vector_weight,
+            "keyword_weight": settings.keyword_weight,
+            "rrf_k": settings.rrf_k,
+            "alias_expansion": settings.alias_expansion,
+            "embedding_provider": settings.embedding_provider,
+        },
+    }
+    return result
+
+
+def render(result: dict) -> None:
+    print(f"graded {result['graded']} queries  {result['settings']}")
+    if result["unresolved"]:
+        print(f"  unresolved judgments: {', '.join(result['unresolved'])}")
+    print()
+    print(f"  {'arm':10} {'P@1':>7} {'R@5':>7} {'R@10':>7} {'MRR@10':>8}")
+    for arm, metrics in result["arms"].items():
+        print(
+            f"  {arm:10} {metrics.get('p_at_1', 0):7.3f} {metrics.get('r_at_5', 0):7.3f} "
+            f"{metrics.get('r_at_10', 0):7.3f} {metrics.get('mrr_at_10', 0):8.3f}"
+        )
+    print()
+    print("  fused, by kind:")
+    for kind, metrics in sorted(result["by_kind"].items()):
+        if "n" in metrics:
+            print(f"    {kind:18} {metrics['returned_rank1']}/{metrics['n']} returned a top hit")
+            continue
+        print(
+            f"    {kind:18} P@1 {metrics.get('p_at_1', 0):.3f}  "
+            f"R@5 {metrics.get('r_at_5', 0):.3f}  MRR@10 {metrics.get('mrr_at_10', 0):.3f}"
+        )
+
+
+def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0.08) -> int:
+    """Fail when a recorded ARM metric drops by more than `tolerance`, or a per-KIND
+    metric by more than `per_kind_tolerance`.
+
+    The per-kind floor exists because the mean hides a category collapse: reverting
+    the arm weighting left the fused MRR bit-identical at 0.699 while particle_glue
+    fell 0.833 -> 0.611 (AGENTS.md '## Measuring retrieval'). A per-kind bucket is
+    small (n=2-4), so a single-query flip is a real signal; the looser tolerance
+    catches that collapse without firing on a rounding wobble.
+    """
+    if not BASELINE_FILE.exists():
+        print(f"[eval] no baseline at {BASELINE_FILE}; record one with `make eval-baseline`.")
+        return 0
+
+    baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8"))
+
+    # The floor is only comparable on the corpus the baseline was recorded on.
+    # Adding documents (the platform's whole purpose) shifts every ranking, which
+    # is a corpus change, not a retrieval regression. When the indexed corpus
+    # differs, skip rather than false-alarm -- same spirit as the resolvability
+    # skip in evaluate(). Re-record with `make eval-baseline` to adopt the new
+    # corpus as the floor.
+    base_count = baseline.get("chunk_count")
+    current_count = result.get("chunk_count")
+    if base_count is not None and current_count is not None and base_count != current_count:
+        print(
+            f"\n[eval] corpus changed since the baseline ({base_count} -> {current_count} "
+            "chunks); the regression floor is not comparable and is skipped. Re-record "
+            "with `make eval-baseline` if this corpus is the new normal.",
+        )
+        return 0
+
+    regressions = []
+    for arm, metrics in baseline.get("arms", {}).items():
+        for metric, previous in metrics.items():
+            current = result["arms"].get(arm, {}).get(metric)
+            if current is not None and current < previous - tolerance:
+                regressions.append(f"{arm}.{metric} {previous:.3f} -> {current:.3f}")
+
+    # Per-kind floor: a category can collapse while the mean holds. Buckets are
+    # small, so treat a per-kind drop as a real signal, not noise -- and fail on it.
+    kind_regressions = []
+    for kind, metrics in baseline.get("by_kind", {}).items():
+        if "n" in metrics:  # the negative kind has no positive metric to floor
+            continue
+        current_bucket = result.get("by_kind", {}).get(kind)
+        if not current_bucket or "n" in current_bucket:
+            continue  # kind absent from this run (corpus shifted) -- skip, don't false-alarm
+        for metric, previous in metrics.items():
+            current = current_bucket.get(metric)
+            if current is not None and current < previous - per_kind_tolerance:
+                kind_regressions.append(f"{kind}.{metric} {previous:.3f} -> {current:.3f}")
+
+    base_sha = (baseline.get("source_sha") or "")[:8] or "(no sha)"
+    if regressions or kind_regressions:
+        if regressions:
+            print(f"\n[eval] ARM REGRESSION vs baseline {base_sha} (tolerance {tolerance}):")
+            for line in regressions:
+                print(f"  - {line}")
+        if kind_regressions:
+            print(f"\n[eval] PER-KIND REGRESSION vs baseline {base_sha} (tolerance {per_kind_tolerance}):")
+            for line in kind_regressions:
+                print(f"  - {line}")
+        return 1
+    print(
+        f"\n[eval] no regression vs baseline {base_sha} "
+        f"(arm tolerance {tolerance}, per-kind {per_kind_tolerance})."
+    )
+    return 0
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--record-baseline", action="store_true", help="Write the current numbers as the floor.")
+    parser.add_argument("--assert-baseline", action="store_true", help="Fail if a metric regressed.")
+    parser.add_argument("--json", action="store_true", help="Emit the raw result.")
+    args = parser.parse_args(argv)
+
+    result = evaluate()
+    if result is None:
+        # A corpus mismatch is not a failure: a fresh clone has only fixtures.
+        return 0
+
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        render(result)
+
+    if args.record_baseline:
+        BASELINE_FILE.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"\n[eval] baseline written to {BASELINE_FILE}")
+        return 0
+
+    if args.assert_baseline:
+        return compare(result)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

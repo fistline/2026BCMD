@@ -1,0 +1,29 @@
+# 26bmdc — root ignore. data-platform/ keeps its own nested .gitignore
+# (data/, .venv/, .meltano/, .env …), which git still honours inside this repo.
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Node / Scaffold-ETH 2 dApp builds generated under gen-apps/
+node_modules/
+gen-apps/**/.next/
+gen-apps/**/cache/
+gen-apps/**/out/
+gen-apps/**/artifacts/
+gen-apps/**/broadcast/
+gen-apps/**/*.log
+
+# Secrets (per-tree .env; .env.example stays tracked)
+.env
+.env.*
+!.env.example

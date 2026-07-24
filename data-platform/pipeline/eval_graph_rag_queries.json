@@ -1,0 +1,59 @@
+{
+  "_about": [
+    "Judgments for the RELATED section of graph_rag_search (make ask): does the",
+    "graph arm surface the expected article from a graph-connected document the",
+    "direct top hits missed? Anchored by DOC-ID REGEX + HEADING REGEX, never by",
+    "chunk_id (chunk ids are positional) and never by rank (the related section",
+    "is grouped by document score, and document scores shift when the relation",
+    "weight ontology is tuned -- membership is the contract, order is not).",
+    "",
+    "A judgment scores only when the expected document is NOT a seed doc: the",
+    "related section excludes seed docs by design, so a corpus or embedder",
+    "change that promotes the document into the seeds reports as `absorbed`",
+    "(excluded from the mean, counted separately) rather than as a miss.",
+    "",
+    "Every row was recorded from a measurement against a built index, per the",
+    "repo rule that retrieval changes are measurements, not opinions."
+  ],
+  "queries": [
+    {
+      "id": "g01",
+      "query": "예치금 분리보관 의무",
+      "kind": "graph_bridge",
+      "expect": [
+        {"doc": "^01_디지털자산기본법안", "heading": "이용자 예치금의 보호"},
+        {"doc": "^04_디지털자산육성기본법안", "heading": "이용자 예치금의 보호"}
+      ],
+      "why": "Direct top-5 carries the 예치금 articles of two bills; the co-citation arm must surface the SAME concept's article in the bills the direct list missed."
+    },
+    {
+      "id": "g02",
+      "query": "스테이블코인 발행자의 준비자산 요건",
+      "kind": "graph_bridge",
+      "expect": [
+        {"doc": "^01_디지털자산기본법안", "heading": "자산연동형 디지털자산 발행인의 자격요건"},
+        {"doc": "^08_가치고정형디지털자산", "heading": "준비자산 구성 및 관리"}
+      ],
+      "why": "제103조(자산연동형...자격요건) is the README's canonical synonym-gap miss; the graph arm must reach it through the shared-statute pivot when 01 is not a seed."
+    },
+    {
+      "id": "g03",
+      "query": "디지털자산사업자 검사 및 처분 권한",
+      "kind": "graph_bridge",
+      "expect": [
+        {"doc": "^03_디지털자산시장통합법안", "heading": "디지털자산업자에 대한 검사|검사 및 처분"},
+        {"doc": "^02_디지털자산시장", "heading": "디지털자산업자에 대한 검사|검사 및 처분"}
+      ],
+      "why": "The cross-bill family case: every bill legislates 검사/처분; related must extend the family beyond the direct top hits."
+    },
+    {
+      "id": "g04",
+      "query": "가상자산 불공정거래 조사",
+      "kind": "graph_bridge",
+      "expect": [
+        {"doc": "^03_디지털자산시장통합법안", "heading": "보고 및 조사|불공정거래행위자"}
+      ],
+      "why": "03's enforcement articles are reachable only through the graph when its bill is absent from the direct top-5."
+    }
+  ]
+}

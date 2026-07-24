@@ -1,0 +1,90 @@
+{
+  "by_kind": {
+    "code_multihop": {
+      "mrr": 0.5,
+      "p_at_1": 0.0,
+      "path_strength": 1.5,
+      "reach": 1.0
+    },
+    "delegation": {
+      "mrr": 0.75,
+      "p_at_1": 0.5,
+      "path_strength": 1.0,
+      "reach": 1.0
+    },
+    "delegation_upstream": {
+      "mrr": 1.0,
+      "p_at_1": 1.0,
+      "path_strength": 1.0,
+      "reach": 1.0
+    },
+    "doc_reach": {
+      "mrr": 0.25,
+      "p_at_1": 0.0,
+      "path_strength": 1.3333,
+      "reach": 1.0
+    }
+  },
+  "edge_count": 65,
+  "graded": 5,
+  "metrics": {
+    "mrr": 0.65,
+    "p_at_1": 0.4,
+    "path_strength": 1.1667,
+    "reach": 1.0
+  },
+  "node_count": 57,
+  "per_query": [
+    {
+      "id": "g01",
+      "kind": "code_multihop",
+      "mrr": 0.5,
+      "p_at_1": 0.0,
+      "path_strength": 1.5,
+      "reach": 1.0
+    },
+    {
+      "id": "g02",
+      "kind": "doc_reach",
+      "mrr": 0.25,
+      "p_at_1": 0.0,
+      "path_strength": 1.3333,
+      "reach": 1.0
+    },
+    {
+      "id": "g03",
+      "kind": "delegation",
+      "mrr": 0.5,
+      "p_at_1": 0.0,
+      "path_strength": 1.0,
+      "reach": 1.0
+    },
+    {
+      "id": "g04",
+      "kind": "delegation",
+      "mrr": 1.0,
+      "p_at_1": 1.0,
+      "path_strength": 1.0,
+      "reach": 1.0
+    },
+    {
+      "id": "g05",
+      "kind": "delegation_upstream",
+      "mrr": 1.0,
+      "p_at_1": 1.0,
+      "path_strength": 1.0,
+      "reach": 1.0
+    }
+  ],
+  "relation_weights": {
+    "defines": 0.8,
+    "delegates_to": 1.0,
+    "depends_on": 1.0,
+    "imports": 1.0,
+    "mentions": 0.3,
+    "references": 0.5,
+    "uses": 0.8
+  },
+  "source_sha": "e31e8790eb871efaf9d8de3a95d6a68f98d3f8ae",
+  "unresolved": []
+}

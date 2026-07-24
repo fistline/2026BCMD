@@ -1,0 +1,129 @@
+{
+  "_about": [
+    "Retrieval judgments. Relevance is anchored by a HEADING REGEX, never by chunk_id:",
+    "chunk ids are positional ({doc_id}#{index:04d}), so any change to sectioning",
+    "silently re-points them. That is not hypothetical -- an earlier judgment set",
+    "keyed on chunk_id survived a zone-splitting change with every id still resolving,",
+    "while #0110 had moved from a capital-adequacy article to 제97조(준수사항).",
+    "The ids looked fine and the metrics would have been garbage.",
+    "",
+    "This is a REGRESSION FLOOR, not a benchmark. It is small, it is specific to the",
+    "Korean bill corpus, and its absolute numbers mean nothing against a different one.",
+    "What it is for: making the next retrieval change a measurement instead of an opinion.",
+    "",
+    "`kind` groups queries by the failure they probe. Report per kind, never only the",
+    "mean: a change can lift the average while destroying one category.",
+    "  vocabulary_match  the query reuses the document's own words",
+    "  synonym_gap       the query uses a different surface for the same referent",
+    "  particle_glue     the query noun carries 조사, the document's does not",
+    "  cross_bill        several bills legislate it; finding the family is the point",
+    "  negative          genuinely absent; anything confident here is a false positive"
+  ],
+  "queries": [
+    {
+      "id": "q01",
+      "query": "스테이블코인 발행자의 자기자본 요건",
+      "kind": "synonym_gap",
+      "relevant": ["자산연동형 디지털자산 발행인의 자격요건", "재무건전성 유지", "경영건전성기준", "가치안정형 디지털자산 발행자"],
+      "why": "스테이블코인 appears in no bill; each coins its own term. The measured failure that motivated pipeline/aliases.tsv."
+    },
+    {
+      "id": "q02",
+      "query": "가상자산 거래업자 인가에 필요한 자본금",
+      "kind": "synonym_gap",
+      "relevant": ["디지털자산업의 인가", "경영건전성기준", "재무건전성 유지"],
+      "why": "가상자산 for 디지털자산, plus 자본금 which the bills phrase as 건전성."
+    },
+    {
+      "id": "q03",
+      "query": "코인 발행사가 이용자 돈을 따로 보관해야 하나",
+      "kind": "synonym_gap",
+      "relevant": ["예치금의 보호", "이용자 예치금의 보호"],
+      "why": "Colloquial phrasing throughout: 코인 for 디지털자산, 돈 for 예치금, 따로 보관 for 분리하여 예치."
+    },
+    {
+      "id": "q04",
+      "query": "가치안정형 디지털자산 발행자의 의무",
+      "kind": "vocabulary_match",
+      "relevant": ["가치안정형 디지털자산 발행자"],
+      "why": "Uses one bill's exact coinage. Must stay at rank 1: this is the category alias expansion could damage."
+    },
+    {
+      "id": "q05",
+      "query": "예치금의 보호",
+      "kind": "vocabulary_match",
+      "relevant": ["예치금의 보호", "이용자 예치금의 보호"],
+      "why": "Verbatim heading match. A floor that any working keyword arm clears."
+    },
+    {
+      "id": "q06",
+      "query": "무인가 영업행위",
+      "kind": "vocabulary_match",
+      "relevant": ["무인가 영업행위의 금지"],
+      "why": "Pins that 인가/등록/신고 stay distinct regimes. excluded.tsv records why they must never be aliased."
+    },
+    {
+      "id": "q07",
+      "query": "가상자산사업자의 신고 요건",
+      "kind": "particle_glue",
+      "relevant": ["가상자산사업자의 신고", "디지털자산업의 인가"],
+      "why": "사업자의 carries 조사. The fixture holds 제7조(신고한 업무의 요건) and 제12조(신고를 게을리한 자) as deliberate distractors."
+    },
+    {
+      "id": "q08",
+      "query": "디지털자산사업자는 어떤 신고를 하여야 하는가",
+      "kind": "particle_glue",
+      "relevant": ["인가", "등록", "신고"],
+      "why": "사업자는 glued; the answer articles use the bare noun."
+    },
+    {
+      "id": "q09",
+      "query": "증권",
+      "kind": "particle_glue",
+      "relevant": ["벌칙"],
+      "why": "Two characters. The trigram tokenizer cannot match these at all, which is why bigrams were chosen."
+    },
+    {
+      "id": "q10",
+      "query": "재무건전성 유지 의무",
+      "kind": "cross_bill",
+      "relevant": ["재무건전성 유지", "경영건전성기준"],
+      "why": "Legislated by several bills under two different headings. Finding the family, not one member, is the point."
+    },
+    {
+      "id": "q11",
+      "query": "이용자 예치금 분리보관",
+      "kind": "cross_bill",
+      "relevant": ["예치금의 보호", "이용자 예치금의 보호"],
+      "why": "Three bills carry near-identical articles under the same heading."
+    },
+    {
+      "id": "q12",
+      "query": "법 시행일",
+      "kind": "cross_bill",
+      "relevant": ["시행일"],
+      "why": "Every bill has one, in 부칙. Regression guard for the MIN_CHUNK_CHARS bug that dropped 부칙 from 3 of 8 bills on a green build."
+    },
+    {
+      "id": "q13",
+      "query": "임원의 자격요건",
+      "kind": "vocabulary_match",
+      "relevant": ["임원의 자격요건", "준법감시인의 자격요건"],
+      "why": "Guards against over-merging: excluded.tsv rejects 대주주 ≡ 임원, a Jaccard artifact of both being pointers to the same statute."
+    },
+    {
+      "id": "q14",
+      "query": "양자컴퓨터 내성 암호 알고리즘 표준",
+      "kind": "negative",
+      "relevant": [],
+      "why": "Absent from the corpus. sqlite-vec returns exactly k rows however distant, so this will still return candidates; what is measured is that nothing scores like a real hit."
+    },
+    {
+      "id": "q15",
+      "query": "탄소배출권 거래소 상장 요건",
+      "kind": "negative",
+      "relevant": [],
+      "why": "Plausible financial-regulation phrasing with no referent here. Catches alias over-expansion, which inflates confidence on out-of-corpus queries."
+    }
+  ]
+}
