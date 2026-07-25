@@ -7,6 +7,11 @@
 > 약어: **STO**(Security Token Offering, 토큰증권 공모) · **RWA**(Real-World Asset,
 > 실물연계자산) · **dApp**(탈중앙화 애플리케이션) · **DART**(금융감독원 전자공시시스템) ·
 > **혁신금융서비스**(금융규제 샌드박스).
+>
+> 기술 용어: **코퍼스**(검색용으로 색인해 둔 문서 모음) · **색인/인덱스**(빨리 찾도록
+> 미리 정리해 둔 데이터) · **하이브리드 검색**(뜻이 비슷한 문서를 찾는 *벡터* 검색과
+> 정확한 단어를 찾는 *키워드* 검색을 합친 방식) · **의존 그래프**(법안이 어떤 법률에
+> 위임·참조하는지 나타낸 문서 사이의 관계망) · **슬러그**(파일·폴더 이름에 쓰는 짧은 영문 식별자).
 
 ![26bmdc 전체 개요 — 지식에서 온체인 서비스까지](docs/overview.svg)
 
@@ -29,7 +34,7 @@ dApp을 만든다.
 | **`gen-docs/`** | 조각투자·STO 증권신고서를 유형 판정 → 작성 → 자기심사 | `gen-docs/st_prospectus/<slug>/` | Agent Skill (`sto-filing`) |
 | **`gen-apps/`** | Security Token(RWA) 서비스 dApp을 생성. 신고서에서 이어받거나 직접 | `gen-apps/<slug>/` | Agent Skill (`st-service-dapp`, `filing-to-dapp`) |
 
-`gen-docs`·`gen-apps`는 **코퍼스 없이도 완주**된다. `data-platform` 코퍼스는 법령 조문을
+`gen-docs`·`gen-apps`는 **코퍼스(색인된 문서 모음) 없이도 완주**된다. `data-platform` 코퍼스는 법령 조문을
 직접 인용해 근거를 강화하는 **선택 요소**이자, 그 자체로 법안을 검색·추론하는 도구다.
 
 ```
@@ -40,7 +45,7 @@ dApp을 만든다.
 ├── docs/                  # 아키텍처 다이어그램 (overview.svg · architecture.svg · system.svg)
 ├── .agents/skills/        # 루트 스킬 정본 (sto-filing·st-service-dapp·filing-to-dapp·corpus-lookup)
 ├── .claude/skills/        # 위를 미러 (심링크)
-├── data-platform/         # ── 독립 git 저장소. 코퍼스 색인 파이프라인
+├── data-platform/         # ── 코퍼스(문서 색인) 파이프라인
 │   ├── README.md          #    셋업·아키텍처·근거 (이 영역의 정본)
 │   ├── Makefile           #    make build / query / ask / impact / graph 등
 │   ├── source/            #    실제 코퍼스 (법안 원문 hwp/pdf) — git 추적 대상
@@ -58,7 +63,7 @@ dApp을 만든다.
 ```
 
 **data-platform 파이프라인 상세** — 코퍼스가 색인되는 전체 경로(수집 → 랜딩 → Meltano
-EL → SQLMesh 변환 → 서빙 빌드):
+EL(수집·적재) → SQLMesh(변환) → 서빙 빌드):
 
 ![data-platform 파이프라인](docs/architecture.svg)
 
@@ -80,7 +85,7 @@ FTS(키워드)·Graph(관계) **3계로 나눠 `index.sqlite`를 색인**한다.
   에이전트가 스킬을 로드해 구동한다.
 - **Python 3.12 권장(≥3.10) + [uv](https://docs.astral.sh/uv/)** — data-platform
   파이프라인용. 버전 플로어의 정본은 `data-platform/README.md`의 *Version floors*.
-- **Node.js 18+** — gen-apps 산출물(Scaffold-ETH 2 dApp)을 실제로 띄울 때만.
+- **Node.js 22.10+** — gen-apps 산출물(Scaffold-ETH 2 dApp)을 실제로 띄울 때만.
 
 ### 0. 에이전트 열기 (스킬을 쓰는 법)
 
@@ -193,10 +198,11 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   대상이다. 코퍼스 원본은 `data-platform/source/`에 두며(이곳은 git-ignore 대상이
   아니라 추적 대상이다), 근거는 `data-platform/README.md`의 control/data plane 절.
 
-> **저장소 경계·상태:** 현재 git으로 버전 관리되는 것은 **`data-platform/`뿐**이다.
-> 루트 `26bmdc/`와 `gen-docs`·`gen-apps`는 아직 독립 추적되지 않는다. 또한
-> `data-platform/source/`의 코퍼스 원본은 추적 대상이지만 **현재 작업본에는 아직
-> 커밋되지 않았다** — 갓 clone한 사본에는 원본이 없을 수 있으니 커밋 여부를 확인한다.
+> **저장소 경계·상태:** 루트 `26bmdc/` 전체가 **하나의 git 저장소**로
+> `data-platform`·`gen-docs`·`gen-apps`를 함께 추적한다(원격
+> `github.com/fistline/2026BCMD`, branch `main`). `data-platform/source/`의 코퍼스
+> 원본(법안 hwp/pdf)은 추적·커밋되어 clone에 함께 실린다. `data/`·`.venv`·`.meltano`는
+> 재생성물이라 gitignore 대상이다.
 
 ---
 
