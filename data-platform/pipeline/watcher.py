@@ -54,30 +54,38 @@ def seed_inbox(paths: Paths) -> int:
       * `pipeline/fixtures/` — the small deterministic sample set the smoke test
         and the retrieval floor stand on (flat).
       * `source/` — the curated real corpus, one subfolder per collection; walked
-        recursively and flattened into the inbox by basename.
+        recursively and copied into the inbox PRESERVING that first subfolder, so
+        `source/norms/x.txt` lands at `inbox/norms/x.txt` and keeps collection
+        `norms` (`collection_of` = first inbox folder). Fixtures stay flat, so they
+        remain the `_root` collection the smoke/eval floors expect.
 
     Only SUPPORTED_SUFFIXES are materialised, so a human-facing PDF sitting beside
     each `.hwp` original stays in `source/` and never enters the pipeline. An
     existing inbox file is never overwritten, which keeps this idempotent and lets
     a manual drop win over a re-seed.
     """
-    candidates = []
+    # (candidate, destination-relative-to-inbox). Fixtures flatten by basename;
+    # source keeps its subfolder so the folder-as-collection convention survives a
+    # fresh clone -- otherwise the whole curated corpus re-seeds into `_root` and
+    # every per-collection scope is lost.
+    entries = []
     if paths.fixtures.exists():
-        candidates += sorted(paths.fixtures.iterdir())
+        entries += [(c, Path(c.name)) for c in sorted(paths.fixtures.iterdir())]
     if paths.source.exists():
-        candidates += sorted(paths.source.rglob("*"))
+        entries += [(c, c.relative_to(paths.source)) for c in sorted(paths.source.rglob("*"))]
 
-    if not candidates:
+    if not entries:
         return 0
     paths.inbox.mkdir(parents=True, exist_ok=True)
 
     copied = 0
-    for candidate in candidates:
+    for candidate, dest_rel in entries:
         if not candidate.is_file() or candidate.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
-        destination = paths.inbox / candidate.name
+        destination = paths.inbox / dest_rel
         if destination.exists():
             continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(candidate, destination)
         copied += 1
     return copied

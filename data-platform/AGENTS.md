@@ -41,10 +41,14 @@ mistakes; everything else is recoverable.
    claim the same bytes and diverge on the next sync. Two tracked trees seed the
    git-ignored inbox on every build: `pipeline/fixtures/` (the small smoke-test
    sample set) and `source/` (the curated real corpus, one subfolder per
-   collection). `seed_inbox` walks both, copies only SUPPORTED_SUFFIXES, and
-   flattens by basename — so the `.pdf` twin beside each `.hwp` original stays in
-   `source/` and never enters the pipeline. Add corpus originals to `source/` and
-   fixtures to `pipeline/fixtures/`, never to `data/`.
+   collection). `seed_inbox` walks both and copies only SUPPORTED_SUFFIXES — so the
+   `.pdf` twin beside each `.hwp` original stays in `source/` and never enters the
+   pipeline. Fixtures land flat (the `_root` collection); a `source/` file keeps its
+   first subfolder as its inbox path, so `source/norms/x.txt → inbox/norms/x.txt`
+   stays in collection `norms` on a fresh clone. Add corpus originals to `source/`
+   (in the subfolder that names their collection) and fixtures to
+   `pipeline/fixtures/`, never to `data/`. `source/CORPUS_MANIFEST.tsv` records each
+   document's sha256 + source URL so the corpus can be re-fetched deterministically.
 
 2. **Never edit `data/raw/` or `data/inbox/` in place.** They are append-only
    landing zones; the watcher preserves superseded bytes under

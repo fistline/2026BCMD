@@ -1,5 +1,5 @@
 {
-  "_comment": "Graph-reachability judgments. Anchored on node SLUGS + relation type (never on transient degree/rank). Fixture judgments (g01-g02) resolve on any build; legal judgments (g03-g05) resolve once the bills are indexed. relevant = the nodes graph_query MUST reach from start_node within max_depth. See pipeline/eval_graph.py.",
+  "_comment": "Graph-reachability judgments. Anchored on node SLUGS + relation type (never on transient degree/rank). Fixture judgments (g01-g02) resolve on any build; legal judgments resolve once the bills+norms are indexed. g03-g05 test REFERENCE edges (a bill citing a law); g06-g07 test real DELEGATION edges (시행령/감독규정 → 모법, statute.py delegates_to). relevant = the nodes graph_query MUST reach from start_node within max_depth. See pipeline/eval_graph.py.",
   "queries": [
     {
       "id": "g01",
@@ -35,11 +35,27 @@
     },
     {
       "id": "g05",
-      "kind": "delegation_upstream",
+      "kind": "reference_upstream",
       "start_node": "은행법",
       "direction": "upstream",
       "max_depth": 1,
       "relevant": ["01_디지털자산기본법안_민병덕-hwp", "02_디지털자산시장의혁신과성장에관한법률안_이강일-hwp"]
+    },
+    {
+      "id": "g06",
+      "kind": "delegation_downstream",
+      "start_node": "자본시장과-금융투자업에-관한-법률-시행령",
+      "direction": "downstream",
+      "max_depth": 1,
+      "relevant": ["자본시장과-금융투자업에-관한-법률"]
+    },
+    {
+      "id": "g07",
+      "kind": "delegation_downstream",
+      "start_node": "가상자산업감독규정",
+      "direction": "downstream",
+      "max_depth": 1,
+      "relevant": ["가상자산-이용자-보호-등에-관한-법률"]
     }
   ]
 }

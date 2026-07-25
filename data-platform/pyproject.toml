@@ -52,10 +52,14 @@ ocr = [
 # operator step that lands files in the inbox. Uses scrapling's Fetcher /
 # DynamicFetcher / StealthyFetcher, escalating to a stealth browser only when a
 # public page bot-blocks a plain fetch (§ invariant 8). The stdlib path covers
-# ordinary files; scrapling is needed for --render and --stealth.
-# Enable with: uv sync --extra web  then  uv run scrapling install
+# ordinary files; scrapling is needed for --render and --stealth. The [fetchers]
+# extra pulls the pieces --stealth actually needs (curl_cffi impersonation,
+# camoufox, patchright, msgspec) -- a bare `scrapling` import succeeds but
+# StealthyFetcher then dies on a missing module. Bare-metal browsers are NOT a pip
+# artifact: after `uv sync --extra web` you must still run `uv run scrapling install`
+# (and/or `uv run patchright install chromium`) once to download them.
 web = [
-    "scrapling>=0.2",
+    "scrapling[fetchers]>=0.2",
 ]
 # Optional Korean morphological augmentation for the KEYWORD arm (KIWI_MORPH=1).
 # NOT installed by default and NEVER needed by the model-free default path. It
