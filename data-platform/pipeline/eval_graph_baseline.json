@@ -6,10 +6,10 @@
       "path_strength": 1.5,
       "reach": 1.0
     },
-    "delegation_upstream": {
+    "delegation_downstream": {
       "mrr": 1.0,
       "p_at_1": 1.0,
-      "path_strength": 0.5,
+      "path_strength": 1.0,
       "reach": 1.0
     },
     "doc_reach": {
@@ -23,17 +23,23 @@
       "p_at_1": 0.5,
       "path_strength": 0.5,
       "reach": 1.0
+    },
+    "reference_upstream": {
+      "mrr": 1.0,
+      "p_at_1": 1.0,
+      "path_strength": 0.5,
+      "reach": 1.0
     }
   },
-  "edge_count": 70,
-  "graded": 5,
+  "edge_count": 76,
+  "graded": 7,
   "metrics": {
-    "mrr": 0.65,
-    "p_at_1": 0.4,
-    "path_strength": 0.8667,
+    "mrr": 0.75,
+    "p_at_1": 0.5714,
+    "path_strength": 0.9048,
     "reach": 1.0
   },
-  "node_count": 95,
+  "node_count": 96,
   "per_query": [
     {
       "id": "g01",
@@ -69,10 +75,26 @@
     },
     {
       "id": "g05",
-      "kind": "delegation_upstream",
+      "kind": "reference_upstream",
       "mrr": 1.0,
       "p_at_1": 1.0,
       "path_strength": 0.5,
+      "reach": 1.0
+    },
+    {
+      "id": "g06",
+      "kind": "delegation_downstream",
+      "mrr": 1.0,
+      "p_at_1": 1.0,
+      "path_strength": 1.0,
+      "reach": 1.0
+    },
+    {
+      "id": "g07",
+      "kind": "delegation_downstream",
+      "mrr": 1.0,
+      "p_at_1": 1.0,
+      "path_strength": 1.0,
       "reach": 1.0
     }
   ],
@@ -85,6 +107,6 @@
     "references": 0.5,
     "uses": 0.8
   },
-  "source_sha": "8950bfbd6ad371fb92b3eba953c0c760717b2340",
+  "source_sha": "360aaac7894a8b0e0726682603b26ee9eb4a3b78",
   "unresolved": []
 }
