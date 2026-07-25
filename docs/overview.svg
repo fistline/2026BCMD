@@ -73,7 +73,7 @@
 
     <rect class="subc" x="16" y="164" width="308" height="54" rx="9" fill="#f2f4f7" stroke="#e4e8ee"/>
     <text class="step" x="30" y="186">① 유형 판정 (항상 먼저)</text>
-    <text class="desc" x="30" y="204">투자계약 · 비금전신탁 · 집합투자</text>
+    <text class="desc" x="30" y="204">투자계약증권 · 신탁수익증권</text>
 
     <rect class="subc" x="16" y="232" width="308" height="54" rx="9" fill="#f2f4f7" stroke="#e4e8ee"/>
     <text class="step" x="30" y="254">② 작성</text>
