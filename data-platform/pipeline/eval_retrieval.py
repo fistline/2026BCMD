@@ -49,6 +49,14 @@ from pipeline.build_rag import (
 
 QUERY_FILE = Path(__file__).with_name("eval_queries.json")
 BASELINE_FILE = Path(__file__).with_name("eval_baseline.json")
+# The opt-in reranker floor lives in a SEPARATE file so `make eval-baseline`
+# (rerank off) and `make eval-rerank-baseline` (RERANK=1) never overwrite each
+# other. Selected by the run's rerank_enabled, so the default gate is untouched.
+BASELINE_RERANK_FILE = Path(__file__).with_name("eval_rerank_baseline.json")
+
+
+def _baseline_file(result: dict) -> Path:
+    return BASELINE_RERANK_FILE if result.get("settings", {}).get("rerank_enabled") else BASELINE_FILE
 DEPTH = 10
 # Below this share of judgments resolvable against the index, the corpus is not
 # the one these judgments describe and the numbers would be noise.
@@ -339,11 +347,13 @@ def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0
     small (n=2-4), so a single-query flip is a real signal; the looser tolerance
     catches that collapse without firing on a rounding wobble.
     """
-    if not BASELINE_FILE.exists():
-        print(f"[eval] no baseline at {BASELINE_FILE}; record one with `make eval-baseline`.")
+    baseline_file = _baseline_file(result)
+    record_cmd = "make eval-rerank-baseline" if baseline_file is BASELINE_RERANK_FILE else "make eval-baseline"
+    if not baseline_file.exists():
+        print(f"[eval] no baseline at {baseline_file}; record one with `{record_cmd}`.")
         return 0
 
-    baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8"))
+    baseline = json.loads(baseline_file.read_text(encoding="utf-8"))
 
     # The floor is only comparable on the corpus the baseline was recorded on.
     # Adding documents (the platform's whole purpose) shifts every ranking, which
@@ -431,11 +441,12 @@ def main(argv=None) -> int:
         render(result)
 
     if args.record_baseline:
-        BASELINE_FILE.write_text(
+        baseline_file = _baseline_file(result)
+        baseline_file.write_text(
             json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        print(f"\n[eval] baseline written to {BASELINE_FILE}")
+        print(f"\n[eval] baseline written to {baseline_file}")
         return 0
 
     if args.assert_baseline:
