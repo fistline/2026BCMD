@@ -31,6 +31,13 @@ Documents relate in two ways:
 Hub nodes are damped: a statute half the corpus delegates to relates everything
 to everything and means nothing. Nodes connected to more than HUB_DOC_CAP
 documents are skipped; the rest weigh in at 1/log2(2+degree).
+
+When the related section comes back empty or short, `expansion.reachability`
+says why in read-only terms — no usable seed edges, every shared pivot over the
+hub cap (each named with its raw degree), partners that were themselves seeds or
+hidden — so an unreachable answer is inspectable instead of silent. It carries
+counts and pivot-node ids only, never a document id and never nodes.doc_id, and
+it is derived from the walk's own structures without influencing `related`.
 """
 
 from __future__ import annotations
@@ -115,6 +122,86 @@ def _node_labels(connection: sqlite3.Connection, node_ids: Sequence[str]) -> dic
     return {row["node_id"]: row["label"] or row["node_id"] for row in rows}
 
 
+def _reachability_summary(
+    *,
+    seeds: int,
+    seed_edges_total: int,
+    seed_edges_usable: int,
+    direct_neighbours: int,
+    pivots_found: int,
+    hub_dropped: list,
+    usable_partners: int,
+    excluded_seed: int,
+    excluded_hidden: int,
+    related_found: int,
+    truncated: bool,
+) -> dict:
+    """Explain, read-only, why the related set came out the size it did.
+
+    Turns a silent empty `related` into an inspectable reason: the graph only
+    knows declared edges, co-citation needs a shared pivot, hubs are capped, and
+    the walk starts only from the retrieval seeds. Every input is a count or a
+    pivot-node identity (never a document id, never nodes.doc_id), so this never
+    re-surfaces a hidden fixture nor leaks the MIN()-attributed doc_id column.
+    """
+    if related_found > 0:
+        reason = f"{related_found} related document(s) found"
+        if truncated:
+            reason += "; more candidates than the cap were dropped (truncated)"
+    elif seeds == 0:
+        reason = "retrieval returned no seed documents"
+    elif seed_edges_usable == 0:
+        reason = (
+            f"seed documents have {seed_edges_total} edge(s), all suppressed as "
+            "mentions/excluded relations"
+            if seed_edges_total
+            else "seed documents have no graph edges (the relation may be prose-only)"
+        )
+    elif pivots_found == 0 and direct_neighbours == 0:
+        reason = "seed edges reach no shared pivot or indexed neighbour"
+    else:
+        # Edges exist but nothing became related. Name EVERY blocker present so a
+        # genuine hub drop is never masked by a trivial self-/sibling exclusion.
+        parts = []
+        if hub_dropped:
+            parts.append(
+                f"{len(hub_dropped)} shared pivot(s) over the hub cap ({HUB_DOC_CAP} docs)"
+            )
+        if excluded_seed or excluded_hidden:
+            bits = []
+            if excluded_seed:
+                bits.append(f"{excluded_seed} already a seed")
+            if excluded_hidden:
+                bits.append(f"{excluded_hidden} hidden")
+            parts.append("co-citation partner(s) excluded (" + ", ".join(bits) + ")")
+        if (
+            pivots_found - len(hub_dropped) > 0
+            and usable_partners == 0
+            and not (excluded_seed or excluded_hidden)
+        ):
+            parts.append(
+                "shared pivot(s) cited by no other indexed document (no co-citation sibling)"
+            )
+        reason = (
+            "no related documents: " + "; ".join(parts)
+            if parts
+            else "no admissible related documents"
+        )
+
+    return {
+        "reason": reason,
+        "seeds": seeds,
+        "seed_edges": {"total": seed_edges_total, "usable": seed_edges_usable},
+        "direct_neighbours": direct_neighbours,
+        "pivots_found": pivots_found,
+        "pivots_hub_dropped": hub_dropped,
+        "usable_partner_docs": usable_partners,
+        "partners_excluded": {"already_seed": excluded_seed, "hidden": excluded_hidden},
+        "related_found": related_found,
+        "truncated": truncated,
+    }
+
+
 def _discover_related(
     connection: sqlite3.Connection,
     seed_docs: Sequence[str],
@@ -123,14 +210,27 @@ def _discover_related(
     relations: Optional[Sequence[str]],
     hidden_docs: frozenset,
     max_related_docs: int,
+    collect_diagnostics: bool = True,
 ) -> tuple:
     """Find related documents with honest provenance.
 
-    Returns (related, truncated): related is a dict
+    Returns (related, truncated, reachability): related is a dict
     doc_id -> {"score": float, "connections": [rows]} ordered later by the
-    caller; truncated reports whether the doc cap dropped candidates.
+    caller; truncated reports whether the doc cap dropped candidates;
+    reachability is a read-only diagnostic (or None when collect_diagnostics is
+    False) explaining WHY the related set is empty/small. It is derived from the
+    same structures the walk uses and never influences `related` — an equality
+    test pins related/truncated identical with diagnostics on and off.
     """
     seed_set = set(seed_docs)
+    # Read-only diagnostic accumulators. Every write below targets one of these
+    # and never `related`/`add`, so the related output is byte-identical whether
+    # or not diagnostics are collected.
+    _direct_docs: set = set()
+    _hub_dropped: dict = {}
+    _usable_partners: set = set()
+    _excluded_seed: set = set()
+    _excluded_hidden: set = set()
     allowed = (lambda r: r not in DEFAULT_EXCLUDED_RELATIONS) if relations is None else (
         lambda r: r in set(relations)
     )
@@ -146,7 +246,8 @@ def _discover_related(
         entry["connections"].append(connection_row)
 
     # -- depth 1: direct doc<->doc edges, plus co-citation through shared nodes.
-    seed_edges = [edge for edge in _edges_touching(connection, seed_docs) if allowed(edge["relation"])]
+    _all_seed_edges = _edges_touching(connection, seed_docs)
+    seed_edges = [edge for edge in _all_seed_edges if allowed(edge["relation"])]
 
     intermediates: dict = {}
     for edge in seed_edges:
@@ -156,6 +257,7 @@ def _discover_related(
             other, direction = edge["source_id"], "incoming"
         if other in documents:
             if admissible(other):
+                _direct_docs.add(other)
                 add(
                     other,
                     edge["weight"],
@@ -191,8 +293,17 @@ def _discover_related(
         # with other docs X cites.
         pair_key = (pivot, "cited_by" if seed_direction == "outgoing" else "cites")
         partners = pivot_docs.get(pair_key, [])
+        # The seeds that reached THIS pivot: a seed cites its own pivot too, so it
+        # appears among the pivot's partners as a self-reference, not a sibling.
+        pivot_seeds = {
+            e["source_id"] if seed_direction == "outgoing" else e["target_id"]
+            for e in seed_side
+        }
         degree = len({e["source_id"] if pair_key[1] == "cited_by" else e["target_id"] for e in partners})
         if degree > HUB_DOC_CAP:
+            _hub_dropped.setdefault(
+                pivot, {"node": pivot, "label": labels.get(pivot, pivot), "degree": degree}
+            )
             continue
         damping = 1.0 / math.log2(2 + degree)
         for partner_edge in partners:
@@ -202,7 +313,18 @@ def _discover_related(
                 else partner_edge["target_id"]
             )
             if not admissible(other):
+                # Attribute the exclusion reason directly (not via the collapsed
+                # admissible() bool). Count a seed partner as a LOST sibling only
+                # when a DIFFERENT seed reached this pivot; a seed pairing only
+                # with itself is no shared pivot, so recording it would misreport
+                # "reach no shared pivot" as an exclusion.
+                if other in seed_set:
+                    if pivot_seeds - {other}:
+                        _excluded_seed.add(other)
+                elif other in hidden_docs:
+                    _excluded_hidden.add(other)
                 continue
+            _usable_partners.add(other)
             for seed_edge in seed_side:
                 seed_doc = (
                     seed_edge["source_id"]
@@ -261,7 +383,24 @@ def _discover_related(
 
     ordered = sorted(related.items(), key=lambda item: (-item[1]["score"], item[0]))
     truncated = len(ordered) > max_related_docs
-    return dict(ordered[:max_related_docs]), truncated
+    result = dict(ordered[:max_related_docs])
+
+    reachability = None
+    if collect_diagnostics:
+        reachability = _reachability_summary(
+            seeds=len(seed_set),
+            seed_edges_total=len(_all_seed_edges),
+            seed_edges_usable=len(seed_edges),
+            direct_neighbours=len(_direct_docs),
+            pivots_found=len(pivot_ids),
+            hub_dropped=[_hub_dropped[node] for node in sorted(_hub_dropped)],
+            usable_partners=len(_usable_partners),
+            excluded_seed=len(_excluded_seed),
+            excluded_hidden=len(_excluded_hidden),
+            related_found=len(result),
+            truncated=truncated,
+        )
+    return result, truncated, reachability
 
 
 def _connective_variants(entry: dict) -> list:
@@ -495,14 +634,23 @@ def graph_rag_search(
             "related": [],
             "expansion": {"depth": depth, "truncated": False},
         }
-        if depth == 0 or not seed_docs:
+        if depth == 0:
+            payload["expansion"]["reachability"] = {
+                "reason": "graph expansion disabled (depth=0)"
+            }
+            return payload
+        if not seed_docs:
+            payload["expansion"]["reachability"] = {
+                "reason": "retrieval returned no seed documents",
+                "seeds": 0,
+            }
             return payload
 
         _require_graph(connection)
         documents = _document_ids(connection)
         hidden = frozenset() if include_fixtures else _fixture_doc_ids()
 
-        related, truncated = _discover_related(
+        related, truncated, reachability = _discover_related(
             connection,
             seed_docs,
             documents,
@@ -512,6 +660,7 @@ def graph_rag_search(
             max_related_docs,
         )
         payload["expansion"]["truncated"] = truncated
+        payload["expansion"]["reachability"] = reachability
         if not related:
             return payload
 

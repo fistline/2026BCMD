@@ -1,5 +1,5 @@
 {
   "related_recall": 1.0,
-  "scored": 7,
-  "index_signature": "v4|bill:2/3/8/2|onnx_int8|Xenova/bge-m3|1024|cjk2-3|fts2|unicode61 remove_diacritics 2 tokenchars '_'|kiwi-add-0.23.0"
+  "scored": 6,
+  "index_signature": "v4|bill:2/3/8/2,statute:1/5/4/1|onnx_int8|Xenova/bge-m3|1024|cjk2-3|fts2|unicode61 remove_diacritics 2 tokenchars '_'|kiwi-add-0.23.0"
 }
