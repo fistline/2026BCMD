@@ -31,3 +31,7 @@ gen-apps/**/*.log
 .env
 .env.*
 !.env.example
+
+# Local-only design/working notes — preserved on disk but never shared.
+# (docs/*.svg diagrams stay tracked; only this subfolder is ignored.)
+docs/design/
