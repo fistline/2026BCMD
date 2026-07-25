@@ -339,11 +339,12 @@ class OnnxInt8Embedder:
     _MAX_TOKENS = 512  # a 1200-char chunk fits well under this; bounds CPU cost.
     _BATCH = 16
 
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, allow_download: bool = False):
         try:
             import numpy as np
             import onnxruntime as ort
             from huggingface_hub import hf_hub_download
+            from huggingface_hub.errors import LocalEntryNotFoundError
             from tokenizers import Tokenizer
         except ImportError as error:
             raise RuntimeError(
@@ -355,11 +356,22 @@ class OnnxInt8Embedder:
         self.model_name = model_name
 
         def _fetch(filename: str) -> str:
-            # Keep the read path offline (invariant 7): use the cached file and
-            # touch the network only on the first-ever fetch (during a build).
+            # The read path is strictly offline (invariant 7): try the local HF
+            # cache first on BOTH paths, and branch only on a genuine cache miss.
+            # The build path (allow_download=True) fetches once; the read path
+            # raises with an actionable message instead of touching the network.
+            # A non-miss failure (corrupt cache, permissions) surfaces as itself
+            # rather than being masked as "not cached".
             try:
                 return hf_hub_download(model_name, filename, local_files_only=True)
-            except Exception:
+            except LocalEntryNotFoundError:
+                if not allow_download:
+                    raise RuntimeError(
+                        f"onnx_int8 model {model_name!r} is not in the local Hugging "
+                        f"Face cache. The model is fetched once during `make build`; "
+                        f"the read path never downloads (invariant 7). Run `make build` "
+                        f"online once to warm the cache, then retry."
+                    ) from None
                 return hf_hub_download(model_name, filename)
 
         onnx_path = _fetch(self._ONNX_FILE)
@@ -380,39 +392,92 @@ class OnnxInt8Embedder:
         self._output_name = self._session.get_outputs()[0].name
         self.dimensions = len(self.encode(["차원 확인"])[0])
 
-    def encode(self, texts: Sequence[str]) -> list:
+    def _encode_batch(self, batch) -> list:
         np = self._np
+        encoded = self._tokenizer.encode_batch(list(batch))
+        feeds = {
+            "input_ids": np.array([e.ids for e in encoded], dtype=np.int64),
+            "attention_mask": np.array([e.attention_mask for e in encoded], dtype=np.int64),
+        }
+        feeds = {name: value for name, value in feeds.items() if name in self._input_names}
+        output = self._session.run([self._output_name], feeds)[0]
+        # Pooled variant returns [batch, dim]; fall back to CLS if a token-level
+        # [batch, seq, dim] graph is ever substituted.
+        matrix = output if output.ndim == 2 else output[:, 0, :]
+        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        norms[norms == 0.0] = 1.0
+        return (matrix / norms).astype(float).tolist()
+
+    def _encode_workers(self, n_batches: int) -> int:
+        override = os.environ.get("ENCODE_WORKERS")
+        if override:
+            try:
+                return max(1, min(int(override), n_batches))
+            except ValueError:
+                pass
+        cores = os.cpu_count() or 1
+        # int8 GEMM is memory-bandwidth-bound, so throughput saturates near the
+        # physical core count; leave 2 cores free and cap at 8. Determinism is
+        # unaffected -- every Run still uses intra_op=1, so each chunk's vector is
+        # bit-identical to the single-threaded path; only independent batches run
+        # concurrently, and results are re-assembled in order.
+        return max(1, min(cores - 2, 8, n_batches))
+
+    def encode(self, texts: Sequence[str]) -> list:
         texts = list(texts)
-        vectors: list = []
-        for start in range(0, len(texts), self._BATCH):
-            batch = texts[start : start + self._BATCH]
-            encoded = self._tokenizer.encode_batch(batch)
-            feeds = {
-                "input_ids": np.array([e.ids for e in encoded], dtype=np.int64),
-                "attention_mask": np.array([e.attention_mask for e in encoded], dtype=np.int64),
-            }
-            feeds = {name: value for name, value in feeds.items() if name in self._input_names}
-            output = self._session.run([self._output_name], feeds)[0]
-            # Pooled variant returns [batch, dim]; fall back to CLS if a token-
-            # level [batch, seq, dim] graph is ever substituted.
-            matrix = output if output.ndim == 2 else output[:, 0, :]
-            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-            norms[norms == 0.0] = 1.0
-            vectors.extend((matrix / norms).astype(float).tolist())
-        return vectors
+        if not texts:
+            return []
+        batches = [texts[i : i + self._BATCH] for i in range(0, len(texts), self._BATCH)]
+        workers = self._encode_workers(len(batches))
+        if workers <= 1:
+            return [vector for batch in batches for vector in self._encode_batch(batch)]
+        # onnxruntime releases the GIL during run() and Run() is thread-safe, so
+        # independent batches encode on separate cores while each stays single-
+        # threaded (intra_op=1). ThreadPoolExecutor.map preserves batch order, so
+        # the assembled result is bit-identical to the sequential path (verified by
+        # the ENCODE_WORKERS=1 vs N equality check).
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(self._encode_batch, batches))
+        return [vector for batch_result in results for vector in batch_result]
 
 
-def get_embedder(settings: Settings):
-    """Resolve the configured embedder. Unknown values fail loudly, not silently."""
-    if settings.embedding_provider == "hashing":
-        return HashingEmbedder(settings.embedding_dim)
-    if settings.embedding_provider == "sentence_transformers":
-        return SentenceTransformerEmbedder(settings.embedding_model)
-    if settings.embedding_provider == "onnx_int8":
-        return OnnxInt8Embedder(settings.embedding_model)
+@lru_cache(maxsize=None)
+def _load_embedder(provider: str, model: str, dim: int, allow_download: bool):
+    """Construct the embedder once per (provider, model, dim, allow_download).
+
+    Cached for the process, so the read path does not rebuild the ONNX session on
+    every query. Keyed on primitives (not the Settings object) so the key is
+    explicit and stable.
+    """
+    if provider == "hashing":
+        return HashingEmbedder(dim)
+    if provider == "sentence_transformers":
+        # NOTE: this provider still downloads on a cold cache at construction
+        # (SentenceTransformer(model_name)); the read-path offline guarantee is
+        # currently restored for onnx_int8 only. Gating it is a follow-up.
+        return SentenceTransformerEmbedder(model)
+    if provider == "onnx_int8":
+        return OnnxInt8Embedder(model, allow_download=allow_download)
     raise ValueError(
         "EMBEDDING_PROVIDER must be 'hashing', 'sentence_transformers' or "
-        f"'onnx_int8', got {settings.embedding_provider!r}"
+        f"'onnx_int8', got {provider!r}"
+    )
+
+
+def get_embedder(settings: Settings, allow_download: bool = False):
+    """Resolve the configured embedder (cached, once per process).
+
+    `allow_download` is True only on the build path (`build_index`); the read path
+    leaves it False so a missing onnx_int8 model raises rather than silently
+    touching the network (invariant 7).
+    """
+    return _load_embedder(
+        settings.embedding_provider,
+        settings.embedding_model,
+        settings.embedding_dim,
+        allow_download,
     )
 
 
@@ -547,7 +612,7 @@ def build_index(paths: Optional[Paths] = None, settings: Optional[Settings] = No
         seen_keys.add(key)
         representatives.append(row)
 
-    embedder = get_embedder(settings)
+    embedder = get_embedder(settings, allow_download=True)
     embeddings = embedder.encode([row[8] for row in representatives])
     dimensions = len(embeddings[0])
 

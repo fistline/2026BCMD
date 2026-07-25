@@ -77,27 +77,46 @@ def _matching_chunk_ids(connection, patterns: list) -> set:
     }
 
 
+def _fixture_chunk_ids(connection) -> set:
+    """Chunk ids of smoke fixtures, hidden from the served read path.
+
+    The single arms query chunks_vec/chunks_fts directly, with no doc_id column
+    and no fixture predicate; without this they credit fixture chunks the fused
+    product path (build_rag HYBRID_SEARCH_SQL) hides, inflating the arm metrics
+    against a retriever users never get.
+    """
+    from pipeline.build_rag import _fixture_doc_ids
+
+    fixture_docs = _fixture_doc_ids()
+    if not fixture_docs:
+        return set()
+    rows = connection.execute("SELECT chunk_id, doc_id FROM chunks").fetchall()
+    return {row["chunk_id"] for row in rows if row["doc_id"] in fixture_docs}
+
+
 def _vector_only(query: str, connection, settings: Settings, depth: int) -> list:
     embedder = get_embedder(settings)
     vector = embedder.encode([query])[0]
     if not any(vector):
         return []
+    fixtures = _fixture_chunk_ids(connection)
     rows = connection.execute(
         "SELECT chunk_id FROM chunks_vec WHERE embedding MATCH ? AND k = ? ORDER BY distance",
-        (serialize_vector(vector), depth),
+        (serialize_vector(vector), depth + len(fixtures)),  # over-fetch so DEPTH real rows survive
     ).fetchall()
-    return [row["chunk_id"] for row in rows]
+    return [row["chunk_id"] for row in rows if row["chunk_id"] not in fixtures][:depth]
 
 
 def _keyword_only(query: str, connection, depth: int) -> list:
     match = build_fts_query(query)
     if not match:
         return []
+    fixtures = _fixture_chunk_ids(connection)
     rows = connection.execute(
         "SELECT chunk_id FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT ?",
-        (match, depth),
+        (match, depth + len(fixtures)),  # over-fetch so DEPTH real rows survive
     ).fetchall()
-    return [row["chunk_id"] for row in rows]
+    return [row["chunk_id"] for row in rows if row["chunk_id"] not in fixtures][:depth]
 
 
 def _score(ranked: list, relevant: set, depth: int = DEPTH) -> dict:

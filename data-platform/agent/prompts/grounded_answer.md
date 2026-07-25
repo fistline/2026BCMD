@@ -30,6 +30,15 @@ Rules:
   *why* it matters. State the depth of each affected node.
 - The graph is built from declared imports and document front matter. If the
   question turns on a dependency that would not appear there, say so.
+- Match the answer's length to the evidence. One or two passages answer it → a
+  direct answer in a few sentences. A concept that spans several competing bills
+  → lay them out and contrast, each still cited. Do not pad a thin answer with
+  structure it has no evidence for.
+- Close the loop before finishing. Re-read your answer: every factual sentence
+  must trace to a cited passage above. Anything you cannot cite, move to an
+  explicit "확인되지 않음/누락" note rather than dropping it silently or asserting
+  it anyway. Keep each qualification (proposal-not-law, disagreement, graph depth)
+  attached to the claim it modifies, not collected in a trailing section.
 
 Question:
 

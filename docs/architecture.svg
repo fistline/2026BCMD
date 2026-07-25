@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 674" font-family="'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .card{fill:#ffffff;stroke-width:1.4}
+      .hd{font-size:13.5px;font-weight:700;fill:#ffffff}
+      .b{font-size:11px;fill:#1e293b}
+      .m{font-size:10px;fill:#64748b}
+      .star{font-size:10px;fill:#2E6CB0;font-weight:700}
+      .flow{stroke:#475569;stroke-width:1.8;fill:none}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1320" height="674" fill="#f8fafc"/>
+  <rect x="0.5" y="0.5" width="1319" height="673" fill="none" stroke="#e2e8f0"/>
+
+  <!-- Title -->
+  <text x="24" y="34" font-size="21" font-weight="800" fill="#0f172a">data-platform — 로컬 우선 AI 에이전트 데이터 플랫폼</text>
+  <text x="24" y="56" font-size="12.5" fill="#475569">Meltano 추출 → DuckLake 저장 → SQLMesh 정제 → 단일 SQLite 인덱스가 벡터·키워드·그래프를 서빙</text>
+  <!-- structure-focused diagram -->>
+
+  <!-- DuckLake container (behind stages 3-4) -->
+  <rect x="444" y="78" width="432" height="286" rx="10" fill="#f2f4f7" stroke="#3C7790" stroke-dasharray="5 4" stroke-width="1.2"/>
+  <text x="660" y="357" font-size="11" font-weight="700" fill="#3C7790" text-anchor="middle">DuckLake (lakehouse · parquet + catalog.ducklake)</text>
+
+  <!-- ===== Stage cards ===== -->
+  <!-- 1 SOURCES -->
+  <g>
+    <rect x="24" y="90" width="192" height="256" rx="9" class="card" stroke="#2E6CB0"/>
+    <path d="M24,99 a9,9 0 0 1 9,-9 h174 a9,9 0 0 1 9,9 v17 h-192 z" fill="#2E6CB0"/>
+    <text x="120" y="110" class="hd" text-anchor="middle">① 소스 / 수집</text>
+    <text x="36" y="136" class="b">source/ (큐레이션 코퍼스)</text>
+    <text x="40" y="150" class="m">법안 원문 HWP·PDF · git (HWP만 색인)</text>
+    <text x="36" y="170" class="b">pipeline/fixtures/</text>
+    <text x="40" y="184" class="m">스모크 테스트 시드</text>
+    <text x="36" y="204" class="b">외부 수집</text>
+    <text x="40" y="218" class="m">· fetch_law.py: 법령(법제처)·</text>
+    <text x="52" y="232" class="m">의안·DART (공식 API 우선)</text>
+    <text x="40" y="246" class="m">· 웹: fetch_web.py + scrapling</text>
+    <text x="52" y="260" class="m">(정적→render→stealth)</text>
+    <text x="36" y="282" class="b">HITL 검토 (hitl-review)</text>
+    <text x="40" y="296" class="m">OCR·저신뢰 추출 사람 승인</text>
+    <text x="36" y="320" class="m">robots/ToS 준수 · API 우선</text>
+  </g>
+
+  <!-- 2 INBOX→RAW -->
+  <g>
+    <rect x="240" y="90" width="192" height="256" rx="9" class="card" stroke="#35729B"/>
+    <path d="M240,99 a9,9 0 0 1 9,-9 h174 a9,9 0 0 1 9,9 v17 h-192 z" fill="#35729B"/>
+    <text x="336" y="110" class="hd" text-anchor="middle">② 랜딩 존</text>
+    <text x="252" y="138" class="b">seed_inbox</text>
+    <text x="256" y="152" class="m">source/ + fixtures →</text>
+    <text x="256" y="166" class="m">data/inbox/documents/</text>
+    <text x="252" y="190" class="b">watcher 승격 (promote)</text>
+    <text x="256" y="204" class="m">bytes 해시로 중복 판별</text>
+    <text x="252" y="228" class="b">data/raw/documents/</text>
+    <text x="256" y="242" class="m">불변 · append-only</text>
+    <text x="256" y="256" class="m">· _revisions/ (덮인 bytes)</text>
+    <text x="256" y="270" class="m">· _manifest.jsonl</text>
+    <text x="252" y="298" class="m">data/ 전체 gitignore</text>
+    <text x="252" y="320" class="m">(git=로직, 데이터플레인=바이트)</text>
+  </g>
+
+  <!-- 3 MELTANO EL -->
+  <g>
+    <rect x="456" y="90" width="192" height="256" rx="9" class="card" stroke="#3C7790"/>
+    <path d="M456,99 a9,9 0 0 1 9,-9 h174 a9,9 0 0 1 9,9 v17 h-192 z" fill="#3C7790"/>
+    <text x="552" y="110" class="hd" text-anchor="middle">③ Meltano EL</text>
+    <text x="468" y="138" class="b">tap_inbox_documents</text>
+    <text x="472" y="152" class="m">· parse_document</text>
+    <text x="472" y="166" class="m">· 청킹 (chunking.py)</text>
+    <text x="472" y="180" class="m">· 문서정체성/fingerprint</text>
+    <text x="468" y="204" class="b">doctype 프로파일 (데이터)</text>
+    <text x="472" y="218" class="m">bill · statute (정규식 4표)</text>
+    <text x="472" y="232" class="m">make gate 로 검증</text>
+    <text x="468" y="256" class="b">→ target-ducklake</text>
+    <text x="472" y="270" class="m">DuckLake raw.* 적재</text>
+    <text x="468" y="300" class="m">3 스트림: docs·chunks·relations</text>
+    <text x="472" y="314" class="m">full-refresh 적재</text>
+  </g>
+
+  <!-- 4 SQLMesh -->
+  <g>
+    <rect x="672" y="90" width="192" height="256" rx="9" class="card" stroke="#438185"/>
+    <path d="M672,99 a9,9 0 0 1 9,-9 h174 a9,9 0 0 1 9,9 v17 h-192 z" fill="#438185"/>
+    <text x="768" y="110" class="hd" text-anchor="middle">④ SQLMesh 변환</text>
+    <text x="684" y="138" class="b">bronze</text>
+    <text x="688" y="152" class="m">shape 보존 · 타입 cast</text>
+    <text x="684" y="176" class="b">silver</text>
+    <text x="688" y="190" class="m">정제 · 2단계 dedup:</text>
+    <text x="688" y="204" class="m">doc_id → content</text>
+    <text x="688" y="218" class="m">fingerprint(포맷 통합)</text>
+    <text x="684" y="242" class="b">gold</text>
+    <text x="688" y="256" class="m">chunks · entities · relations</text>
+    <text x="684" y="280" class="b">blocking audits</text>
+    <text x="688" y="294" class="m">every_document_chunked 등</text>
+    <text x="688" y="316" class="m">실패 시 빌드 중단</text>
+  </g>
+
+  <!-- 5 SERVING BUILD -->
+  <g>
+    <rect x="888" y="90" width="192" height="256" rx="9" class="card" stroke="#3E877E"/>
+    <path d="M888,99 a9,9 0 0 1 9,-9 h174 a9,9 0 0 1 9,9 v17 h-192 z" fill="#3E877E"/>
+    <text x="984" y="110" class="hd" text-anchor="middle">⑤ 서빙 빌드</text>
+    <text x="900" y="138" class="b">build_rag (gold.chunks →)</text>
+    <text x="904" y="152" class="m">· onnx_int8 bge-m3 임베딩</text>
+    <text x="916" y="166" class="m">(다중코어 병렬 인코딩)</text>
+    <text x="904" y="182" class="m">· Kiwi 형태소 FTS 증강</text>
+    <text x="916" y="196" class="m">(opt-in · KIWI_MORPH)</text>
+    <text x="904" y="212" class="m">· 컬렉션-aware 청크 dedup</text>
+    <text x="916" y="226" class="m">(중복 조항 1회만 색인)</text>
+    <text x="900" y="250" class="b">build_graph</text>
+    <text x="904" y="264" class="m">entities/relations → nodes/edges</text>
+    <text x="900" y="292" class="m">gold.chunks.embed_text 입력</text>
+    <text x="904" y="306" class="m">(content는 프로비넌스로만)</text>
+  </g>
+
+  <!-- 6 SQLITE INDEX -->
+  <g>
+    <rect x="1104" y="90" width="192" height="256" rx="9" class="card" stroke="#3E8E82"/>
+    <path d="M1104,99 a9,9 0 0 1 9,-9 h174 a9,9 0 0 1 9,9 v17 h-192 z" fill="#3E8E82"/>
+    <text x="1200" y="110" class="hd" text-anchor="middle">⑥ SQLite 인덱스</text>
+    <text x="1116" y="138" class="b">data/serving/index.sqlite</text>
+    <text x="1120" y="152" class="m">단일 파일 스냅샷</text>
+    <text x="1116" y="176" class="b">chunks</text>
+    <text x="1120" y="190" class="m">본문 + 프로비넌스(전량)</text>
+    <text x="1116" y="210" class="b">chunks_vec</text>
+    <text x="1120" y="224" class="m">sqlite-vec (벡터)</text>
+    <text x="1116" y="244" class="b">chunks_fts</text>
+    <text x="1120" y="258" class="m">FTS5 (CJK bigram)</text>
+    <text x="1116" y="278" class="b">nodes · edges</text>
+    <text x="1120" y="292" class="m">그래프 (위임·참조·언급·imports)</text>
+    <text x="1116" y="314" class="b">index_meta (signature)</text>
+    <text x="1120" y="328" class="m">쓰기·질의 경로 정합 감시</text>
+  </g>
+
+  <!-- flow arrows between stages -->
+  <line x1="216" y1="218" x2="240" y2="218" class="flow" marker-end="url(#arrow)"/>
+  <line x1="432" y1="218" x2="456" y2="218" class="flow" marker-end="url(#arrow)"/>
+  <line x1="648" y1="218" x2="672" y2="218" class="flow" marker-end="url(#arrow)"/>
+  <line x1="864" y1="218" x2="888" y2="218" class="flow" marker-end="url(#arrow)"/>
+  <line x1="1080" y1="218" x2="1104" y2="218" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- index → read path arrow -->
+  <path d="M1200,346 L1200,392 L676,392 L676,410" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- ===== Read path ===== -->
+  <g>
+    <rect x="24" y="410" width="880" height="150" rx="9" class="card" stroke="#3C7790"/>
+    <path d="M24,419 a9,9 0 0 1 9,-9 h862 a9,9 0 0 1 9,9 v17 h-880 z" fill="#3C7790"/>
+    <text x="464" y="430" class="hd" text-anchor="middle">읽기 경로 (에이전트 질의)</text>
+
+    <rect x="40" y="446" width="270" height="102" rx="7" fill="#eef3fa" stroke="#3C7790" stroke-width="1"/>
+    <text x="52" y="466" class="b" font-weight="700">hybrid_search</text>
+    <text x="52" y="484" class="m">벡터(sqlite-vec) + 키워드(FTS5)</text>
+    <text x="52" y="500" class="m">RRF 융합 (vector·keyword 등가중)</text>
+    <text x="52" y="516" class="m">alias 확장 (aliases.tsv, 인용근거)</text>
+    <text x="52" y="534" class="m">Kiwi 노운 레마 · fixture 숨김</text>
+
+    <rect x="325" y="446" width="240" height="102" rx="7" fill="#eef3fa" stroke="#3C7790" stroke-width="1"/>
+    <text x="337" y="466" class="b" font-weight="700">graph_query</text>
+    <text x="337" y="484" class="m">다중홉 도달성 (재귀 CTE)</text>
+    <text x="337" y="500" class="m">위임·참조·언급 · imports·uses</text>
+    <text x="337" y="516" class="m">사이클 가드 + depth cap</text>
+    <text x="337" y="534" class="m">코드 변경 blast-radius</text>
+
+    <rect x="580" y="446" width="308" height="102" rx="7" fill="#eef3fa" stroke="#3C7790" stroke-width="1"/>
+    <text x="592" y="466" class="b" font-weight="700">eval — 회귀 바닥 (per-kind)</text>
+    <text x="592" y="484" class="m">15 질의 · 벡터/키워드/융합 3-arm</text>
+    <text x="592" y="500" class="m">현재: 융합 MRR@10 0.660,</text>
+    <text x="592" y="516" class="m">particle_glue 0.417, cross_bill 1.0</text>
+    <text x="592" y="534" class="m">make eval-baseline 로 SHA 고정</text>
+  </g>
+
+  <!-- Agent skills -->
+  <g>
+    <rect x="924" y="410" width="372" height="150" rx="9" class="card" stroke="#334155"/>
+    <path d="M924,419 a9,9 0 0 1 9,-9 h354 a9,9 0 0 1 9,9 v17 h-372 z" fill="#334155"/>
+    <text x="1110" y="430" class="hd" text-anchor="middle">Agent Skills (오픈 SKILL.md 표준)</text>
+    <text x="938" y="452" class="m">.agents/skills/ (원본) → .claude/skills/ 링크</text>
+    <text x="938" y="474" class="b">corpus-search · corpus-graph</text>
+    <text x="938" y="490" class="b">code-impact-analysis · document-drafting</text>
+    <text x="938" y="506" class="b">doctype-profile-authoring · source-onboarding</text>
+    <text x="938" y="522" class="b">legal-schema-authoring · correction-harvesting</text>
+    <text x="938" y="538" class="b">hitl-review · graph-viz</text>
+    <line x1="905" y1="470" x2="921" y2="470" class="flow" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- data-flow summary -->
+  <g font-size="10.5" fill="#475569">
+    <text x="24" y="602" font-weight="700" fill="#0f172a">데이터 흐름</text>
+    <text x="24" y="622">소스 → 랜딩(불변 raw) → Meltano EL → SQLMesh(bronze→silver→gold) → 서빙 빌드(임베딩+FTS+그래프) → 단일 SQLite → 에이전트 읽기 경로</text>
+    <text x="24" y="644" fill="#94a3b8">코퍼스 규모: gold.chunks 11,439 · 60 문서(법안·법령·DART)</text>
+  </g>
+</svg>

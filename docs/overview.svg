@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 680" font-family="'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif">
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arwd" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .title{font-size:21px;font-weight:800;fill:#1f2328}
+      .sub{font-size:13px;fill:#59636e}
+      .card{fill:#ffffff;stroke:#d8dee4;stroke-width:1.4}
+      .atitle{font-size:15px;font-weight:800}
+      .asub{font-size:10.5px;fill:#59636e}
+      .step{font-size:12.5px;font-weight:700;fill:#1f2328}
+      .desc{font-size:10px;fill:#59636e}
+      .subc{stroke-width:1}
+      .out{font-size:11.5px;font-weight:700}
+      .lbl{font-size:9.5px;font-weight:600;fill:#475569}
+      .note{font-size:10.5px;fill:#59636e}
+      .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+      .vflow{fill:none;stroke:#9aa3b0;stroke-width:1.6}
+      .solid{fill:none;stroke:#475569;stroke-width:2.4}
+      .dash{fill:none;stroke:#94a3b8;stroke-width:1.6;stroke-dasharray:5 4}
+    </style>
+  </defs>
+
+  <rect x="2" y="2" width="1276" height="676" rx="16" fill="#ffffff" stroke="#e5e8ec"/>
+
+  <!-- header -->
+  <text class="title" x="40" y="44">26bmdc — 규제 지식에서 온체인 서비스까지</text>
+  <text class="sub" x="40" y="66">법령 코퍼스 → 증권신고서 → 서비스 dApp · 프롬프트·스킬·데이터플랫폼이 맞물리는 방식</text>
+  <line class="solid" x1="978" y1="40" x2="1010" y2="40"/>
+  <text class="lbl" x="1016" y="43">핵심 경로</text>
+  <line class="dash" x1="1108" y1="40" x2="1140" y2="40"/>
+  <text class="lbl" x="1146" y="43">선택 · 결속</text>
+
+  <!-- ============ COL 1 · data-platform (slate) ============ -->
+  <g transform="translate(40,0)">
+    <rect class="card" x="0" y="90" width="340" height="372" rx="13"/>
+    <rect x="0" y="90" width="6" height="372" rx="3" fill="#2E6CB0"/>
+    <text class="atitle" x="22" y="120" fill="#2E6CB0">data-platform</text>
+    <text class="asub" x="22" y="138">법률 지식 베이스 · make CLI</text>
+    <line x1="16" y1="150" x2="324" y2="150" stroke="#2E6CB0" stroke-opacity="0.28"/>
+
+    <rect class="subc" x="16" y="164" width="308" height="54" rx="9" fill="#eef4fb" stroke="#d2e0f1"/>
+    <text class="step" x="30" y="186">source/ 코퍼스</text>
+    <text class="desc" x="30" y="204">법안·법령 HWP·PDF · git 추적</text>
+
+    <rect class="subc" x="16" y="232" width="308" height="54" rx="9" fill="#eef4fb" stroke="#d2e0f1"/>
+    <text class="step" x="30" y="254">index.sqlite</text>
+    <text class="desc" x="30" y="272">벡터 · FTS5 · 의존그래프 (단일 파일)</text>
+
+    <rect class="subc" x="16" y="300" width="308" height="54" rx="9" fill="#eef4fb" stroke="#d2e0f1"/>
+    <text class="step" x="30" y="322">agent tools</text>
+    <text class="desc" x="30" y="340">hybrid_search · graph_query · graph_rag</text>
+
+    <rect x="16" y="380" width="308" height="52" rx="9" fill="#2E6CB0"/>
+    <text class="out" x="170" y="411" fill="#ffffff" text-anchor="middle">make query · ask · impact</text>
+
+    <path class="vflow" d="M170,218 V232" marker-end="url(#arw)"/>
+    <path class="vflow" d="M170,286 V300" marker-end="url(#arw)"/>
+    <path class="vflow" d="M170,354 V380" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- ============ COL 2 · gen-docs (sienna) ============ -->
+  <g transform="translate(464,0)">
+    <rect class="card" x="0" y="90" width="340" height="372" rx="13"/>
+    <rect x="0" y="90" width="6" height="372" rx="3" fill="#5B6577"/>
+    <text class="atitle" x="22" y="120" fill="#5B6577">gen-docs</text>
+    <text class="asub" x="22" y="138">증권신고서 · sto-filing 스킬</text>
+    <line x1="16" y1="150" x2="324" y2="150" stroke="#5B6577" stroke-opacity="0.28"/>
+
+    <rect class="subc" x="16" y="164" width="308" height="54" rx="9" fill="#f2f4f7" stroke="#e4e8ee"/>
+    <text class="step" x="30" y="186">① 유형 판정 (항상 먼저)</text>
+    <text class="desc" x="30" y="204">투자계약 · 비금전신탁 · 집합투자</text>
+
+    <rect class="subc" x="16" y="232" width="308" height="54" rx="9" fill="#f2f4f7" stroke="#e4e8ee"/>
+    <text class="step" x="30" y="254">② 작성</text>
+    <text class="desc" x="30" y="272">common-core (공통 ~70%) + 유형별 델타</text>
+
+    <rect class="subc" x="16" y="300" width="308" height="54" rx="9" fill="#f2f4f7" stroke="#e4e8ee"/>
+    <text class="step" x="30" y="322">③ 자기심사</text>
+    <text class="desc" x="30" y="340">금융감독원 심사 관점 · 기획/제출 모드</text>
+
+    <rect x="16" y="380" width="308" height="52" rx="9" fill="#5B6577"/>
+    <text class="out mono" x="170" y="411" fill="#ffffff" text-anchor="middle">st_prospectus/‹slug›/</text>
+
+    <path class="vflow" d="M170,218 V232" marker-end="url(#arw)"/>
+    <path class="vflow" d="M170,286 V300" marker-end="url(#arw)"/>
+    <path class="vflow" d="M170,354 V380" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- ============ COL 3 · gen-apps (teal) ============ -->
+  <g transform="translate(888,0)">
+    <rect class="card" x="0" y="90" width="340" height="372" rx="13"/>
+    <rect x="0" y="90" width="6" height="372" rx="3" fill="#3E8E82"/>
+    <text class="atitle" x="22" y="120" fill="#3E8E82">gen-apps</text>
+    <text class="asub" x="22" y="138">서비스 dApp · Agent Skill</text>
+    <line x1="16" y1="150" x2="324" y2="150" stroke="#3E8E82" stroke-opacity="0.28"/>
+
+    <rect class="subc" x="16" y="164" width="308" height="54" rx="9" fill="#eaf5f2" stroke="#d3e9e3"/>
+    <text class="step" x="30" y="186">filing-to-dapp (브리지)</text>
+    <text class="desc" x="30" y="204">신고서→Q1~Q5 매핑 · 게이트 승계</text>
+
+    <rect class="subc" x="16" y="232" width="308" height="54" rx="9" fill="#eaf5f2" stroke="#d3e9e3"/>
+    <text class="step" x="30" y="254">st-service-dapp</text>
+    <text class="desc" x="30" y="272">Q1~Q5 → 표준판정 S1~S6 (ERC-7943)</text>
+
+    <rect class="subc" x="16" y="300" width="308" height="54" rx="9" fill="#eaf5f2" stroke="#d3e9e3"/>
+    <text class="step" x="30" y="322">PHASE 0–5 (게이트 순서)</text>
+    <text class="desc" x="30" y="340">설계 → 컨트랙트 → 배포 → 프론트 → 검수</text>
+
+    <rect x="16" y="380" width="308" height="52" rx="9" fill="#3E8E82"/>
+    <text class="out mono" x="170" y="411" fill="#ffffff" text-anchor="middle">gen-apps/‹slug›/ (Scaffold-ETH 2)</text>
+
+    <path class="vflow" d="M170,218 V232" marker-end="url(#arw)"/>
+    <path class="vflow" d="M170,286 V300" marker-end="url(#arw)"/>
+    <path class="vflow" d="M170,354 V380" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- ============ cross connections ============ -->
+  <!-- grounding: data-platform -> gen-docs (optional) -->
+  <path class="dash" d="M380,286 H464" marker-end="url(#arwd)"/>
+  <text class="lbl" x="422" y="270" text-anchor="middle">법령 근거</text>
+  <text class="lbl" x="422" y="281" text-anchor="middle">(선택)</text>
+
+  <!-- handoff: gen-docs -> gen-apps -->
+  <path class="solid" d="M804,286 H888" marker-end="url(#arw)"/>
+  <text class="lbl" x="846" y="270" text-anchor="middle">신고서</text>
+  <text class="lbl" x="846" y="281" text-anchor="middle">이어받기</text>
+
+  <!-- shared slug: outputs bound -->
+  <path class="dash" d="M788,406 H904" marker-start="url(#arwd)" marker-end="url(#arwd)"/>
+  <text class="lbl" x="846" y="424" text-anchor="middle">공유 슬러그</text>
+
+  <!-- note -->
+  <text class="note" x="40" y="494">※ data-platform 코퍼스(법령 근거)는 gen-docs·gen-apps 양쪽에 선택적으로 공급된다 — 두 영역은 코퍼스 없이도 완주한다.</text>
+
+  <!-- ============ skills band ============ -->
+  <rect class="card" x="40" y="514" width="1200" height="140" rx="13"/>
+  <text class="atitle" x="60" y="544" fill="#1f2328" font-size="14">스킬 구조 · 정본과 미러</text>
+
+  <rect x="60" y="556" width="270" height="46" rx="9" fill="#eef1f5" stroke="#d3dae3"/>
+  <text class="step mono" x="76" y="577">.agents/skills/</text>
+  <text class="desc" x="76" y="593">정본 · 편집은 여기서만</text>
+
+  <path class="solid" d="M338,579 H408" marker-end="url(#arw)"/>
+  <text class="lbl" x="373" y="572" text-anchor="middle">심링크</text>
+
+  <rect x="416" y="556" width="270" height="46" rx="9" fill="#f5f6f8" stroke="#dde2e9"/>
+  <text class="step mono" x="432" y="577">.claude/skills/</text>
+  <text class="desc" x="432" y="593">미러 · 드리프트 없음</text>
+
+  <text class="desc mono" x="720" y="574">개방 SKILL.md 표준</text>
+  <text class="desc" x="720" y="592">Codex · Claude Code · Antigravity 공용</text>
+
+  <line x1="60" y1="616" x2="1220" y2="616" stroke="#e6eaef"/>
+  <text class="desc mono" x="60" y="636"><tspan fill="#1f2328" font-weight="700">루트 스킬</tspan>  ·  sto-filing · st-service-dapp · filing-to-dapp · corpus-lookup</text>
+  <text class="desc mono" x="60" y="654"><tspan fill="#1f2328" font-weight="700">data-platform 스킬</tspan> (cwd=data-platform)  ·  corpus-search · corpus-graph · document-drafting · graph-viz · … (10종)</text>
+</svg>

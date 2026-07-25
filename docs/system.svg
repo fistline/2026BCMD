@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 752" font-family="'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <symbol id="doc" viewBox="0 0 44 38" overflow="visible">
+      <rect x="10" y="1" width="28" height="32" rx="3" fill="#e9f7ee" stroke="#4aa96e" stroke-width="1.3"/>
+      <rect x="6" y="4" width="28" height="32" rx="3" fill="#e9f7ee" stroke="#4aa96e" stroke-width="1.3"/>
+      <rect x="2" y="7" width="28" height="30" rx="3" fill="#f0fbf4" stroke="#4aa96e" stroke-width="1.3"/>
+    </symbol>
+    <style>
+      .st{fill:#f9f4e3;stroke:#c9b46a;stroke-width:1.4}
+      .stt{font-size:12px;font-weight:700;fill:#4a4218}
+      .sts{font-size:9px;fill:#8a8058}
+      .fail{fill:#fdecec;stroke:#e57373;stroke-width:1.4}
+      .ft{font-size:10px;fill:#c0392b;font-weight:600}
+      .io{font-size:10px;fill:#2e7d4f;font-weight:600}
+      .iosub{font-size:8px;fill:#94a3b8}
+      .cont{fill:none;stroke:#aeb8c4;stroke-width:1.3;stroke-dasharray:7 5}
+      .ct{font-size:13.5px;font-weight:800;fill:#334155}
+      .fl{stroke:#334155;stroke-width:1.7;fill:none}
+      .link{stroke:#9aa5b1;stroke-width:1.5;fill:none;stroke-dasharray:5 4}
+      .kt{font-size:9.5px;fill:#334155}
+      .lane{font-size:13px;font-weight:800}
+      .chip{fill:#e9f7ee;stroke:#4aa96e;stroke-width:1.3}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="752" fill="#ffffff"/>
+
+  <!-- ===== minimized Key ===== -->
+  <rect x="686" y="14" width="466" height="26" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="700" y="31" class="kt" font-weight="700" fill="#334155">Key</text>
+  <rect x="726" y="21" width="16" height="11" rx="2.5" class="fail"/><text x="746" y="31" class="kt">실패</text>
+  <rect x="788" y="21" width="16" height="11" rx="2.5" class="st"/><text x="808" y="31" class="kt">처리 단계</text>
+  <line x1="866" y1="27" x2="884" y2="27" class="fl" marker-end="url(#a)"/><text x="890" y="31" class="kt">흐름</text>
+  <use href="#doc" x="928" y="17" width="18" height="16"/><text x="952" y="31" class="kt">텍스트 입출력</text>
+
+  <!-- ===================== INDEX PROCESS ===================== -->
+  <rect x="16" y="50" width="1148" height="366" rx="12" class="cont"/>
+  <text x="34" y="74" class="ct">① Index Process — 색인 (Vector · FTS · Graph 3계 색인)</text>
+
+  <!-- failure -->
+  <rect x="118" y="84" width="188" height="24" rx="6" class="fail"/>
+  <text x="212" y="100" class="ft" text-anchor="middle">원문 미색인 (PDF·추출 실패)</text>
+  <line x1="200" y1="108" x2="188" y2="126" class="fl" marker-end="url(#a)"/>
+
+  <!-- top prep pipeline -->
+  <use href="#doc" x="40" y="116" width="44" height="38"/>
+  <text x="62" y="172" class="io" text-anchor="middle">문서</text>
+  <rect x="116" y="124" width="128" height="46" rx="8" class="st"/>
+  <text x="180" y="146" class="stt" text-anchor="middle" text-decoration="underline">파싱 · 청킹</text>
+  <text x="180" y="160" class="sts" text-anchor="middle">본문 추출 · 조각 분할</text>
+  <use href="#doc" x="278" y="116" width="44" height="38"/>
+  <text x="300" y="172" class="io" text-anchor="middle">Chunks</text>
+  <rect x="360" y="124" width="188" height="46" rx="8" class="st"/>
+  <text x="454" y="146" class="stt" text-anchor="middle" text-decoration="underline">정제 · 변환 (SQLMesh)</text>
+  <text x="454" y="160" class="sts" text-anchor="middle">원천 → 정제 → 표준(gold)</text>
+  <line x1="84" y1="140" x2="112" y2="146" class="fl" marker-end="url(#a)"/>
+  <line x1="246" y1="146" x2="276" y2="140" class="fl" marker-end="url(#a)"/>
+  <line x1="322" y1="140" x2="356" y2="146" class="fl" marker-end="url(#a)"/>
+
+  <!-- SQLMesh persists gold to DuckLake, which feeds the 3 index lanes -->
+  <path d="M454,170 V186 H175 V205" class="fl" marker-end="url(#a)"/>
+  <text x="316" y="181" class="iosub">gold 저장</text>
+  <path d="M131,208 a44,11 0 0 0 88,0 v170 a44,11 0 0 1 -88,0 z" fill="#eef4fb" stroke="#4b7fa8" stroke-width="1.5"/>
+  <ellipse cx="175" cy="208" rx="44" ry="11" fill="#eef4fb" stroke="#4b7fa8" stroke-width="1.5"/>
+  <text x="175" y="286" font-size="13" font-weight="800" fill="#2f5f80" text-anchor="middle">DuckLake</text>
+  <text x="175" y="302" class="sts" fill="#4b7fa8" text-anchor="middle">gold 레이크</text>
+  <text x="175" y="315" class="sts" fill="#4b7fa8" text-anchor="middle">catalog + parquet</text>
+
+  <!-- lane backgrounds -->
+  <rect x="228" y="210" width="656" height="50" rx="8" fill="#eef4fb" stroke="#cfe0f0"/>
+  <rect x="228" y="274" width="656" height="50" rx="8" fill="#edf3f5" stroke="#cfe0e6"/>
+  <rect x="228" y="338" width="656" height="50" rx="8" fill="#eef5f2" stroke="#cfe6dd"/>
+
+  <!-- lane labels -->
+  <text x="44" y="231" class="lane" fill="#2E6CB0">Vector</text>
+  <text x="44" y="246" class="sts" fill="#2E6CB0">의미 임베딩</text>
+  <text x="44" y="295" class="lane" fill="#3C7790">FTS</text>
+  <text x="44" y="310" class="sts" fill="#3C7790">키워드</text>
+  <text x="44" y="359" class="lane" fill="#3E877E">Graph</text>
+  <text x="44" y="374" class="sts" fill="#3E877E">지식 그래프</text>
+
+  <!-- DuckLake fans out to the 3 lanes (clean, rightward) -->
+  <line x1="218" y1="235" x2="252" y2="235" class="fl" marker-end="url(#a)"/>
+  <line x1="218" y1="299" x2="252" y2="299" class="fl" marker-end="url(#a)"/>
+  <line x1="218" y1="363" x2="252" y2="363" class="fl" marker-end="url(#a)"/>
+
+  <!-- Vector lane -->
+  <rect x="256" y="212" width="220" height="46" rx="7" class="st"/>
+  <text x="366" y="231" class="stt" text-anchor="middle">임베딩 입력 구성</text>
+  <text x="366" y="245" class="sts" text-anchor="middle">제목+본문 결합 · 중복 청크 제거</text>
+  <rect x="512" y="212" width="232" height="46" rx="7" class="st"/>
+  <text x="628" y="231" class="stt" text-anchor="middle">의미 벡터 생성</text>
+  <text x="628" y="245" class="sts" text-anchor="middle">bge-m3 임베딩 · 다중코어 병렬</text>
+  <rect x="776" y="218" width="96" height="34" rx="7" class="chip"/>
+  <text x="824" y="234" class="io" text-anchor="middle">의미 벡터</text>
+  <text x="824" y="245" class="iosub" text-anchor="middle">chunks_vec</text>
+  <line x1="476" y1="235" x2="510" y2="235" class="fl" marker-end="url(#a)"/>
+  <line x1="744" y1="235" x2="774" y2="235" class="fl" marker-end="url(#a)"/>
+  <line x1="874" y1="235" x2="942" y2="235" class="fl" marker-end="url(#a)"/>
+
+  <!-- FTS lane -->
+  <rect x="256" y="276" width="220" height="46" rx="7" class="st"/>
+  <text x="366" y="295" class="stt" text-anchor="middle">검색 토큰화</text>
+  <text x="366" y="309" class="sts" text-anchor="middle">한글 정규화 · 2글자 겹침 분해</text>
+  <rect x="512" y="276" width="232" height="46" rx="7" class="st"/>
+  <text x="628" y="295" class="stt" text-anchor="middle">명사·어근 보강</text>
+  <text x="628" y="309" class="sts" text-anchor="middle">Kiwi 형태소 분석 · 선택 기능</text>
+  <rect x="776" y="282" width="96" height="34" rx="7" class="chip"/>
+  <text x="824" y="298" class="io" text-anchor="middle">키워드 색인</text>
+  <text x="824" y="309" class="iosub" text-anchor="middle">chunks_fts</text>
+  <line x1="476" y1="299" x2="510" y2="299" class="fl" marker-end="url(#a)"/>
+  <line x1="744" y1="299" x2="774" y2="299" class="fl" marker-end="url(#a)"/>
+  <line x1="874" y1="299" x2="942" y2="299" class="fl" marker-end="url(#a)"/>
+
+  <!-- Graph lane -->
+  <rect x="256" y="340" width="220" height="46" rx="7" class="st"/>
+  <text x="366" y="359" class="stt" text-anchor="middle">① 관계 추출</text>
+  <text x="366" y="373" class="sts" text-anchor="middle">문서유형 규칙 · 위임/개정/인용</text>
+  <rect x="512" y="340" width="232" height="46" rx="7" class="st"/>
+  <text x="628" y="359" class="stt" text-anchor="middle">② 관계 정제</text>
+  <text x="628" y="373" class="sts" text-anchor="middle">노드 연결 · 가중치 · 검증</text>
+  <rect x="776" y="346" width="96" height="34" rx="7" class="chip"/>
+  <text x="824" y="362" class="io" text-anchor="middle">지식 그래프</text>
+  <text x="824" y="373" class="iosub" text-anchor="middle">nodes·edges</text>
+  <line x1="476" y1="363" x2="510" y2="363" class="fl" marker-end="url(#a)"/>
+  <line x1="744" y1="363" x2="774" y2="363" class="fl" marker-end="url(#a)"/>
+  <line x1="874" y1="363" x2="942" y2="363" class="fl" marker-end="url(#a)"/>
+
+  <!-- Database (SQLite index) -->
+  <path d="M944,218 a46,12 0 0 0 92,0 v148 a46,12 0 0 1 -92,0 z" fill="#f0fbf4" stroke="#4aa96e" stroke-width="1.5"/>
+  <ellipse cx="990" cy="218" rx="46" ry="12" fill="#f0fbf4" stroke="#4aa96e" stroke-width="1.5"/>
+  <text x="990" y="290" font-size="13" font-weight="800" fill="#2e7d4f" text-anchor="middle">SQLite Index</text>
+  <text x="990" y="306" class="sts" fill="#2e7d4f" text-anchor="middle">단일 파일</text>
+  <text x="990" y="320" class="sts" fill="#2e7d4f" text-anchor="middle">index.sqlite</text>
+
+  <!-- ===================== QUERY PROCESS ===================== -->
+  <rect x="16" y="420" width="1148" height="300" rx="12" class="cont"/>
+  <text x="34" y="446" class="ct">② Query Process — 질의 (검색 · 그래프 컨텍스트)</text>
+
+  <use href="#doc" x="36" y="486" width="46" height="40"/>
+  <text x="59" y="548" class="io" text-anchor="middle">Query</text>
+  <rect x="104" y="496" width="118" height="50" rx="8" class="st"/>
+  <text x="163" y="520" class="stt" text-anchor="middle" text-decoration="underline">Query 빌더</text>
+  <text x="163" y="535" class="sts" text-anchor="middle">동의어 · 부분어(n-그램) 확장</text>
+  <use href="#doc" x="244" y="486" width="46" height="40"/>
+  <text x="267" y="548" class="io" text-anchor="middle">확장 질의</text>
+  <rect x="312" y="496" width="126" height="50" rx="8" class="st"/>
+  <text x="375" y="520" class="stt" text-anchor="middle" text-decoration="underline">Retriever</text>
+  <text x="375" y="535" class="sts" text-anchor="middle">벡터 + 키워드 융합</text>
+  <use href="#doc" x="460" y="486" width="46" height="40"/>
+  <text x="483" y="548" class="io" text-anchor="middle">후보 청크</text>
+  <rect x="528" y="496" width="110" height="50" rx="8" class="st" stroke-dasharray="4 3" fill="#fbf9f0"/>
+  <text x="583" y="520" class="stt" text-anchor="middle" fill="#8a8058">Reranker</text>
+  <text x="583" y="535" class="sts" text-anchor="middle">미도입 · 설계상 생략</text>
+  <rect x="660" y="496" width="140" height="50" rx="8" class="st"/>
+  <text x="730" y="520" class="stt" text-anchor="middle" text-decoration="underline">그래프 컨텍스트</text>
+  <text x="730" y="535" class="sts" text-anchor="middle">연결 조항 확장</text>
+  <use href="#doc" x="822" y="486" width="46" height="40"/>
+  <text x="845" y="548" class="io" text-anchor="middle">근거 구절</text>
+  <rect x="890" y="496" width="130" height="50" rx="8" class="st"/>
+  <text x="955" y="520" class="stt" text-anchor="middle" text-decoration="underline">Reader (에이전트)</text>
+  <text x="955" y="535" class="sts" text-anchor="middle">Claude · 외부 LLM</text>
+  <use href="#doc" x="1042" y="486" width="46" height="40"/>
+  <text x="1065" y="548" class="io" text-anchor="middle">Response</text>
+
+  <line x1="84" y1="516" x2="102" y2="518" class="fl" marker-end="url(#a)"/>
+  <line x1="222" y1="518" x2="242" y2="516" class="fl" marker-end="url(#a)"/>
+  <line x1="292" y1="516" x2="310" y2="518" class="fl" marker-end="url(#a)"/>
+  <line x1="438" y1="518" x2="458" y2="516" class="fl" marker-end="url(#a)"/>
+  <line x1="508" y1="516" x2="526" y2="518" class="fl" marker-end="url(#a)"/>
+  <line x1="638" y1="518" x2="658" y2="518" class="fl" marker-end="url(#a)"/>
+  <line x1="800" y1="518" x2="820" y2="516" class="fl" marker-end="url(#a)"/>
+  <line x1="868" y1="516" x2="888" y2="518" class="fl" marker-end="url(#a)"/>
+  <line x1="1020" y1="518" x2="1040" y2="516" class="fl" marker-end="url(#a)"/>
+
+  <!-- DB supplies Retriever -->
+  <path d="M990,366 C 930,430 540,474 388,496" class="link"/>
+  <text x="700" y="438" class="iosub" font-style="italic" text-anchor="middle">인덱스 청크 (Index → Retriever)</text>
+
+  <!-- query failures -->
+  <rect x="104" y="580" width="118" height="34" rx="7" class="fail"/>
+  <text x="163" y="601" class="ft" text-anchor="middle">형태소·조사 미스</text>
+  <rect x="300" y="580" width="150" height="34" rx="7" class="fail"/>
+  <text x="375" y="601" class="ft" text-anchor="middle">상위 랭크 누락 (희석)</text>
+  <rect x="660" y="580" width="140" height="34" rx="7" class="fail"/>
+  <text x="730" y="601" class="ft" text-anchor="middle">그래프 미도달</text>
+  <rect x="890" y="580" width="130" height="34" rx="7" class="fail"/>
+  <text x="955" y="601" class="ft" text-anchor="middle">형식 오류·불완전</text>
+
+  <text x="34" y="742" font-size="9.5" fill="#94a3b8">색인은 gold를 DuckLake에 저장한 뒤 Vector(의미)·FTS(키워드)·Graph(관계) 3계로 읽어 각각 2단계 색인 → 단일 index.sqlite로 수렴.   빨강=실패 지점 · 베이지=처리 단계 · 초록=텍스트 입출력 · 실린더=저장소.</text>
+</svg>

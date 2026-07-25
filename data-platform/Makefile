@@ -14,7 +14,10 @@ setup: ## Resolve dependencies and install Meltano plugins
 
 reset: ## Rebuild every regenerable artefact after a checkout move/rename: venv, Meltano plugins, data plane. The venv and .meltano hardcode absolute paths that no project code controls, so a rename strands them; this recreates them. The DuckLake DATA_PATH is already relative and survives on its own.
 	rm -rf .venv .meltano
-	$(UV) sync
+	# Sync the extras this deployment uses (onnx_int8 embedder, KIWI_MORPH keyword
+	# morphology, web fetching via scrapling), or the rebuilt venv can't run the
+	# configured provider / fetch_web. Keep in step with .env and pipeline usage.
+	$(UV) sync --extra onnx-embed --extra kiwi --extra web
 	$(UV) run meltano install
 	$(MAKE) clean
 	$(MAKE) build

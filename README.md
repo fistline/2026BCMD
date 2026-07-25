@@ -8,15 +8,7 @@
 > 실물연계자산) · **dApp**(탈중앙화 애플리케이션) · **DART**(금융감독원 전자공시시스템) ·
 > **혁신금융서비스**(금융규제 샌드박스).
 
-```
- ┌───────────────────┐            ┌───────────────────┐            ┌───────────────────┐
- │  data-platform/   │  법령 근거  │    gen-docs/      │  신고서를   │    gen-apps/      │
- │  법률 코퍼스       │ ─ 제공 ──▶ │  증권신고서 생성   │ ─ 이어받아 ▶│  서비스 dApp 생성  │
- │  RAG + 의존 그래프 │  (선택)     │  (유형판정→작성)   │            │ (신고서→dApp/직접) │
- └───────────────────┘            └───────────────────┘            └───────────────────┘
-  법안·법률을 검색·추론              DART 제출용 공시 문서을            Scaffold-ETH 2 dApp을
-  가능한 지식 베이스로               유형별로 작성·자기심사              게이트 승계와 함께 생성
-```
+![26bmdc 전체 개요 — 지식에서 온체인 서비스까지](docs/overview.svg)
 
 세 영역은 **독립적으로도** 쓰이고, 하나로 이으면 "규제 지식 → 공시 문서 →
 배포 가능한 서비스"가 한 흐름이 된다.
@@ -42,8 +34,10 @@ dApp을 만든다.
 
 ```
 26bmdc/
+├── README.md · ARCHITECTURE.md · LICENSE   # 우산 문서 (MIT 라이선스)
 ├── AGENTS.md              # 영역 간 규약 정본 (에이전트 지침, 지도)
 ├── CLAUDE.md              # @AGENTS.md 포인터 (Claude Code 진입점)
+├── docs/                  # 아키텍처 다이어그램 (overview.svg · architecture.svg · system.svg)
 ├── .agents/skills/        # 루트 스킬 정본 (sto-filing·st-service-dapp·filing-to-dapp·corpus-lookup)
 ├── .claude/skills/        # 위를 미러 (심링크)
 ├── data-platform/         # ── 독립 git 저장소. 코퍼스 색인 파이프라인
@@ -62,6 +56,19 @@ dApp을 만든다.
     ├── filing-to-dapp/    #    신고서→dApp 브리지 스킬 소스
     └── <slug>/            #    생성된 dApp이 쌓이는 곳
 ```
+
+**data-platform 파이프라인 상세** — 코퍼스가 색인되는 전체 경로(수집 → 랜딩 → Meltano
+EL → SQLMesh 변환 → 서빙 빌드):
+
+![data-platform 파이프라인](docs/architecture.svg)
+
+**색인·질의 런타임** — 위 파이프라인이 만든 gold를 DuckLake에 저장한 뒤, Vector(의미)·
+FTS(키워드)·Graph(관계) **3계로 나눠 `index.sqlite`를 색인**한다. 질의는 하이브리드 검색
+(벡터+키워드) + 그래프 컨텍스트로 답하며, 각 단계의 대표 실패 지점도 함께 표시했다:
+
+![data-platform 색인·질의 시스템](docs/system.svg)
+
+> 각 영역 내부 흐름을 담은 mermaid 다이어그램 5종은 [`ARCHITECTURE.md`](ARCHITECTURE.md) 참조.
 
 ---
 
@@ -199,9 +206,11 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   *Verification*·*Version floors* 절과 `data-platform/AGENTS.md`.
 - 각 영역 절차의 정본: `gen-docs/st_prospectus/sto-filing/SKILL.md`,
   `gen-apps/st-service-dapp/SKILL.md`, `gen-apps/filing-to-dapp/SKILL.md`.
+- 전체 구조를 그림으로: **`ARCHITECTURE.md`** (세 영역·스킬·파이프라인 다이어그램).
 
 ## 라이선스·유의
 
-라이선스는 아직 지정되지 않았다. `data-platform/source/`의 법안 원문은 공개된 국회
-의안 자료다. 생성되는 증권신고서·dApp은 **참고용 초안**이며 법률자문·투자권유가 아니다 —
-실제 제출·발행 전 법률의견서 확보와 금융감독원 사전협의를 권고한다.
+이 프로젝트는 **MIT 라이선스**다 — `LICENSE` 참조. `data-platform/source/`의 법안
+원문은 공개된 국회 의안 자료다. 생성되는 증권신고서·dApp은 **참고용 초안**이며
+법률자문·투자권유가 아니다 — 실제 제출·발행 전 법률의견서 확보와 금융감독원
+사전협의를 권고한다.
