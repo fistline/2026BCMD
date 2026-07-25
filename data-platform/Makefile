@@ -8,8 +8,11 @@ PY := $(UV) run python
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-setup: ## Resolve dependencies and install Meltano plugins
-	$(UV) sync
+setup: ## Resolve dependencies (incl. configured extras) and install Meltano plugins
+	# Match reset: install the extras this deployment uses (onnx_int8 embedder,
+	# KIWI_MORPH keyword morphology, scrapling web fetch) so a fresh checkout can
+	# run the configured provider / fetch_web. Keep in step with .env and reset.
+	$(UV) sync --extra onnx-embed --extra kiwi --extra web
 	$(UV) run meltano install
 
 reset: ## Rebuild every regenerable artefact after a checkout move/rename: venv, Meltano plugins, data plane. The venv and .meltano hardcode absolute paths that no project code controls, so a rename strands them; this recreates them. The DuckLake DATA_PATH is already relative and survives on its own.
