@@ -889,6 +889,7 @@ def hybrid_search(
     expand: Optional[bool] = None,
     collection: Optional[str] = None,
     include_fixtures: bool = False,
+    rerank: Optional[bool] = None,
 ) -> list:
     """Vector + keyword retrieval fused with RRF.
 
@@ -896,10 +897,34 @@ def hybrid_search(
     synonyms and every variant is retrieved separately, then the ranked lists are
     fused. That is what bridges 스테이블코인 to 자산연동형, which share no
     characters and so are invisible to both halves of the index.
+
+    `rerank` overrides `settings.rerank_enabled`: None follows the setting, and an
+    explicit True/False forces the cross-encoder rerank stage on/off (the eval
+    harness needs a rerank-free `fused` arm alongside a `reranked` arm in the same
+    RERANK=1 run, so it passes rerank=False/True explicitly).
     """
     settings = settings or get_settings()
     use_expansion = settings.alias_expansion if expand is None else expand
     variants = expand_query(query) if use_expansion else [query]
+    use_rerank = settings.rerank_enabled if rerank is None else rerank
+
+    if use_rerank:
+        # Retrieve a deeper pool (retrieval order), then reorder it with the
+        # cross-encoder. Kept out of build_rag: pipeline.reranker owns the model.
+        from pipeline.reranker import rerank as _rerank
+
+        pool = multi_hybrid_search(
+            variants,
+            limit=settings.rerank_candidates,
+            candidates=max(candidates, settings.rerank_candidates),
+            connection=connection,
+            paths=paths,
+            settings=settings,
+            collection=collection,
+            include_fixtures=include_fixtures,
+        )
+        return _rerank(query, variants, pool, settings, limit)
+
     return multi_hybrid_search(
         variants,
         limit=limit,

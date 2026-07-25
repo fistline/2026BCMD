@@ -98,6 +98,13 @@ class Settings:
     keyword_weight: float
     alias_expansion: bool
     graph_depth: int
+    # Optional cross-encoder reranker (RERANK=1). Default OFF: the baseline
+    # (no reranker) is the M1-8GB target; this is the heavier opt-in path.
+    rerank_enabled: bool
+    rerank_model: str
+    rerank_candidates: int
+    rerank_weight: float
+    rerank_threads: int
 
 
 def get_settings() -> Settings:
@@ -122,6 +129,17 @@ def get_settings() -> Settings:
         keyword_weight=float(os.environ.get("KEYWORD_WEIGHT", "1.0")),
         alias_expansion=os.environ.get("ALIAS_EXPANSION", "1").strip() not in {"0", "false", "no"},
         graph_depth=_graph_depth(),
+        # Reranker: opt-in, default off. Candidates 40 and single-thread are the
+        # 8GB-friendly defaults; raise RERANK_CANDIDATES/RERANK_THREADS only where
+        # there is memory/CPU headroom (K>100 measured to hurt, so 40 is a floor).
+        rerank_enabled=os.environ.get("RERANK", "0").strip() not in {"", "0", "false", "no"},
+        rerank_model=os.environ.get("RERANK_MODEL", "onnx-community/bge-reranker-v2-m3-ONNX"),
+        rerank_candidates=int(os.environ.get("RERANK_CANDIDATES", "40")),
+        # Retrieval PRIOR weight in the rerank fusion (CE weight is fixed at 1.0):
+        # lower = more cross-encoder-dominant. 0.15 lets CE reorder while retrieval
+        # only breaks near-ties. Tune via `make eval-rerank`.
+        rerank_weight=float(os.environ.get("RERANK_WEIGHT", "0.15")),
+        rerank_threads=int(os.environ.get("RERANK_THREADS", "1")),
     )
 
 

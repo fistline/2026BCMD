@@ -195,21 +195,37 @@ def evaluate(paths: Optional[Paths] = None, settings: Optional[Settings] = None)
             )
             return None
 
+        rerank_on = settings.rerank_enabled
         arms = {"vector": {}, "keyword": {}, "fused": {}}
+        if rerank_on:
+            arms["reranked"] = {}
         by_kind: dict = {}
+        by_kind_reranked: dict = {}
         per_query: list = []
         for query, relevant in graded:
             kind = query.get("kind", "unlabelled")
             ranked = {
                 "vector": _vector_only(query["query"], connection, settings, DEPTH),
                 "keyword": _keyword_only(query["query"], connection, DEPTH),
+                # rerank=False forces a rerank-FREE fused baseline even inside a
+                # RERANK=1 run, so the reranked arm has a clean control to attribute
+                # the cross-encoder's contribution against (not reranked-vs-reranked).
                 "fused": [
                     hit["chunk_id"]
                     for hit in hybrid_search(
-                        query["query"], limit=DEPTH, connection=connection, settings=settings
+                        query["query"], limit=DEPTH, connection=connection,
+                        settings=settings, rerank=False,
                     )
                 ],
             }
+            if rerank_on:
+                ranked["reranked"] = [
+                    hit["chunk_id"]
+                    for hit in hybrid_search(
+                        query["query"], limit=DEPTH, connection=connection,
+                        settings=settings, rerank=True,
+                    )
+                ]
             if kind == "negative":
                 # Nothing to score positively; record how many arms returned a
                 # top hit at all, which is what a future abstention rule needs.
@@ -234,6 +250,13 @@ def evaluate(paths: Optional[Paths] = None, settings: Optional[Settings] = None)
                         "p_at_1": scored["p_at_1"],
                         "mrr_at_10": scored["mrr_at_10"],
                     })
+                elif arm == "reranked":
+                    # Separate bucket: the fused by_kind (and its baseline/gate)
+                    # is left untouched, so the default rerank-off path is
+                    # unaffected; the reranked floor is measured on its own.
+                    rbucket = by_kind_reranked.setdefault(kind, {})
+                    for metric, value in scored.items():
+                        rbucket.setdefault(metric, []).append(value)
     finally:
         connection.close()
 
@@ -261,8 +284,17 @@ def evaluate(paths: Optional[Paths] = None, settings: Optional[Settings] = None)
             "rrf_k": settings.rrf_k,
             "alias_expansion": settings.alias_expansion,
             "embedding_provider": settings.embedding_provider,
+            "rerank_enabled": settings.rerank_enabled,
+            "rerank_model": settings.rerank_model if settings.rerank_enabled else None,
+            "rerank_weight": settings.rerank_weight if settings.rerank_enabled else None,
         },
     }
+    # Only present in a RERANK=1 run: keeps the default baseline shape unchanged.
+    if by_kind_reranked:
+        result["by_kind_reranked"] = {
+            kind: {metric: _mean(values) for metric, values in bucket.items()}
+            for kind, bucket in by_kind_reranked.items()
+        }
     return result
 
 
@@ -287,6 +319,14 @@ def render(result: dict) -> None:
             f"    {kind:18} P@1 {metrics.get('p_at_1', 0):.3f}  "
             f"R@5 {metrics.get('r_at_5', 0):.3f}  MRR@10 {metrics.get('mrr_at_10', 0):.3f}"
         )
+    if result.get("by_kind_reranked"):
+        print()
+        print("  reranked, by kind (vs fused above = cross-encoder's contribution):")
+        for kind, metrics in sorted(result["by_kind_reranked"].items()):
+            print(
+                f"    {kind:18} P@1 {metrics.get('p_at_1', 0):.3f}  "
+                f"R@5 {metrics.get('r_at_5', 0):.3f}  MRR@10 {metrics.get('mrr_at_10', 0):.3f}"
+            )
 
 
 def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0.08) -> int:
@@ -341,6 +381,19 @@ def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0
             current = current_bucket.get(metric)
             if current is not None and current < previous - per_kind_tolerance:
                 kind_regressions.append(f"{kind}.{metric} {previous:.3f} -> {current:.3f}")
+
+    # Reranked per-kind floor: present only when a RERANK=1 baseline was recorded
+    # (via `make eval-rerank-baseline`). The default rerank-off run has no
+    # by_kind_reranked, so both sides are empty and this is a no-op -- the opt-in
+    # reranker is gated by `make eval-rerank` without touching the default path.
+    for kind, metrics in baseline.get("by_kind_reranked", {}).items():
+        current_bucket = result.get("by_kind_reranked", {}).get(kind)
+        if not current_bucket:
+            continue
+        for metric, previous in metrics.items():
+            current = current_bucket.get(metric)
+            if current is not None and current < previous - per_kind_tolerance:
+                kind_regressions.append(f"reranked:{kind}.{metric} {previous:.3f} -> {current:.3f}")
 
     base_sha = (baseline.get("source_sha") or "")[:8] or "(no sha)"
     if regressions or kind_regressions:

@@ -1053,6 +1053,229 @@ def test_graph_rag() -> None:
         == _json.dumps(again, sort_keys=True, ensure_ascii=False),
     )
 
+    # 6. graph_rag_search attaches the reachability diagnostic to expansion on
+    #    the real read path (the synthetic test pins _discover_related; this pins
+    #    the caller wiring the unit test cannot reach).
+    check(
+        "graph_rag_search attaches a reachability diagnostic to expansion",
+        isinstance(payload["expansion"].get("reachability"), dict)
+        and "reason" in payload["expansion"]["reachability"],
+        str(payload["expansion"].get("reachability")),
+    )
+
+
+def test_reachability_diagnostics() -> None:
+    """graph_rag reachability diagnostics: read-only, honest 'why not' reasons.
+
+    Runs against a synthetic in-memory graph so the reason logic AND the
+    isolation guarantee (diagnostics never change `related`) are pinned even on
+    a fresh clone with no built index. Provenance guard: the payload carries
+    only counts and pivot-node ids, never a document id.
+    """
+    print("reachability diagnostics")
+    import sqlite3 as _sqlite3
+    import json as _json
+    from pipeline.graph_rag import _discover_related
+
+    def graph(edges):
+        conn = _sqlite3.connect(":memory:")
+        conn.row_factory = _sqlite3.Row
+        conn.executescript(
+            "CREATE TABLE nodes (node_id TEXT PRIMARY KEY, label TEXT);"
+            "CREATE TABLE edges (source_id TEXT, target_id TEXT, relation TEXT,"
+            " weight REAL, evidence TEXT);"
+        )
+        names = set()
+        for s, t, rel, w in edges:
+            names.update((s, t))
+            conn.execute("INSERT INTO edges VALUES (?,?,?,?,?)", (s, t, rel, w, f"{s}->{t}"))
+        conn.executemany("INSERT INTO nodes VALUES (?,?)", [(n, n) for n in sorted(names)])
+        conn.commit()
+        return conn
+
+    docs = frozenset({"billA", "billB"})
+
+    # A. co-citation: billA and billB both delegate_to statuteX (a non-document).
+    conn = graph([("billA", "statuteX", "delegates_to", 1.0),
+                  ("billB", "statuteX", "delegates_to", 1.0)])
+    related, trunc, diag = _discover_related(conn, ["billA"], docs, 1, None, frozenset(), 8)
+    check("co-citation reaches the sibling document", set(related) == {"billB"}, str(sorted(related)))
+    check(
+        "reachability reports the hit (1 usable partner, 1 pivot, no hub drop)",
+        diag["reason"].startswith("1 related")
+        and diag["usable_partner_docs"] == 1
+        and diag["pivots_found"] == 1
+        and diag["pivots_hub_dropped"] == [],
+        str(diag),
+    )
+    # isolation: diagnostics on vs off leave related/truncated byte-identical.
+    r_on, t_on, _ = _discover_related(conn, ["billA"], docs, 1, None, frozenset(), 8, collect_diagnostics=True)
+    r_off, t_off, d_off = _discover_related(conn, ["billA"], docs, 1, None, frozenset(), 8, collect_diagnostics=False)
+    check(
+        "diagnostics are side-effect free (related/truncated identical on vs off)",
+        r_on == r_off and t_on == t_off and d_off is None,
+        "related or truncated diverged with diagnostics off",
+    )
+    conn.close()
+
+    # B. hub drop: 27 docs cite statuteX -> raw degree 27 > HUB_DOC_CAP -> skipped.
+    hub_edges = [("billA", "statuteX", "delegates_to", 1.0)]
+    hub_docs = {"billA"}
+    for i in range(26):
+        node = f"doc{i:02d}"
+        hub_edges.append((node, "statuteX", "delegates_to", 1.0))
+        hub_docs.add(node)
+    conn = graph(hub_edges)
+    related, trunc, diag = _discover_related(conn, ["billA"], frozenset(hub_docs), 1, None, frozenset(), 8)
+    check("a hub pivot yields no related docs", related == {}, str(sorted(related)))
+    dropped = diag["pivots_hub_dropped"]
+    check(
+        "reachability names the hub-dropped pivot with its RAW degree (27)",
+        len(dropped) == 1 and dropped[0]["node"] == "statuteX"
+        and dropped[0]["degree"] == 27 and "hub cap" in diag["reason"],
+        str(dropped) + " | " + diag["reason"],
+    )
+    conn.close()
+
+    # C. mentions-only seed: the sole edge is suppressed by default.
+    conn = graph([("billA", "statuteX", "mentions", 1.0)])
+    related, trunc, diag = _discover_related(conn, ["billA"], docs, 1, None, frozenset(), 8)
+    check("mentions-only seed reaches nothing", related == {}, str(related))
+    check(
+        "reachability blames suppressed (mentions) edges",
+        diag["seed_edges"] == {"total": 1, "usable": 0} and "suppressed" in diag["reason"],
+        str(diag),
+    )
+    conn.close()
+
+    # D. the only co-citation partner is itself a seed -> excluded, reported.
+    conn = graph([("billA", "statuteX", "delegates_to", 1.0),
+                  ("billB", "statuteX", "delegates_to", 1.0)])
+    related, trunc, diag = _discover_related(conn, ["billA", "billB"], docs, 1, None, frozenset(), 8)
+    check("a partner that is a seed is not surfaced", related == {}, str(related))
+    check(
+        "reachability reports the excluded seed partner",
+        diag["partners_excluded"]["already_seed"] >= 1 and "already a seed" in diag["reason"],
+        str(diag),
+    )
+    conn.close()
+
+    # E. provenance/fixture guard: no document id ever appears in the payload,
+    #    and the hidden exclusion IS surfaced as a count (positive half).
+    conn = graph([("billA", "statuteX", "delegates_to", 1.0),
+                  ("billB", "statuteX", "delegates_to", 1.0)])
+    _, _, diag = _discover_related(conn, ["billA"], docs, 1, None, frozenset({"billB"}), 8)
+    blob = _json.dumps(diag, ensure_ascii=False)
+    check(
+        "reachability never emits a document id (counts + pivot ids only)",
+        "billA" not in blob and "billB" not in blob and "doc00" not in blob,
+        blob,
+    )
+    check(
+        "a hidden co-citation partner is surfaced as a count",
+        diag["partners_excluded"]["hidden"] == 1,
+        str(diag["partners_excluded"]),
+    )
+    conn.close()
+
+    # F. a pivot cited ONLY by the seed is NOT a shared pivot: the seed's own
+    #    citation must not be miscounted as an excluded sibling, and the reason
+    #    must name the honest cause (no co-citation sibling).
+    conn = graph([("billA", "statuteX", "delegates_to", 1.0)])
+    related, _, diag = _discover_related(conn, ["billA"], docs, 1, None, frozenset(), 8)
+    check("a self-cited pivot yields no related docs", related == {}, str(related))
+    check(
+        "the seed's own citation is not miscounted as an excluded partner",
+        diag["partners_excluded"]["already_seed"] == 0,
+        str(diag["partners_excluded"]),
+    )
+    check(
+        "reachability reports the honest cause (no co-citation sibling)",
+        "no co-citation sibling" in diag["reason"],
+        diag["reason"],
+    )
+    conn.close()
+
+    # G. two hub pivots (inserted Z-before-A): the hub-drop list is emitted
+    #    sorted by node id, and a populated hub_dropped list leaks no doc id.
+    g_edges = []
+    g_docs = {"billA"}
+    for pivot in ("statZ", "statA"):
+        g_edges.append(("billA", pivot, "delegates_to", 1.0))
+        for i in range(26):
+            node = f"doc{pivot}{i:02d}"
+            g_edges.append((node, pivot, "delegates_to", 1.0))
+            g_docs.add(node)
+    conn = graph(g_edges)
+    _, _, diag = _discover_related(conn, ["billA"], frozenset(g_docs), 1, None, frozenset(), 8)
+    order = [p["node"] for p in diag["pivots_hub_dropped"]]
+    check("hub-dropped pivots are emitted sorted by node id", order == ["statA", "statZ"], str(order))
+    blob = _json.dumps(diag, ensure_ascii=False)
+    check(
+        "a populated hub_dropped list leaks no document id",
+        "billA" not in blob and "docstatA00" not in blob and "docstatZ00" not in blob,
+        blob,
+    )
+    conn.close()
+
+
+def test_reranker() -> None:
+    """The opt-in cross-encoder reranker: off by default, offline fail-loud,
+    deterministic when on, and it never disturbs the default read path.
+
+    Model-gated: the reranking assertions are skipped when the reranker model is
+    not in the local HF cache, so `make smoke` stays hermetic on a fresh clone.
+    Run `make warm-rerank` once to exercise them. The fail-loud assertion is
+    model-independent and always runs.
+    """
+    print("reranker")
+    from pipeline import get_settings
+    from pipeline.reranker import OnnxReranker, get_reranker
+
+    settings = get_settings()
+
+    # 1. Offline fail-loud (model-independent): a missing model raises with an
+    #    actionable message, never a silent network download (invariant 7).
+    try:
+        OnnxReranker("bogus/nonexistent-reranker-xyz", allow_download=False)
+        check("reranker read path raises on a missing model", False, "no error raised")
+    except RuntimeError as error:
+        check(
+            "reranker read path raises on a missing model (no network)",
+            "warm-rerank" in str(error) and "invariant 7" in str(error),
+            str(error)[:80],
+        )
+
+    try:
+        get_reranker(settings, allow_download=False)
+    except Exception:
+        print("       (reranker model not cached; run `make warm-rerank`. reranking checks skipped)")
+        return
+
+    query = "hybrid_search"
+    base = [hit["chunk_id"] for hit in hybrid_search(query, limit=5, rerank=False)]
+
+    # 2. The DEFAULT read path (rerank unset -> settings, off) must equal an
+    #    explicit rerank=False: enabling the model changes nothing until asked.
+    default_ids = [hit["chunk_id"] for hit in hybrid_search(query, limit=5)]
+    check("default read path is not reranked (RERANK off)", default_ids == base, "off != rerank=False")
+
+    reranked = hybrid_search(query, limit=5, rerank=True)
+    check("rerank returns `limit` rows", len(reranked) == 5, len(reranked))
+    check(
+        "every reranked row carries CE provenance",
+        all(
+            row.get("reranked") and "ce_score" in row and "ce_rank" in row and "retrieval_rank" in row
+            for row in reranked
+        ),
+        "missing rerank annotation",
+    )
+
+    # 3. Deterministic across runs (single-thread + logit rounding + chunk_id
+    #    tie-break), because the reranker sits on the query-answer path.
+    again = [row["chunk_id"] for row in hybrid_search(query, limit=5, rerank=True)]
+    check("rerank is deterministic across runs", again == [row["chunk_id"] for row in reranked])
+
 
 def main() -> int:
     paths = get_paths()
@@ -1080,6 +1303,10 @@ def main() -> int:
         test_graph_query()
         print()
         test_graph_rag()
+        print()
+        test_reachability_diagnostics()
+        print()
+        test_reranker()
     except Exception:
         traceback.print_exc()
         return 1

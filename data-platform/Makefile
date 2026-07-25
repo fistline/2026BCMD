@@ -3,7 +3,7 @@ SHELL := /bin/bash
 UV := uv
 PY := $(UV) run python
 
-.PHONY: help setup reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline
+.PHONY: help setup reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -42,6 +42,15 @@ eval: ## Retrieval regression floor: P@1 / R@5 / MRR@10 per arm and per query ki
 
 eval-baseline: ## Record the current retrieval numbers as the floor
 	$(PY) -m pipeline.eval_retrieval --record-baseline
+
+warm-rerank: ## One-time online fetch of the cross-encoder reranker model (opt-in; the read path never downloads)
+	RERANK=1 $(PY) -c "from pipeline import get_settings; from pipeline.reranker import get_reranker; get_reranker(get_settings(), allow_download=True); print('[warm-rerank] reranker model cached')"
+
+eval-rerank: ## OPT-IN reranker floor: fused vs reranked per kind (needs warm-rerank). Default `make verify` does NOT cover this.
+	RERANK=1 $(PY) -m pipeline.eval_retrieval --assert-baseline
+
+eval-rerank-baseline: ## Record the reranked arm/per-kind numbers as the opt-in floor
+	RERANK=1 $(PY) -m pipeline.eval_retrieval --record-baseline
 
 eval-graph: ## Graph-reachability floor: reach / p@1 / mrr / path_strength per judgment kind
 	$(PY) -m pipeline.eval_graph
