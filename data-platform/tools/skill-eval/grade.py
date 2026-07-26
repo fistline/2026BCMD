@@ -22,6 +22,7 @@ grading.json 의 스키마(`expectations` 배열의 `text`/`passed`/`evidence`)�
 
 디렉터리 레이아웃은 skill-creator 규약을 따른다.
 
+    <iteration>/manual_grades.json                  # 사람이 채운 판정 (iteration 별)
     <iteration>/<eval-name>/eval_metadata.json      # prompt + assertions
     <iteration>/<eval-name>/<config>/outputs/       # 채점 대상 산출물
     <iteration>/<eval-name>/<config>/run-N/outputs/ # 같은 구성을 여러 번 돌린 경우
@@ -186,7 +187,7 @@ def main() -> None:
     ap.add_argument("--rules", default="sto-filing", choices=sorted(RULES),
                     help="적용할 규칙 모듈 (기본: sto-filing)")
     ap.add_argument("--manual", type=Path, default=None,
-                    help="수동 채점 파일 (기본: <iteration>/../manual_grades.json)")
+                    help="수동 채점 파일 (기본: <iteration>/manual_grades.json)")
     ap.add_argument("--require-complete", action="store_true",
                     help="보류가 하나라도 남아 있으면 목록을 찍고 비정상 종료한다 "
                          "(채점을 끝냈다고 선언할 때 쓴다)")
@@ -197,7 +198,9 @@ def main() -> None:
         ap.error(f"디렉터리가 없다: {it}")
 
     rules = importlib.import_module(RULES[args.rules])
-    manual_path = args.manual or (it.parent / "manual_grades.json")
+    # iteration 안에 둔다. 키가 <eval>/<config> 라서 워크스페이스 한 곳에 모으면
+    # iteration-1 과 iteration-2 의 같은 케이스가 같은 키를 놓고 충돌한다.
+    manual_path = args.manual or (it / "manual_grades.json")
     manual = json.loads(manual_path.read_text(encoding="utf-8")) if manual_path.exists() else {}
     if not manual:
         print(f"수동 채점 파일 없음({manual_path}) — 판단 필요 항목은 보류로 남는다.\n")
