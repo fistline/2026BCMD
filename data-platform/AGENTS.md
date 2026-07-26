@@ -199,6 +199,15 @@ And banned-phrase checks read the surrounding 60 characters for a negation marke
 because a filing is *required* to say "원금·수익 보장과 무관", so bare keyword
 matching flags the compliant document.
 
+Like `tools/hitl/`, this is **off the build path** — `make verify` does not call it,
+because a skill eval needs an LLM run first (~10 minutes and ~100k tokens per case),
+which no blocking build can afford. Invocation is the only switch; there is nothing
+to enable. The one thing worth configuring is what a `pending` verdict does to the
+score, and the default hides it: `pass_rate` is `passed / (passed + failed)`, so
+un-graded assertions drop out of the denominator and 13 of 29 blanks once read as
+"100%". `--require-complete` exits non-zero on any pending and prints the keys to
+fill — use it when declaring a grading pass finished, not on every run.
+
 Output is `grading.json` per run in the skill-creator viewer's schema
 (`expectations[].text/passed/evidence`); its aggregator wants sibling `run-*`
 directories, which this layout does not have — symlink rather than restructure.

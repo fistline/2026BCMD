@@ -13,6 +13,12 @@ grading.json 의 스키마(`expectations` 배열의 `text`/`passed`/`evidence`)�
 뷰어와 집계 스크립트가 기대하는 그대로다. 바꾸면 뷰어가 등급을 못 읽는다.
 
     python3 tools/skill-eval/grade.py <workspace>/iteration-1 --rules sto-filing
+    python3 tools/skill-eval/grade.py <workspace>/iteration-1 --require-complete
+
+**빌드 경로 밖에 있다** — `tools/hitl/` 과 같다. `make verify` 에 붙어 있지 않고, 부를 때만
+돈다. 스킬 eval 은 LLM 실행이 선행돼야 해서(케이스당 10분·10만 토큰대) 상시 게이트로 쓸 수
+없다. 그래서 기본은 리포트이고, `--require-complete` 는 **채점을 끝냈다고 선언할 때** 쓴다 —
+보류가 남아 있으면 그 목록과 채울 키를 찍고 비정상 종료한다.
 
 디렉터리 레이아웃은 skill-creator 규약을 따른다.
 
@@ -130,6 +136,9 @@ def main() -> None:
                     help="적용할 규칙 모듈 (기본: sto-filing)")
     ap.add_argument("--manual", type=Path, default=None,
                     help="수동 채점 파일 (기본: <iteration>/../manual_grades.json)")
+    ap.add_argument("--require-complete", action="store_true",
+                    help="보류가 하나라도 남아 있으면 목록을 찍고 비정상 종료한다 "
+                         "(채점을 끝냈다고 선언할 때 쓴다)")
     args = ap.parse_args()
 
     it = args.iteration.resolve()
@@ -144,6 +153,7 @@ def main() -> None:
 
     print(f"{'eval':<34}{'구성':<15}{'PASS':>5}{'FAIL':>6}{'보류':>6}{'비율':>8}")
     print("-" * 76)
+    pending: dict[str, list[str]] = {}
     for eval_dir in sorted(it.glob("eval-*")):
         if not (eval_dir / "eval_metadata.json").exists():
             continue
@@ -151,6 +161,25 @@ def main() -> None:
             s = grade_run(rules, manual, eval_dir, run)
             print(f"{eval_dir.name:<34}{run.name:<15}"
                   f"{s['passed']:>5}{s['failed']:>6}{s['pending']:>6}{s['pass_rate']:>8.0%}")
+            if s["pending"]:
+                key = f"{eval_dir.name}/{run.name}"
+                graded = json.loads((run / "grading.json").read_text(encoding="utf-8"))
+                pending[key] = [e["text"] for e in graded["expectations"] if e["passed"] is None]
+
+    # 비율은 보류를 분모에서 뺀다. 그래서 미채점이 남은 채로도 100% 가 나온다 — 실제로 나왔고,
+    # 29건 중 13건이 비어 있는 "만점"이었다. 채점을 끝냈다고 선언할 때 이 플래그로 막는다.
+    total_pending = sum(len(v) for v in pending.values())
+    if total_pending:
+        hint = "" if args.require_complete else " (--require-complete 로 검사할 수 있다)"
+        print(f"\n보류 {total_pending}건 — 비율 계산에서 빠져 있다.{hint}")
+    if args.require_complete and pending:
+        print(f"\n채점이 끝나지 않았다. {manual_path} 에 아래 키로 판정과 근거를 채운다.\n")
+        for key, texts in pending.items():
+            print(f'  "{key}": {{')
+            for t in texts:
+                print(f'    "{t[:40]}": [true, "<근거>"],')
+            print("  },")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
