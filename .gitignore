@@ -38,3 +38,7 @@ gen-docs/**/dist/
 # Local-only design/working notes — preserved on disk but never shared.
 # (docs/*.svg diagrams stay tracked; only this subfolder is ignored.)
 docs/design/
+
+# Claude Code — local workspace settings, kept per-machine (plugin enablement).
+# (.claude/skills/ stays tracked; only this one file is local.)
+.claude/settings.json
