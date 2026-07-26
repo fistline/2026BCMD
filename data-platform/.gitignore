@@ -51,6 +51,11 @@ dist/
 # state, not logic. The corpus proper lives in source/, which IS tracked.
 temp/
 
+# Local-only design / working notes and shelved drafts. Preserved on disk but
+# never shared — the tracked counterpart is docs/plans/ (shared decision
+# records). Mirrors the root docs/design/ rule, scoped to this subproject.
+docs/design/
+
 # Agent memory is stored OUTSIDE this repo (in ~/.claude/projects/.../memory/)
 # so it can never be committed; this line is a belt-and-suspenders guard in case
 # a memory dir is ever created inside the tree.
