@@ -1,6 +1,9 @@
 # 이중색인 방지 — 인박스 쌍둥이 퍼지 탐지 (연구·설계·적대검증·실측)
 
-- 상태: **설계 확정·실데이터 검증 완료(2026-07-26). 배선(silver 소비·측정 하니스)은 스테이징 — 다른 세션의 미커밋 `documents.sql`/`report_dupes.py` 커밋 후, 빌드 유휴 시 적용.**
+- 상태: **탐지기 SQL 구현·검증 완료(2026-07-27). 착지(모델 배치+documents.sql 배선)는 다른 세션의 연속 빌드로 유휴 창이 없어 대기** — 자동-롤백 착지 스크립트가 32분간 안정 유휴를 못 찾고 무해 중단. 검증된 SQL은 §4/§5b에 turnkey. 착지엔 빌드 창(다른 세션 일시정지)만 필요.
+- **doc_type=format 교정(중요)**: silver `doc_type`은 프로파일(bill/statute)이 아니라 **포맷**('hwp'/'pdf'/'txt')이라 "doctype동일" 게이트는 "포맷상이"와 자기모순 → **폐기**. 판별자는 포맷상이 + 길이비<0.15 + Jaccard≥0.85. 미래의 cross-format 다른서류(예: 증권신고서.pdf vs 투자설명서.hwp)는 프로파일 게이트 부재로 이론상 미차단이나, **비파괴(document_twins 기록 + bronze 보존)로 복원가능** + 현 코퍼스엔 cross-format 다른서류 쌍 부재(측정 최대 0.610).
+- **검증 완료(합성 DuckDB)**: SQL 문법 정상, 쌍둥이 검출(loser=pdf→winner=hwp), 무관문서 오병합 0, **결정성 ✓(최종 ORDER BY doc_id)**, 집합 Jaccard라 hash() 미사용. 현 코퍼스 실빌드는 **no-op**(큐레이션 쌍둥이는 `_superseded_renditions`가 seed에서 pdf 미시딩 → bronze에 쌍둥이 없음; 탐지기는 인박스 직접투입에서만 발동). 성능 유계(대형 same-format 문서는 길이비 게이트로 후보 제외).
+- 스테이징 파일(적용 대기): `scratchpad/document_twins.sql`(신규 모델), `scratchpad/documents.sql`(LEFT JOIN + `AND tw.doc_id IS NULL`). build_rag는 **미변경**(그들 reranker 작업 충돌 회피 — loser는 silver.documents에서 빠지면 downstream INNER JOIN으로 자동 제외).
 - 흐름: 최신 방법론 조사 → 개선계획 → 적대적 검증 → **실측 교정** 순.
 - 대상 갭: **인박스 직접투입 쌍둥이**(이름 불일치, 큐레이션 없음). `source/` 큐레이션 쌍둥이는 이미 `watcher._superseded_renditions`가 처리. `content_fingerprint`(정확 일치)는 HWP/PDF 추출 선형화 차이로 **0/10** 실패.
 
