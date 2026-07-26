@@ -30,6 +30,7 @@ grading.json 의 스키마(`expectations` 배열의 `text`/`passed`/`evidence`)�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
 import re
@@ -82,19 +83,51 @@ def banned_hits(text: str, patterns: list[str], negation: re.Pattern = NEGATION)
     return hits
 
 
-def apply_manual(manual: dict, key: str, results: list) -> list[str]:
-    """사람 판정을 verdict=None 자리에만 채운다. 반환값은 매칭되지 않은 키 목록."""
+def outputs_digest(run: Path) -> str:
+    """산출물 전체의 지문. 파일명과 내용이 하나라도 다르면 값이 달라진다."""
+    h = hashlib.sha256()
+    for f in sorted((run / "outputs").glob("*")):
+        if f.is_file():
+            h.update(f.name.encode("utf-8"))
+            h.update(hashlib.sha256(f.read_bytes()).digest())
+    return h.hexdigest()[:16]
+
+
+def apply_manual(manual: dict, key: str, run: Path, results: list) -> list[str]:
+    """사람 판정을 verdict=None 자리에만, 그리고 **판정할 때 본 그 산출물에만** 채운다.
+
+    경로로만 묶으면 실행을 다시 돌렸을 때 어제의 판정이 오늘 파일에 조용히 재부착된다.
+    실제로 그렇게 됐다 — eval 을 재실행했더니 삭제된 산출물을 근거로 든 판정 5건이
+    새 산출물에 그대로 붙어 채점이 통과로 나왔다. 그래서 `_digest` 로 결속한다.
+    어긋나면 적용을 거부하고 보류로 되돌린다 — 조용히 틀리느니 시끄럽게 비는 게 낫다.
+
+    `_` 로 시작하는 키는 메타데이터이고 assertion 매칭 대상이 아니다.
+    반환값은 매칭되지 않은 키 목록.
+    """
     table = manual.get(key, {})
+    rules = {k: v for k, v in table.items() if not k.startswith("_")}
+    if not rules:
+        return []
+
+    actual = outputs_digest(run)
+    expected = table.get("_digest")
+    if expected is None:
+        print(f"  ⚠ {key}: 수동 채점이 산출물에 결속되지 않았다. 확인 후 \"_digest\": \"{actual}\" 를 넣어라.")
+    elif expected != actual:
+        print(f"  ✗ {key}: 산출물이 바뀌었다(기록 {expected} → 현재 {actual}). "
+              f"수동 채점 {len(rules)}건을 적용하지 않고 보류로 남긴다 — 새 산출물로 다시 판정하라.")
+        return []
+
     used = set()
     for r in results:
         if r["passed"] is not None:
             continue
-        for prefix, (verdict, evidence) in table.items():
+        for prefix, (verdict, evidence) in rules.items():
             if r["text"].startswith(prefix):
                 r["passed"], r["evidence"] = verdict, f"[직접 열람] {evidence}"
                 used.add(prefix)
                 break
-    return sorted(set(table) - used)
+    return sorted(set(rules) - used)
 
 
 def grade_run(rules, manual: dict, eval_dir: Path, run: Path) -> dict:
@@ -109,7 +142,7 @@ def grade_run(rules, manual: dict, eval_dir: Path, run: Path) -> dict:
             verdict = (None, "판단 필요 — 스크립트로 검증 불가")
         results.append({"text": a, "passed": verdict[0], "evidence": verdict[1]})
 
-    orphans = apply_manual(manual, f"{eval_dir.name}/{run.name}", results)
+    orphans = apply_manual(manual, f"{eval_dir.name}/{run.name}", run, results)
     if orphans:
         print(f"  ⚠ {eval_dir.name}/{run.name}: 매칭 안 된 수동 채점 {orphans}")
 
