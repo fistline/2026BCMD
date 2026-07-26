@@ -19,9 +19,18 @@ Exits non-zero on the first failed assertion.
 
 from __future__ import annotations
 
+import os
 import sys
 import traceback
 import unicodedata
+
+# Smoke pins the FUSED core (deterministic retrieval + graph). The opt-in
+# reranker is a query-time reordering with its own coverage -- test_reranker
+# (which passes rerank=True explicitly) and `make eval-rerank`. Force it off for
+# the whole run so a deployment .env with RERANK=1 cannot reorder the pinned
+# results. Set BEFORE importing pipeline, whose load_dotenv is override=False, so
+# this wins over .env.
+os.environ["RERANK"] = "0"
 
 from pipeline import get_paths, get_settings
 from pipeline.build_graph import graph_query, resolve_node
@@ -62,8 +71,11 @@ from pipeline.build_rag import (
 # mechanics assertions here must SEE them; this thin wrapper re-admits them. The
 # no-leak assertion in test_hybrid_search calls _hybrid_search directly (default
 # excluded) to prove the read path hides fixtures from a real answer.
-def hybrid_search(*args, include_fixtures=True, **kwargs):
-    return _hybrid_search(*args, include_fixtures=include_fixtures, **kwargs)
+def hybrid_search(*args, include_fixtures=True, rerank=False, **kwargs):
+    # Force rerank=False so the retrieval PINS below test the fused core and stay
+    # stable even when .env sets RERANK=1 (the opt-in reranker reorders results).
+    # test_reranker passes rerank=True explicitly where it exercises the reranker.
+    return _hybrid_search(*args, include_fixtures=include_fixtures, rerank=rerank, **kwargs)
 
 FAILURES: list = []
 
@@ -1253,12 +1265,12 @@ def test_reranker() -> None:
         return
 
     query = "hybrid_search"
-    base = [hit["chunk_id"] for hit in hybrid_search(query, limit=5, rerank=False)]
 
-    # 2. The DEFAULT read path (rerank unset -> settings, off) must equal an
-    #    explicit rerank=False: enabling the model changes nothing until asked.
-    default_ids = [hit["chunk_id"] for hit in hybrid_search(query, limit=5)]
-    check("default read path is not reranked (RERANK off)", default_ids == base, "off != rerank=False")
+    # 2. rerank=False is the clean fused core -- no rerank annotation leaks onto
+    #    it. (The default read path follows .env's RERANK; smoke pins the core via
+    #    the rerank=False wrapper above, so it is stable whether RERANK is on or off.)
+    off = hybrid_search(query, limit=5, rerank=False)
+    check("rerank=False path carries no rerank annotation", all("reranked" not in hit for hit in off))
 
     reranked = hybrid_search(query, limit=5, rerank=True)
     check("rerank returns `limit` rows", len(reranked) == 5, len(reranked))

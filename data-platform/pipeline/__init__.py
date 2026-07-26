@@ -129,12 +129,15 @@ def get_settings() -> Settings:
         keyword_weight=float(os.environ.get("KEYWORD_WEIGHT", "1.0")),
         alias_expansion=os.environ.get("ALIAS_EXPANSION", "1").strip() not in {"0", "false", "no"},
         graph_depth=_graph_depth(),
-        # Reranker: opt-in, default off. Candidates 40 and single-thread are the
-        # 8GB-friendly defaults; raise RERANK_CANDIDATES/RERANK_THREADS only where
-        # there is memory/CPU headroom (K>100 measured to hurt, so 40 is a floor).
+        # Reranker: opt-in, default off. Candidates 20 is the MEASURED floor on
+        # this corpus: 20 reproduces 40's every per-kind metric (reranked MRR
+        # 0.718, cross_bill 1.0) at ~2.1x the speed, while 15 drops cross_bill
+        # (a relevant bill sits at fused rank 16-20) and 10 drops vocab too.
+        # Single-thread keeps the ranking deterministic. Raise either knob only
+        # with headroom; K>100 was measured to hurt.
         rerank_enabled=os.environ.get("RERANK", "0").strip() not in {"", "0", "false", "no"},
         rerank_model=os.environ.get("RERANK_MODEL", "onnx-community/bge-reranker-v2-m3-ONNX"),
-        rerank_candidates=int(os.environ.get("RERANK_CANDIDATES", "40")),
+        rerank_candidates=int(os.environ.get("RERANK_CANDIDATES", "20")),
         # Retrieval PRIOR weight in the rerank fusion (CE weight is fixed at 1.0):
         # lower = more cross-encoder-dominant. 0.15 lets CE reorder while retrieval
         # only breaks near-ties. Tune via `make eval-rerank`.
