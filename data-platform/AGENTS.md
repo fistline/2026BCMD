@@ -176,6 +176,33 @@ mean hides (the `particle_glue` case above) fails the blocking build, not just a
 arm-mean drop. Re-record it with `make eval-baseline` only alongside a measurement
 that justifies the move; the baseline also carries the git SHA it was recorded at.
 
+## Grading skill outputs
+
+`make eval` measures retrieval. `tools/skill-eval/grade.py` measures the other
+thing this repo produces — **documents a skill wrote** — against the assertions in
+that skill's `evals/evals.json`. It lives here because measurement tooling does,
+not because it touches the corpus: it reads nothing from `data/` and imports no
+`pipeline` module.
+
+```
+python3 tools/skill-eval/grade.py ../gen-docs/st_prospectus/sto-filing-workspace/iteration-1 --rules sto-filing
+```
+
+The harness is skill-agnostic; every domain regex sits in `rules_<skill>.py` beside
+it, so a skill's rules stay reviewable next to its assertions rather than smeared
+through the runner. Add a skill by writing one rules module and one `RULES` entry.
+
+Two things it will not do, both learned by getting them wrong. It **never invents a
+verdict** — an assertion no rule matches comes out `pending`, and a human fills it in
+`<workspace>/manual_grades.json`, which is applied only where the machine abstained.
+And banned-phrase checks read the surrounding 60 characters for a negation marker,
+because a filing is *required* to say "원금·수익 보장과 무관", so bare keyword
+matching flags the compliant document.
+
+Output is `grading.json` per run in the skill-creator viewer's schema
+(`expectations[].text/passed/evidence`); its aggregator wants sibling `run-*`
+directories, which this layout does not have — symlink rather than restructure.
+
 ## Document-type profiles
 
 A profile in `pipeline/doctypes/` is **data**, not code: four tables of regexes.

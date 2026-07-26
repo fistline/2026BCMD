@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""스킬 eval 실행을 assertion 기준으로 채점해 grading.json 을 쓴다.
+
+`pipeline/eval_*.py` 는 색인 검색을 재는 회귀 바닥이고, 이건 **스킬이 만든 문서**를 잰다.
+대상이 달라 같은 파일에 두지 않았지만, 규율은 같다 — 근거 없이 통과를 주지 않는다.
+
+**기계로 확인되는 것만 여기서 판정한다.** 판단이 필요한 항목은 verdict=None 으로 남기고
+사람이 산출물을 읽고 `<workspace>/manual_grades.json` 에 근거와 함께 채운다.
+그 파일은 verdict=None 자리에만 적용된다 — 기계 판정을 손으로 뒤집을 수 있으면 채점이
+산출물이 아니라 기대에 맞춰지기 때문이다.
+
+grading.json 의 스키마(`expectations` 배열의 `text`/`passed`/`evidence`)는 skill-creator
+뷰어와 집계 스크립트가 기대하는 그대로다. 바꾸면 뷰어가 등급을 못 읽는다.
+
+    python3 tools/skill-eval/grade.py <workspace>/iteration-1 --rules sto-filing
+
+디렉터리 레이아웃은 skill-creator 규약을 따른다.
+
+    <iteration>/<eval-name>/eval_metadata.json      # prompt + assertions
+    <iteration>/<eval-name>/<config>/outputs/       # 채점 대상 산출물
+    <iteration>/<eval-name>/<config>/timing.json    # 집계용(있으면)
+    <iteration>/<eval-name>/<config>/grading.json   # 이 스크립트의 출력
+"""
+from __future__ import annotations
+
+import argparse
+import importlib
+import json
+import re
+from pathlib import Path
+
+# 규칙 모듈 등록부. 스킬이 늘면 여기 한 줄 추가하고 rules_<name>.py 를 옆에 둔다.
+# 도메인 정규식(법 조문·문구)은 전부 규칙 모듈 쪽에 있다 — 이 파일은 스킬을 모른다.
+RULES = {
+    "sto-filing": "rules_sto_filing",
+}
+
+# 보장성·금지 표현은 부정형·경고형으로도 반드시 등장한다. 증권신고서라면 오히려
+#   "원금이나 수익을 보장하지 않습니다" / "원금·수익 보장과 무관" / "사실상 보장으로 재분류"
+# 를 **써야** 한다. 그래서 단순 키워드 검사는 필연적으로 오탐을 낸다 — 실제로 냈다.
+# 매치 주변에 부정·경고 표지가 있으면 위반으로 세지 않는다.
+NEGATION = re.compile(r"않|무관|없|아니|금지|재분류|위험|말라|불가|배제|되지|해서는|오인|주의")
+
+
+def load_outputs(run: Path) -> tuple[str, list[str]]:
+    """실행 디렉터리의 산출물 전문과 파일명 목록."""
+    names, blobs = [], []
+    for f in sorted((run / "outputs").glob("*")):
+        if f.is_file():
+            names.append(f.name)
+            try:
+                blobs.append(f.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                pass
+    return "\n".join(blobs), names
+
+
+def has(text: str, *pats: str) -> bool:
+    """모든 패턴이 있어야 참."""
+    return all(re.search(p, text) for p in pats)
+
+
+def any_of(text: str, *pats: str) -> bool:
+    """하나라도 있으면 참. 같은 뜻을 다르게 쓴 올바른 출력을 떨어뜨리지 않으려는 것이다."""
+    return any(re.search(p, text) for p in pats)
+
+
+def banned_hits(text: str, patterns: list[str], negation: re.Pattern = NEGATION) -> list[str]:
+    """긍정 단언으로 쓰인 금지 표현만 골라낸다. 앞뒤 60자에 부정 표지가 있으면 뺀다."""
+    hits = []
+    for pat in patterns:
+        for m in re.finditer(pat, text):
+            ctx = text[max(0, m.start() - 60): m.end() + 60]
+            if not negation.search(ctx):
+                hits.append(f"{m.group(0)!r} … “{ctx.strip()[:70]}”")
+    return hits
+
+
+def apply_manual(manual: dict, key: str, results: list) -> list[str]:
+    """사람 판정을 verdict=None 자리에만 채운다. 반환값은 매칭되지 않은 키 목록."""
+    table = manual.get(key, {})
+    used = set()
+    for r in results:
+        if r["passed"] is not None:
+            continue
+        for prefix, (verdict, evidence) in table.items():
+            if r["text"].startswith(prefix):
+                r["passed"], r["evidence"] = verdict, f"[직접 열람] {evidence}"
+                used.add(prefix)
+                break
+    return sorted(set(table) - used)
+
+
+def grade_run(rules, manual: dict, eval_dir: Path, run: Path) -> dict:
+    text, names = load_outputs(run)
+    meta = json.loads((eval_dir / "eval_metadata.json").read_text(encoding="utf-8"))
+    ctx = {"text": text, "names": names, "has": has, "any_of": any_of, "banned_hits": banned_hits}
+
+    results = []
+    for a in meta["assertions"]:
+        verdict = rules.judge(a, ctx)
+        if verdict is None:
+            verdict = (None, "판단 필요 — 스크립트로 검증 불가")
+        results.append({"text": a, "passed": verdict[0], "evidence": verdict[1]})
+
+    orphans = apply_manual(manual, f"{eval_dir.name}/{run.name}", results)
+    if orphans:
+        print(f"  ⚠ {eval_dir.name}/{run.name}: 매칭 안 된 수동 채점 {orphans}")
+
+    passed = sum(1 for r in results if r["passed"] is True)
+    failed = sum(1 for r in results if r["passed"] is False)
+    pending = sum(1 for r in results if r["passed"] is None)
+    # timing 은 grading.json 에 넣지 않는다 — skill-creator 집계 스크립트는 여기에 timing 이
+    # 있으면 sibling timing.json 을 읽지 않고, 그러면 토큰 수가 0 으로 집계된다.
+    out = {
+        "expectations": results,
+        "summary": {
+            "passed": passed, "failed": failed, "pending": pending, "total": len(results),
+            "pass_rate": round(passed / (passed + failed), 3) if passed + failed else 0.0,
+        },
+    }
+    (run / "grading.json").write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out["summary"]
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("iteration", type=Path, help="채점할 iteration 디렉터리 (eval-* 를 담고 있다)")
+    ap.add_argument("--rules", default="sto-filing", choices=sorted(RULES),
+                    help="적용할 규칙 모듈 (기본: sto-filing)")
+    ap.add_argument("--manual", type=Path, default=None,
+                    help="수동 채점 파일 (기본: <iteration>/../manual_grades.json)")
+    args = ap.parse_args()
+
+    it = args.iteration.resolve()
+    if not it.is_dir():
+        ap.error(f"디렉터리가 없다: {it}")
+
+    rules = importlib.import_module(RULES[args.rules])
+    manual_path = args.manual or (it.parent / "manual_grades.json")
+    manual = json.loads(manual_path.read_text(encoding="utf-8")) if manual_path.exists() else {}
+    if not manual:
+        print(f"수동 채점 파일 없음({manual_path}) — 판단 필요 항목은 보류로 남는다.\n")
+
+    print(f"{'eval':<34}{'구성':<15}{'PASS':>5}{'FAIL':>6}{'보류':>6}{'비율':>8}")
+    print("-" * 76)
+    for eval_dir in sorted(it.glob("eval-*")):
+        if not (eval_dir / "eval_metadata.json").exists():
+            continue
+        for run in sorted(p for p in eval_dir.iterdir() if (p / "outputs").is_dir()):
+            s = grade_run(rules, manual, eval_dir, run)
+            print(f"{eval_dir.name:<34}{run.name:<15}"
+                  f"{s['passed']:>5}{s['failed']:>6}{s['pending']:>6}{s['pass_rate']:>8.0%}")
+
+
+if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    main()
