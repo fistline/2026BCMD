@@ -65,34 +65,36 @@ cand AS (
    AND ABS(a.content_len - b.content_len)::DOUBLE / GREATEST(a.content_len, b.content_len) < 0.15
 ),
 parts AS (SELECT a_id AS d FROM cand UNION SELECT b_id AS d FROM cand),
-sh AS (
-  -- Shingle ONLY candidate participants, so the big single-format documents
-  -- (a 333k-char 감독규정, a 249k-char 증권신고서) that can never be a cross-format
-  -- twin are never exploded. w=10 character shingles.
-  SELECT p.doc_id, SUBSTR(p.norm, g, 10) AS shingle
-  FROM prepared p, range(1, LENGTH(p.norm) - 10 + 2) AS t(g)
+shingle_sets AS (
+  -- One DISTINCT shingle SET per candidate participant, materialised as a LIST.
+  -- Shingle ONLY candidate participants, so the big single-format documents (a
+  -- 333k-char 감독규정, a 249k-char 증권신고서) that have no similar-length
+  -- cross-format partner are never listed. w=10 character shingles.
+  SELECT p.doc_id,
+         list_distinct(list_transform(range(1, LENGTH(p.norm) - 10 + 2),
+                                       g -> SUBSTR(p.norm, g, 10))) AS shingles
+  FROM prepared p
   WHERE p.doc_id IN (SELECT d FROM parts) AND LENGTH(p.norm) >= 10
 ),
-dsh AS (SELECT DISTINCT doc_id, shingle FROM sh),
-sizes AS (SELECT doc_id, COUNT(*) AS n FROM dsh GROUP BY doc_id),
-inter AS (
-  SELECT c.a_id, c.b_id, COUNT(*) AS inter_n
-  FROM cand c
-  JOIN dsh da ON da.doc_id = c.a_id
-  JOIN dsh db ON db.doc_id = c.b_id AND db.shingle = da.shingle
-  GROUP BY c.a_id, c.b_id
-),
 scored AS (
-  -- Exact set Jaccard (no MinHash, no hash() on the decision path -> deterministic
-  -- across DuckDB versions and PYTHONHASHSEEDs). T=0.85: measured twin floor 0.910,
-  -- worst cross-format different-doc 0.610 (margin +0.30).
-  SELECT c.a_id, c.b_id, c.a_prio, c.b_prio,
-         i.inter_n::DOUBLE / (sa.n + sb.n - i.inter_n) AS jaccard
-  FROM inter i
-  JOIN cand c  ON c.a_id = i.a_id AND c.b_id = i.b_id
-  JOIN sizes sa ON sa.doc_id = i.a_id
-  JOIN sizes sb ON sb.doc_id = i.b_id
-  WHERE i.inter_n::DOUBLE / (sa.n + sb.n - i.inter_n) >= 0.85
+  -- Exact set Jaccard computed PER CANDIDATE PAIR with list_intersect, NOT a
+  -- shingle-level self-join. The self-join (dsh db ON db.shingle = da.shingle)
+  -- fans out on shingles common to many legal documents (every 제N조 boilerplate
+  -- shard) into a K^2 cartesian that OOM'd DuckDB at 80 GiB; list_intersect stays
+  -- O(shingles) per pair. Still no MinHash, no hash() on the decision path ->
+  -- deterministic across DuckDB versions and PYTHONHASHSEEDs. T=0.85: measured
+  -- twin floor 0.910, worst cross-format different-doc 0.610 (margin +0.30).
+  SELECT a_id, b_id, a_prio, b_prio, jaccard
+  FROM (
+    SELECT c.a_id, c.b_id, c.a_prio, c.b_prio,
+           LEN(list_intersect(sa.shingles, sb.shingles))::DOUBLE
+             / NULLIF(LEN(sa.shingles) + LEN(sb.shingles)
+                      - LEN(list_intersect(sa.shingles, sb.shingles)), 0) AS jaccard
+    FROM cand c
+    JOIN shingle_sets sa ON sa.doc_id = c.a_id
+    JOIN shingle_sets sb ON sb.doc_id = c.b_id
+  )
+  WHERE jaccard >= 0.85
 ),
 pairs AS (
   -- Winner = higher FORMAT_PRIORITY (tiebreak lower doc_id for a total order). The
