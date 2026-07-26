@@ -23,6 +23,9 @@ gen-apps/**/artifacts/
 gen-apps/**/broadcast/
 gen-apps/**/*.log
 
+# Generated prompts under gen-docs/ — regenerated from source by build_prompts.py
+gen-docs/**/dist/
+
 # Auto-installed browser binaries (Playwright / Scrapling, used by fetch_web.py)
 .cache/ms-playwright/
 .cache/scrapling/

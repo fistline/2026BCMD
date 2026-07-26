@@ -2,6 +2,7 @@
 name: corpus-lookup
 description: 프로젝트 루트(또는 gen-docs·gen-apps 작업 중)에서 data-platform의 색인 코퍼스를 조회해 근거 조문으로 답한다. 코퍼스에는 한국 법안·법률 원문(통과된 토큰증권 개정법 2건, 디지털자산 법안들)이 색인돼 있다. 법안·조문·시행일·전매제한·유통제한·예치금 등 문서 내용 질문, 증권신고서·dApp 작업 중 법령 근거 확인에 사용. data-platform 디렉터리 안에서 직접 작업 중일 때는 이 래퍼 대신 원본 스킬(corpus-search·corpus-graph)을 쓴다.
 allowed-tools: Bash(make -C data-platform query *), Bash(make -C data-platform impact *), Bash(make -C data-platform collections*)
+compatibility: data-platform 색인(data/serving/index.sqlite)이 빌드되어 있어야 하며 uv 로 실행한다. 색인이 없으면 make build 가 선행되어야 한다.
 ---
 
 # Corpus lookup (루트 래퍼)

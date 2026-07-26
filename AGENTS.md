@@ -32,5 +32,6 @@ data-platform 자체 스킬(corpus-search·corpus-graph 등)은 `data-platform/.
   이 슬러그는 data-platform의 node-id 슬러그(한글·언더스코어 유지)와 **별개 체계**다.
 - **루트에서 코퍼스 조회** — `make -C data-platform query Q="..."`. 색인이 빌드돼 있어야 하며,
   검색 규칙·랭킹 해석의 정본은 `data-platform/AGENTS.md`와 corpus-search 스킬이다(여기 재서술 금지).
-- **sto-filing 패키징** — `sto-filing/` 소스 수정 후 반드시 `.skill` zip 재생성:
-  `gen-docs/st_prospectus/PACKAGING.md` 참조.
+- **sto-filing 패키징** — 정본 1벌(`sto-filing/` + `prompt-templates/`)에서 단독 실행
+  프롬프트 3종(`dist/`)을 생성한다. **소스 수정 후 반드시 `python3 build_prompts.py`** 로
+  재생성하고, `dist/`는 손으로 고치지 않는다. 절차는 `gen-docs/st_prospectus/PACKAGING.md`.

@@ -52,8 +52,10 @@ dApp을 만든다.
 │   └── pipeline/ transform/ agent/ 등
 ├── gen-docs/
 │   └── st_prospectus/
-│       ├── sto-filing/    #    스킬 소스 (SKILL.md + references/)
-│       ├── sto-filing.skill   # 배포용 zip (PACKAGING.md 참조)
+│       ├── sto-filing/    #    스킬 소스 = 정본 (SKILL.md + references/)
+│       ├── prompt-templates/  # 프롬프트 골조 = 정본
+│       ├── build_prompts.py   # 생성기 (PACKAGING.md 참조)
+│       ├── dist/          #    생성물: 단독 실행 프롬프트 3종
 │       └── <slug>/        #    생성된 증권신고서가 쌓이는 곳
 └── gen-apps/
     ├── ST_SERVICE_DAPP_PROMPT.md  # dApp 생성 대형 프롬프트 (Q1~Q5만 사람이 채움)
@@ -192,8 +194,9 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   포인터다(Claude Code만 `CLAUDE.md`를 읽으므로). 규약은 `AGENTS.md`에서만 고친다.
 - **스킬은 `.agents/skills/`에서만 편집**하고 `.claude/skills/`는 미러다.
   Windows에서 심링크가 깨지면 `data-platform`의 `make sync-skills`로 복사한다.
-- **sto-filing 패키징** — `sto-filing/` 소스를 고쳤으면 반드시 `.skill` zip을 재생성한다.
-  잊으면 배포본이 옛 버전을 조용히 서빙한다. `gen-docs/st_prospectus/PACKAGING.md` 참조.
+- **sto-filing 패키징** — `sto-filing/` 또는 `prompt-templates/`를 고쳤으면
+  `python3 build_prompts.py`로 `dist/` 프롬프트 3종을 재생성한다. 잊으면 배포본이 옛 버전을
+  조용히 서빙한다. `dist/`는 손으로 고치지 않는다. `gen-docs/st_prospectus/PACKAGING.md` 참조.
 - **data plane은 절대 커밋하지 않는다** — `data-platform/data/`는 전부 git-ignore
   대상이다. 코퍼스 원본은 `data-platform/source/`에 두며(이곳은 git-ignore 대상이
   아니라 추적 대상이다), 근거는 `data-platform/README.md`의 control/data plane 절.
