@@ -27,6 +27,7 @@ package reaches the pipeline only once the plugins are reinstalled.
 | `make triage` | Which profile claims each document in `data/raw` |
 | `make dupes` | Content-duplicate renditions the fingerprint dedup collapsed |
 | `make dupes-twins` | Do `source/` twin renditions (`X.hwp` beside `X.pdf`) match? Reads no lake state |
+| `make dupes-controls` | Fuzzy-twin detector controls: 10 positives caught, 정정본·타문서·모법/시행령 rejected |
 | `make verify` | Full verification gate |
 | `make clean` | Delete regenerable state only |
 

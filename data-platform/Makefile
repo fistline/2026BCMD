@@ -78,6 +78,9 @@ dupes: ## Report content-duplicate renditions collapsed by the fingerprint dedup
 dupes-twins: ## Do source/ twin renditions (X.hwp beside X.pdf) share a fingerprint? Reads no lake state
 	$(PY) -m pipeline.report_dupes --twins
 
+dupes-controls: ## Fuzzy-twin detector controls: 10 positives caught, 정정본·타문서·모법/시행령 rejected
+	$(PY) -m pipeline.report_dupes --controls
+
 export: ## Rewrite data/processed/chunks/*.json from the gold layer
 	$(PY) -m pipeline.export
 

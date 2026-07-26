@@ -19,6 +19,8 @@ would always look clean.
 from __future__ import annotations
 
 import argparse
+import re
+import unicodedata
 from pathlib import Path
 
 from pipeline import get_paths
@@ -35,6 +37,56 @@ from pipeline.extract import ExtractionError, extract_text
 # the twin this tool measures against.
 TWIN_ORIGINALS = tuple(f".{suffix}" for suffix in FORMAT_PRIORITY if suffix != "pdf")
 TWIN_FORMATS = frozenset(TWIN_ORIGINALS) | {".pdf"}
+
+# ---- Fuzzy-twin detector parameters -------------------------------------------
+# These MUST match transform/models/silver/document_twins.sql (the live detector,
+# when landed). This module is the detector's measurement harness: same gates,
+# same normalisation, same threshold, computed in Python against source/ files so
+# a regression is visible without touching lake state.
+#   w=10 char shingles on the n2 norm; measured twin floor 0.910, worst
+#   cross-format different-doc 0.610 -> T=0.85 sits inside a +0.30 margin.
+#   Hard gates run BEFORE the threshold: format-different (the load-bearing one:
+#   a 정정/개정/다른서류 arrives in the SAME format and must never reach Jaccard),
+#   then length-ratio < 0.15 (a true rendition is ~length-identical).
+TWIN_SHINGLE_W = 10
+TWIN_JACCARD_T = 0.85
+TWIN_LEN_RATIO = 0.15
+
+
+def _norm_n2(text: str) -> str:
+    """NFC, then strip whitespace the way the SQL detector does.
+
+    flags=re.ASCII on purpose: DuckDB's regexp_replace is RE2, whose \\s is the
+    ASCII class. Python's default unicode \\s would ALSO eat U+3000/U+00A0 and
+    the two sides would disagree on any document that uses ideographic spaces --
+    which Korean filings do. Harness and detector must compute the same string,
+    and the smoke test asserts that byte-for-byte.
+    """
+    return re.sub(r"\s", "", unicodedata.normalize("NFC", text), flags=re.ASCII)
+
+
+def _shingles(norm: str) -> set:
+    """Set of w-char shingles; empty for a string shorter than one shingle."""
+    w = TWIN_SHINGLE_W
+    return {norm[i : i + w] for i in range(len(norm) - w + 1)} if len(norm) >= w else set()
+
+
+def _jaccard(a: set, b: set) -> float:
+    if not a or not b:
+        return 0.0
+    inter = len(a & b)
+    return inter / (len(a) + len(b) - inter)
+
+
+def _twin_gates(suffix_a: str, suffix_b: str, len_a: int, len_b: int):
+    """Why a pair is excluded before Jaccard, or None if it reaches the score."""
+    if suffix_a == suffix_b:
+        return "same-format"
+    if len_a == 0 or len_b == 0:
+        return "empty"
+    if abs(len_a - len_b) / max(len_a, len_b) >= TWIN_LEN_RATIO:
+        return "length-ratio"
+    return None
 
 
 def main() -> int:
@@ -176,6 +228,135 @@ def report_twins() -> int:
     return 0
 
 
+def report_controls() -> int:
+    """Negative-control harness for the fuzzy-twin detector (plan §5b-1).
+
+    Every case here was measured to be correctly REJECTED before the detector
+    was designed; this re-measures them from source/ so a change to the gates,
+    the normalisation or the threshold that would start merging non-twins fails
+    loudly. The positive control is the 10 curated hwp/pdf twin sets, which the
+    detector must catch 10/10 -- they are exactly what the exact fingerprint
+    was measured to miss (0/10).
+
+    Prints 잔여 이중색인률 as a first-class number: of the known twin sets, how
+    many would still double-index if they arrived through the inbox (no
+    curation), i.e. after the fuzzy layer too.
+    """
+    root = get_paths().root / "source"
+    if not root.is_dir():
+        print(f"[controls] no {root} directory; nothing to measure")
+        return 0
+
+    def load(path: Path) -> tuple:
+        # Binary formats go through the extractor; plain text is read as-is,
+        # the same split parse_document makes.
+        if path.suffix.lower() in TWIN_FORMATS:
+            text = extract_text(path.name, path.read_bytes())
+        else:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        norm = _norm_n2(text)
+        return norm, _shingles(norm)
+
+    failures: list = []
+
+    # -- positive: curated twin sets must all be caught by the fuzzy layer -----
+    pairs = _twin_pairs(root)
+    caught = 0
+    print(f"[controls] positive: {len(pairs)} curated twin set(s)")
+    for stem, original, derived in pairs:
+        norm_a, sh_a = load(original)
+        norm_b, sh_b = load(derived)
+        gate = _twin_gates(original.suffix.lower(), derived.suffix.lower(), len(norm_a), len(norm_b))
+        score = _jaccard(sh_a, sh_b)
+        detected = gate is None and score >= TWIN_JACCARD_T
+        caught += detected
+        print(f"  {'DETECT ' if detected else 'MISSED '} J={score:.3f} gate={gate or '-'}  {stem}")
+        if not detected:
+            failures.append(f"positive twin missed: {stem} (J={score:.3f}, gate={gate})")
+
+    # -- negative 1: a 1-char correction (same format) must be format-gated ----
+    # Synthesised, because that is what a 정정본 IS: the same file with one
+    # character changed. Measured J 0.999 -- more similar than a real twin, which
+    # is exactly why the FORMAT gate, not the threshold, has to carry this case.
+    sample = root / "sto" / "증권신고서(투자계약증권)_열매컴퍼니_20250626000457.txt"
+    if sample.exists():
+        norm_a = _norm_n2(sample.read_text(encoding="utf-8", errors="replace"))
+        norm_b = norm_a[:5000] + ("일" if norm_a[5000] != "일" else "이") + norm_a[5001:]
+        gate = _twin_gates(".txt", ".txt", len(norm_a), len(norm_b))
+        score = _jaccard(_shingles(norm_a), _shingles(norm_b))
+        print(f"[controls] 정정본(합성 1글자): J={score:.3f} gate={gate} (기대: same-format)")
+        if gate != "same-format":
+            failures.append("correction pair was not format-gated")
+    else:
+        print("[controls] 정정본: sample filing absent -- skipped")
+
+    # -- negative 2: cross-format DIFFERENT documents stay far below T ---------
+    by_suffix: dict = {}
+    for stem, original, derived in pairs:
+        by_suffix.setdefault("orig", []).append((stem, original))
+        by_suffix.setdefault("pdf", []).append((stem, derived))
+    worst = 0.0
+    worst_pair = "-"
+    reached = 0
+    for stem_a, path_a in by_suffix.get("orig", []):
+        norm_a, sh_a = load(path_a)
+        for stem_b, path_b in by_suffix.get("pdf", []):
+            if stem_a == stem_b:
+                continue
+            norm_b, sh_b = load(path_b)
+            if _twin_gates(path_a.suffix.lower(), path_b.suffix.lower(), len(norm_a), len(norm_b)):
+                continue
+            reached += 1
+            score = _jaccard(sh_a, sh_b)
+            if score > worst:
+                worst, worst_pair = score, f"{stem_a} × {stem_b}"
+            if score >= TWIN_JACCARD_T:
+                failures.append(f"cross-format different docs would merge: {stem_a} × {stem_b} J={score:.3f}")
+    print(
+        f"[controls] cross-format 타문서: {reached} pair(s) reached Jaccard, "
+        f"worst J={worst:.3f} ({worst_pair}) < T={TWIN_JACCARD_T}"
+    )
+
+    # -- negative 3: same-format different filings must be format-gated --------
+    sto = root / "sto"
+    filings = sorted(sto.glob("*.txt")) if sto.is_dir() else []
+    if len(filings) >= 2:
+        norm_a, sh_a = load(filings[0])
+        norm_b, sh_b = load(filings[1])
+        gate = _twin_gates(".txt", ".txt", len(norm_a), len(norm_b))
+        score = _jaccard(sh_a, sh_b)
+        print(f"[controls] 동종 타서류({filings[0].stem[:20]}… × {filings[1].stem[:20]}…): J={score:.3f} gate={gate}")
+        if gate != "same-format":
+            failures.append("same-format filings were not format-gated")
+
+    # -- negative 4: 모법/시행령 (same format here) ----------------------------
+    law = root / "norms" / "금융소비자 보호에 관한 법률.txt"
+    decree = root / "norms" / "금융소비자 보호에 관한 법률 시행령.txt"
+    if law.exists() and decree.exists():
+        norm_a, sh_a = load(law)
+        norm_b, sh_b = load(decree)
+        gate = _twin_gates(".txt", ".txt", len(norm_a), len(norm_b))
+        score = _jaccard(sh_a, sh_b)
+        print(f"[controls] 모법/시행령: J={score:.3f} gate={gate} (본문이 달라 T 아래이기도 함)")
+        if gate is None and score >= TWIN_JACCARD_T:
+            failures.append("모법/시행령 would merge")
+
+    # -- first-class number ----------------------------------------------------
+    residual = len(pairs) - caught
+    print(
+        f"\n[controls] 잔여 이중색인률(인박스 직투 가정): {residual}/{len(pairs)} "
+        f"-- 큐레이션 시딩까지 겹치면 0/{len(pairs)} (bronze에 쌍둥이 미존재)"
+    )
+
+    if failures:
+        print("\n[controls] FAIL:")
+        for failure in failures:
+            print(f"  - {failure}")
+        return 1
+    print("[controls] OK: positives all caught, negatives all rejected.")
+    return 0
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -183,5 +364,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Measure source/ twin pairs directly instead of reading the lake.",
     )
+    parser.add_argument(
+        "--controls",
+        action="store_true",
+        help="Run the fuzzy-twin detector's positive/negative control set.",
+    )
     arguments = parser.parse_args()
+    if arguments.controls:
+        raise SystemExit(report_controls())
     raise SystemExit(report_twins() if arguments.twins else main())

@@ -918,6 +918,95 @@ def test_format_ladder() -> None:
     )
 
 
+def test_twin_detector() -> None:
+    """Fuzzy-twin detector: norm parity with SQL, plus a synthetic regression.
+
+    The detector (transform/models/silver/document_twins.sql) and its harness
+    (pipeline/report_dupes.py --controls) must compute the SAME normalised
+    string, or the harness's green numbers say nothing about the model. Parity
+    is asserted byte-for-byte, including the characters where RE2 and Python
+    disagree by default (U+3000, U+00A0). The regression then runs the REAL
+    model SQL against a synthetic bronze: a cross-format block-reordered twin
+    must be marked, while a same-format one-char correction and a genuinely
+    different document must not. Skips while the model is not landed.
+    """
+    print("fuzzy twin detector")
+    import duckdb
+
+    from pipeline.report_dupes import TWIN_JACCARD_T, _norm_n2
+
+    con = duckdb.connect(":memory:")
+
+    def duck_norm(value: str) -> str:
+        return con.execute(
+            "SELECT regexp_replace(nfc_normalize(?), '\\s', '', 'g')", [value]
+        ).fetchone()[0]
+
+    tricky = "가Á 나　다 라\r\n마 \t바"  # NFD, U+3000, NBSP, CRLF
+    check(
+        "DuckDB and Python agree byte-for-byte on the twin norm",
+        duck_norm(tricky) == _norm_n2(tricky),
+        f"duckdb={duck_norm(tricky)!r} python={_norm_n2(tricky)!r}",
+    )
+    bills = sorted((get_paths().root / "source").rglob("*.hwp"))
+    if bills:
+        text = extract_text(bills[0].name, bills[0].read_bytes())[:20000]
+        check(
+            "the norm parity holds on real bill text",
+            duck_norm(text) == _norm_n2(text),
+            "diverged on corpus sample",
+        )
+
+    model = get_paths().root / "transform" / "models" / "silver" / "document_twins.sql"
+    if not model.exists():
+        print("       (document_twins.sql not landed; detector regression skipped)")
+        return
+
+    # Strip the MODEL () header: it ends at the first line that is exactly ');'.
+    # The description string CONTAINS the two characters ');', so a plain
+    # substring split would land inside it.
+    parts = re.split(r"^\);\s*$", model.read_text(encoding="utf-8"), maxsplit=1, flags=re.M)
+    check("document_twins.sql has a MODEL header to strip", len(parts) == 2, "no ');' line")
+    body = parts[1]
+
+    con.execute("CREATE SCHEMA bronze")
+    con.execute(
+        "CREATE TABLE bronze.documents ("
+        "doc_id VARCHAR, rel_path VARCHAR, doc_type VARCHAR, content VARCHAR,"
+        "content_sha256 VARCHAR, ingested_at TIMESTAMP)"
+    )
+    base = "".join(
+        f"제{i}조(항목{i}) {i}번째 조문은 디지털자산 사업자의 의무와 절차를 정한다. "
+        for i in range(1, 60)
+    )
+    reordered = base[1300:] + " \n　" + base[:1300]  # block swap + whitespace drift
+    different = "".join(
+        f"제{i}조(별건{i}) 전혀 다른 법률의 {i}번째 규정이 이어진다. " for i in range(1, 60)
+    )
+    corrected = base.replace("의무와 절차", "의무와 정차", 1)  # 1-char 정정, same format
+    for doc_id, rel_path, doc_type, content in (
+        ("bill-hwp", "bill.hwp", "hwp", base),
+        ("bill-pdf", "bill.pdf", "pdf", reordered),
+        ("other-pdf", "other.pdf", "pdf", different),
+        ("bill2-hwp", "bill2.hwp", "hwp", corrected),
+    ):
+        con.execute(
+            "INSERT INTO bronze.documents VALUES (?, ?, ?, ?, ?, TIMESTAMP '2026-01-01')",
+            [doc_id, rel_path, doc_type, content, doc_id],
+        )
+    rows = con.execute(body).fetchall()
+    check(
+        "the detector marks exactly the cross-format twin, loser superseded by winner",
+        len(rows) == 1 and rows[0][0] == "bill-pdf" and rows[0][1] == "bill-hwp",
+        rows,
+    )
+    check(
+        "the marked pair clears the committed threshold",
+        bool(rows) and rows[0][2] >= TWIN_JACCARD_T,
+        rows,
+    )
+
+
 def test_binary_extraction() -> None:
     """HWP and HWPX ingestion, and the guards that keep the raw zone clean."""
     print("binary extraction")
@@ -1504,6 +1593,7 @@ def main() -> int:
         test_binary_extraction()
         test_ooxml_extraction()
         test_format_ladder()
+        test_twin_detector()
         print()
         test_chunk_export()
         print()
