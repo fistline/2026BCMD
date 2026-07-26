@@ -897,6 +897,34 @@ def test_format_ladder() -> None:
         sql_order == list(FORMAT_PRIORITY),
         f"sql={sql_order} python={list(FORMAT_PRIORITY)}",
     )
+    # document_twins.sql carries its OWN copy of the same ladder to pick the twin
+    # winner (higher priority survives). It must not drift from FORMAT_PRIORITY, or a
+    # derived .pdf could be kept over its own .hwp source when both reach bronze.
+    twins_model = (
+        get_paths().root / "transform" / "models" / "silver" / "document_twins.sql"
+    ).read_text(encoding="utf-8")
+    twins_ranked = re.findall(r"WHEN\s+'(\w+)'\s+THEN\s+(\d+)", twins_model)
+    twins_order = [dt for dt, _r in sorted(twins_ranked, key=lambda p: -int(p[1]))]
+    check(
+        "silver.document_twins ranks formats in FORMAT_PRIORITY order",
+        twins_order == list(FORMAT_PRIORITY),
+        f"sql={twins_order} python={list(FORMAT_PRIORITY)}",
+    )
+    # The twin thresholds are literals in the SQL model and named constants in the
+    # controls harness (report_dupes). A silent divergence would certify the feature
+    # against different numbers than it runs on, so pin them to one source here.
+    from pipeline.report_dupes import TWIN_JACCARD_T, TWIN_LEN_RATIO
+
+    sql_jaccard = re.search(r"jaccard\s*>=\s*([0-9.]+)", twins_model)
+    sql_len_ratio = re.search(r"norm_len\)\s*<\s*([0-9.]+)", twins_model)
+    check(
+        "document_twins Jaccard/length-ratio literals match the harness constants",
+        bool(sql_jaccard) and bool(sql_len_ratio)
+        and float(sql_jaccard.group(1)) == TWIN_JACCARD_T
+        and float(sql_len_ratio.group(1)) == TWIN_LEN_RATIO,
+        f"sql=({sql_jaccard and sql_jaccard.group(1)},{sql_len_ratio and sql_len_ratio.group(1)}) "
+        f"python=({TWIN_JACCARD_T},{TWIN_LEN_RATIO})",
+    )
     check(
         "every ranked format is a suffix the pipeline ingests",
         all(f".{doc_type}" in SUPPORTED_SUFFIXES for doc_type in FORMAT_PRIORITY),

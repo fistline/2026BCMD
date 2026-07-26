@@ -37,7 +37,13 @@ prepared AS (
   SELECT
     doc_id,
     lower(regexp_extract(rel_path, '\.([^.]+)$', 1)) AS suffix,
-    LENGTH(content) AS content_len,
+    -- Gate on NORM length, the same basis shingling and Jaccard use (below), not
+    -- raw content length. hwpkit and pypdf disagree on WHITESPACE (the 의안번호
+    -- cover table linearises with different spacing), so a real twin can differ by
+    -- 2x in raw length while its whitespace-free norm is ~identical -- gating on raw
+    -- length would MISS exactly the twins this feature exists to bridge, and would
+    -- also diverge from report_dupes._twin_gates, which gates on norm length.
+    LENGTH(regexp_replace(nfc_normalize(content), '\s', '', 'g')) AS norm_len,
     regexp_replace(nfc_normalize(content), '\s', '', 'g') AS norm,
     CASE doc_type
       WHEN 'hwp'  THEN 9 WHEN 'hwpx' THEN 8
@@ -54,15 +60,18 @@ cand AS (
   --   format-different  -- the load-bearing discriminator. A 정정/개정/different
   --                        instrument arrives in the SAME format, so it never enters
   --                        here; only cross-format renditions do.
-  --   length-ratio<0.15 -- a true rendition is ~0.99 length-identical; this drops a
-  --                        boilerplate-sharing pair of different length before the
-  --                        (measured) 0.30 Jaccard margin even has to carry it.
+  --   length-ratio<0.15 -- on NORM length: a true rendition is ~0.99 length-identical
+  --                        once whitespace is stripped; this drops a boilerplate-sharing
+  --                        pair of different length before the (measured) 0.30 Jaccard
+  --                        margin even has to carry it. GREATEST(...) > 0 guards the
+  --                        divide (a >=200-char doc can still norm to a short string).
   SELECT a.doc_id AS a_id, b.doc_id AS b_id, a.prio AS a_prio, b.prio AS b_prio
   FROM prepared a
   JOIN prepared b
     ON a.doc_id < b.doc_id
    AND a.suffix <> b.suffix
-   AND ABS(a.content_len - b.content_len)::DOUBLE / GREATEST(a.content_len, b.content_len) < 0.15
+   AND GREATEST(a.norm_len, b.norm_len) > 0
+   AND ABS(a.norm_len - b.norm_len)::DOUBLE / GREATEST(a.norm_len, b.norm_len) < 0.15
 ),
 parts AS (SELECT a_id AS d FROM cand UNION SELECT b_id AS d FROM cand),
 shingle_sets AS (

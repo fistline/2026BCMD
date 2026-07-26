@@ -123,28 +123,35 @@ mistakes; everything else is recoverable.
   the build stays model-free.
 - **One rendition per document.** `document_id` keeps `.hwp`/`.hwpx`/`.pdf` as
   distinct ids on purpose, so the same bill in two formats would otherwise
-  double-index (duplicate chunks, duplicate graph nodes). Two mechanisms collapse
+  double-index (duplicate chunks, duplicate graph nodes). Three mechanisms collapse
   that, at different boundaries, because they know different things:
   - **Curated twins, by provenance.** `watcher._superseded_renditions` seeds only
     the top-ranked rendition of a same-directory, same-stem twin set in `source/`.
     Ranking is `chunking.FORMAT_PRIORITY` (hwp > hwpx > docx > doc > pptx > ppt >
     xlsx > xls > pdf); `silver.documents` restates it in SQL and `smoke_test`
     asserts the two agree.
-  - **Inbox arrivals, by content.** `silver.documents` keeps one row per
+  - **Inbox arrivals, by exact content.** `silver.documents` keeps one row per
     `content_fingerprint` (`normalize_for_fingerprint`) above a length floor,
-    highest-priority format winning. This is the net for twins dropped straight
-    into the inbox, where no curation is known.
-  **The content net does NOT catch HWP/PDF twins, and that is measured, not
-  assumed.** `make dupes-twins` extracts both renditions of the 10 twins in
-  `source/` and compares: 0 of 10 match. hwpkit and pypdf agree on a bill's
-  CHARACTERS and disagree on their ORDER, because each linearises the cover-page
-  의안번호 table at a different point -- page-furniture and whitespace
-  normalisation do not touch that. Sorting characters to make order irrelevant
-  reached 7 of 10 and was REJECTED: an order-insensitive key makes any anagram a
-  duplicate, which is too weak for a key that decides what gets indexed. Hence the
-  provenance rule above. Re-run `make dupes-twins` after any change to an
-  extractor or to `normalize_for_fingerprint`, and `make dupes` to see what the
-  content net actually collapsed.
+    highest-priority format winning. This is the net for a twin dropped straight
+    into the inbox whose two formats extract to the SAME normalized bytes.
+  - **Inbox HWP/PDF twins, by fuzzy content.** An HWP and its PDF do NOT share a
+    `content_fingerprint` (measured `make dupes-twins`: 0 of 10 match -- hwpkit and
+    pypdf agree on a bill's CHARACTERS and disagree on their ORDER, linearising the
+    cover-page 의안번호 table at a different point), so the exact net above misses
+    them. `silver.document_twins` catches them: character w=10 shingles over the
+    whitespace-stripped text, exact set Jaccard >= 0.85 (measured margin: twins
+    0.910-0.948 vs cross-format different-doc <= 0.610), gated by format-different
+    + length-ratio < 0.15 on the SAME norm length. `silver.documents` LEFT JOINs it
+    and drops the lower-priority rendition from serving; the loser stays in
+    bronze/raw and is RECORDED in `document_twins` (auditable, reversible), so this
+    is non-destructive. Deterministic (exact set arithmetic, no hash() on the
+    decision path; Jaccard is computed per-pair with `list_intersect`, never a
+    shingle self-join, which OOM'd on shared 제N조 boilerplate). An order-insensitive
+    character-multiset key reached 7/10 but was REJECTED -- it makes any anagram a
+    duplicate; w-shingling keeps local order, so anagrams stay low-Jaccard.
+    `report_dupes --controls` (`make dupes-controls`) is the negative-control gate;
+    re-run it and `make dupes-twins` after any change to an extractor, to
+    `normalize_for_fingerprint`, or to the twin thresholds.
 - **The retrieval surface holds one row per distinct chunk content.** A standard
   약관 clause (예: 제1조(목적)) is copied verbatim into dozens of filings; indexing
   it once per copy lets N identical hits fill every top-K and bury the
