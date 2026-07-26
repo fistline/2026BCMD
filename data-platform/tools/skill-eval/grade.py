@@ -24,6 +24,7 @@ grading.json 의 스키마(`expectations` 배열의 `text`/`passed`/`evidence`)�
 
     <iteration>/<eval-name>/eval_metadata.json      # prompt + assertions
     <iteration>/<eval-name>/<config>/outputs/       # 채점 대상 산출물
+    <iteration>/<eval-name>/<config>/run-N/outputs/ # 같은 구성을 여러 번 돌린 경우
     <iteration>/<eval-name>/<config>/timing.json    # 집계용(있으면)
     <iteration>/<eval-name>/<config>/grading.json   # 이 스크립트의 출력
 """
@@ -130,7 +131,24 @@ def apply_manual(manual: dict, key: str, run: Path, results: list) -> list[str]:
     return sorted(set(rules) - used)
 
 
-def grade_run(rules, manual: dict, eval_dir: Path, run: Path) -> dict:
+def discover_runs(eval_dir: Path) -> list[tuple[Path, str]]:
+    """채점할 실행들. (디렉터리, 표시이름) 목록.
+
+    두 레이아웃을 다 받는다 — 한 구성을 한 번만 돌리면 `<config>/outputs/` 로 평평하고,
+    같은 구성을 여러 번 돌리면 skill-creator 관습대로 `<config>/run-N/outputs/` 로 중첩된다.
+    재현 편차를 보려면 반복 실행이 필요한데, 그때만 디렉터리가 한 겹 깊어진다.
+    """
+    runs = []
+    for config in sorted(p for p in eval_dir.iterdir() if p.is_dir()):
+        nested = sorted(p for p in config.glob("run-*") if (p / "outputs").is_dir())
+        if nested:
+            runs += [(r, f"{config.name}/{r.name}") for r in nested]
+        elif (config / "outputs").is_dir():
+            runs.append((config, config.name))
+    return runs
+
+
+def grade_run(rules, manual: dict, eval_dir: Path, run: Path, label: str | None = None) -> dict:
     text, names = load_outputs(run)
     meta = json.loads((eval_dir / "eval_metadata.json").read_text(encoding="utf-8"))
     ctx = {"text": text, "names": names, "has": has, "any_of": any_of, "banned_hits": banned_hits}
@@ -142,7 +160,7 @@ def grade_run(rules, manual: dict, eval_dir: Path, run: Path) -> dict:
             verdict = (None, "판단 필요 — 스크립트로 검증 불가")
         results.append({"text": a, "passed": verdict[0], "evidence": verdict[1]})
 
-    orphans = apply_manual(manual, f"{eval_dir.name}/{run.name}", run, results)
+    orphans = apply_manual(manual, f"{eval_dir.name}/{label or run.name}", run, results)
     if orphans:
         print(f"  ⚠ {eval_dir.name}/{run.name}: 매칭 안 된 수동 채점 {orphans}")
 
@@ -190,12 +208,12 @@ def main() -> None:
     for eval_dir in sorted(it.glob("eval-*")):
         if not (eval_dir / "eval_metadata.json").exists():
             continue
-        for run in sorted(p for p in eval_dir.iterdir() if (p / "outputs").is_dir()):
-            s = grade_run(rules, manual, eval_dir, run)
-            print(f"{eval_dir.name:<34}{run.name:<15}"
+        for run, label in sorted(discover_runs(eval_dir)):
+            s = grade_run(rules, manual, eval_dir, run, label)
+            print(f"{eval_dir.name:<34}{label:<15}"
                   f"{s['passed']:>5}{s['failed']:>6}{s['pending']:>6}{s['pass_rate']:>8.0%}")
             if s["pending"]:
-                key = f"{eval_dir.name}/{run.name}"
+                key = f"{eval_dir.name}/{label}"
                 graded = json.loads((run / "grading.json").read_text(encoding="utf-8"))
                 pending[key] = [e["text"] for e in graded["expectations"] if e["passed"] is None]
 
