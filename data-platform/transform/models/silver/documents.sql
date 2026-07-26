@@ -1,7 +1,7 @@
 MODEL (
   name silver.documents,
   kind FULL,
-  description 'Current documents: latest sync batch only, one row per doc_id, then one served rendition per content fingerprint. Filtering to the newest ingested_at makes a deletion in data/raw propagate instead of leaving a ghost row; the fingerprint stage collapses the same content arriving in two formats (e.g. .hwp and .pdf) so it is not double-indexed downstream.',
+  description 'Current documents: latest sync batch only, one row per doc_id, then one served rendition per content fingerprint. Filtering to the newest ingested_at makes a deletion in data/raw propagate instead of leaving a ghost row; the fingerprint stage collapses the same content arriving in two formats (e.g. .hwp and .pdf) so it is not double-indexed downstream. Renditions the EXACT fingerprint misses (an .hwp and .pdf of one bill linearise differently) are collapsed by the fuzzy silver.document_twins layer, which marks the lower-priority rendition superseded so it is not served.',
   grain doc_id,
   audits (
     not_null(columns := (doc_id, rel_path, title)),
@@ -67,8 +67,14 @@ WITH latest_batch AS (
     ) AS rendition_rank
   FROM one_per_doc AS o
 )
+-- Exact-fingerprint survivors, minus the fuzzy-superseded renditions. The
+-- LEFT JOIN keeps a served doc when it has no twin (tw.doc_id IS NULL); a bill's
+-- .pdf whose .hwp twin outranks it drops out here so it is not double-indexed,
+-- while its bytes remain in bronze/raw and the pair is recorded in
+-- silver.document_twins (auditable, reversible). No dependency cycle:
+-- document_twins reads bronze.documents, never silver.documents.
 SELECT
-  doc_id,
+  renditions.doc_id,
   rel_path,
   doc_type,
   NULLIF(TRIM(title), '') AS title,
@@ -79,6 +85,8 @@ SELECT
   source_modified_at,
   ingested_at
 FROM renditions
+LEFT JOIN silver.document_twins AS tw ON tw.doc_id = renditions.doc_id
 WHERE rendition_rank = 1
   AND content IS NOT NULL
   AND LENGTH(TRIM(content)) > 0
+  AND tw.doc_id IS NULL
