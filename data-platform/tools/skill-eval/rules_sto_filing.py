@@ -116,6 +116,26 @@ def judge(a: str, ctx: dict):
         ok = has(text, r"하락", r"상승")
         return ok, "하락·상승 시나리오 " + ("병기" if ok else "미확인")
 
+    # 심사 결과를 두 축으로 나눴는가 (common-core §6). 같은 프롬프트의 두 실행이 이 정책을
+    # 반대로 잡아 지적 9건 대 27건으로 갈렸던 자리라, 표현 변주를 넉넉히 받는다.
+    if "두 축으로 나눠 보고한다" in a:
+        defect = any_of(text, r"기재\s*결함", r"기재상\s*결함")
+        missing = any_of(text, r"미확보\s*사실", r"미확보\s*F")
+        return bool(defect and missing), \
+            f"'기재 결함' {'○' if defect else '×'} · '미확보 사실' {'○' if missing else '×'}"
+
+    if "지적 건수를 부풀리지 않는다" in a:
+        # 묶음 보고의 표지는 '묶음' 이라는 단위. 개별 나열이면 이 단어가 나올 이유가 없다.
+        ok = bool(re.search(r"미확보\s*사실\s*\d+\s*묶음|\d+\s*묶음", text))
+        return ok, "미확보 사실을 묶음 단위로 보고 " + ("확인" if ok else "미확인")
+
+    if "집계표" in a and "미충족 항목의 ID" in a:
+        # 집계표에 A-1·W-3 같은 항목 ID 가 실제로 나열돼야 한다. 개수만 있으면 어느 항목을
+        # 봤는지 확인할 수 없고, 다음 심사와 비교도 안 된다.
+        ids = re.findall(r"\b[A-EVXYZW]-\d{1,2}\b", text)
+        ok = bool(re.search(r"집계", text)) and len(set(ids)) >= 5
+        return ok, f"'집계' {'○' if re.search(r'집계', text) else '×'} · 항목 ID {len(set(ids))}종"
+
     # ---- eval3 · 신탁 게이트 ----
     if "제110조" in a:
         ok = bool(re.search(r"제110조|§\s*110", text))
