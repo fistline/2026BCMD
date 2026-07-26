@@ -326,14 +326,17 @@ documentHash  bytes32
 
 ### 3순위 — 구현 패턴
 
-| 대상 | 링크 | 용도 |
-|---|---|---|
-| uRWA20 레퍼런스 | https://eips.ethereum.org/assets/eip-7943/contracts/uRWA20.sol | 제약형 대체가능 토큰 |
-| uRWA1155 레퍼런스 | https://eips.ethereum.org/assets/eip-7943/contracts/uRWA1155.sol | 제약형 멀티토큰 |
-| Centrifuge liquidity-pools | https://github.com/centrifuge/liquidity-pools | 모듈 분리 패턴 (먼저 참조) |
-| Centrifuge protocol | https://github.com/centrifuge/protocol | 허브-스포크 구조 |
-| Centrifuge 문서 | https://docs.centrifuge.io/developer/protocol/overview/ | 아키텍처 배경 |
-| ERC-3643 (T-REX) | https://github.com/ERC-3643/ERC-3643 | 완결형 대안 비교 |
+**기본을 먼저 쓴다. 아래 두 개로 충분하지 않을 때만 대안을 본다.**
+
+| 용도 | **기본** |
+|---|---|
+| 제약형 토큰 구조 | **uRWA 레퍼런스** — 대체가능 https://eips.ethereum.org/assets/eip-7943/contracts/uRWA20.sol · 멀티토큰 https://eips.ethereum.org/assets/eip-7943/contracts/uRWA1155.sol |
+| 모듈 분리 | **Centrifuge liquidity-pools** https://github.com/centrifuge/liquidity-pools |
+
+대안 — 기본으로 풀리지 않는 특정 문제가 있을 때만:
+허브-스포크가 필요하면 [Centrifuge protocol](https://github.com/centrifuge/protocol),
+아키텍처 배경은 [Centrifuge 문서](https://docs.centrifuge.io/developer/protocol/overview/),
+완결형 대안과 비교하려면 [ERC-3643 (T-REX)](https://github.com/ERC-3643/ERC-3643).
 
 > uRWA 레퍼런스 구현은 **감사받지 않은 교육용**이다. 구조만 참조하고 접근제어·재진입 방어는 §4.6 기준으로 강화한다.
 
