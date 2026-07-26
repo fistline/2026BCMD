@@ -1,6 +1,11 @@
 ---
 name: hitl-review
-description: Review flagged items in a browser and approve the corrected text into the inbox — a reusable human-in-the-loop surface. Use to check OCR drafts before landing (hotspots highlighted, source page beside the text), and use when wiring ANY new producer that needs human sign-off (an alias-table proposal, a doctype classification, a low-confidence extraction): the producer writes a manifest, the same server reviews it. Covers both running a review and implementing a new one.
+description: >-
+  Review flagged items in a browser and approve the corrected text into the inbox — a reusable
+  human-in-the-loop surface. Use to check OCR drafts before landing (hotspots highlighted, source
+  page beside the text), and use when wiring ANY new producer that needs human sign-off (an
+  alias-table proposal, a doctype classification, a low-confidence extraction): the producer writes
+  a manifest, the same server reviews it. Covers both running a review and implementing a new one.
 allowed-tools: Bash(uv run python tools/hitl/server.py *), Bash(uv run python tools/ocr/to_hitl.py *)
 ---
 

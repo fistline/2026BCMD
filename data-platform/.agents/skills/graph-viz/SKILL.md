@@ -2,6 +2,7 @@
 name: graph-viz
 description: 코퍼스 의존성 그래프를 브라우저에서 시각화한다. 사용자가 "그래프 보여줘 / 그래프 시각화 / 그래프 열어줘 / graph 띄워줘 / 위임 관계를 그림으로 / visualize the graph"처럼 그래프를 눈으로 보려 하면 라이브 뷰어를 띄운다(브라우저 자동 오픈, 그래프 DB가 여러 개면 드롭다운 선택, DB가 바뀌면 자동 갱신). 공유·오프라인용 단일 HTML 파일이 필요하면 정적 export를 만든다. 법안→법률 위임(delegates_to)·코드 의존 관계를 노드/엣지로 그린다.
 allowed-tools: Bash(make graph), Bash(make graph *), Bash(make graph-serve), Bash(make graph-serve *), Bash(uv run python tools/viz/graph.py *), Bash(uv run python tools/viz/server.py *)
+compatibility: data-platform 색인(data/serving/index.sqlite)이 빌드되어 있어야 하며 uv 로 실행한다. 색인이 없으면 make build 가 선행되어야 한다.
 ---
 
 # Graph viz

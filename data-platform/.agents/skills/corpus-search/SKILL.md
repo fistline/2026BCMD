@@ -1,7 +1,15 @@
 ---
 name: corpus-search
-description: Search this node's indexed corpus for what the documents actually say — Korean bill and statute text (법안·법률·조문), design docs, and code. Use to answer any question grounded in the local documents, to find the article or passage on a topic (예: 예치금 분리보관, 스테이블코인 발행자 자기자본, 시행일, 벌칙), to look up an exact identifier, or whenever grep is too literal to find a passage phrased in different words. Hybrid vector (sqlite-vec) + keyword (FTS5) retrieval fused with reciprocal rank fusion; `make ask` additionally returns passages from graph-connected documents (같은 법령에 위임하는 다른 법안의 관련 조문) with edge provenance.
+description: >-
+  Search this node's indexed corpus for what the documents actually say — Korean bill and statute
+  text (법안·법률·조문), design docs, and code. Use to answer any question grounded in the local
+  documents, to find the article or passage on a topic (예: 예치금 분리보관, 스테이블코인 발행자 자기자본, 시행일, 벌칙), to
+  look up an exact identifier, or whenever grep is too literal to find a passage phrased in
+  different words. Hybrid vector (sqlite-vec) + keyword (FTS5) retrieval fused with reciprocal rank
+  fusion; `make ask` additionally returns passages from graph-connected documents (같은 법령에 위임하는 다른
+  법안의 관련 조문) with edge provenance.
 allowed-tools: Bash(uv run python -m agent.tools.hybrid_search *), Bash(make query *), Bash(uv run python -m agent.tools.graph_rag *), Bash(make ask *)
+compatibility: data-platform 색인(data/serving/index.sqlite)이 빌드되어 있어야 하며 uv 로 실행한다. 색인이 없으면 make build 가 선행되어야 한다.
 ---
 
 # Corpus search

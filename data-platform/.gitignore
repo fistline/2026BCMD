@@ -15,6 +15,9 @@ data/
 *.sqlite
 *.sqlite3
 
+# DuckDB scratch / temp-storage spill directory
+.tmp/
+
 # Meltano working state (plugin venvs, run logs, systemdb)
 .meltano/
 

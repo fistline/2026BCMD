@@ -2,6 +2,7 @@
 name: corpus-graph
 description: Trace how documents in the corpus relate through the local dependency graph — what a bill delegates to a lower decree (위임), what one document references or is referenced by (인용·참조), and which statute a bill amends (개정) where present. Use for reachability questions across bills and documents ("이 법안이 어떤 법에 위임하나", "무엇이 이 문서에 의존하나"), not content questions. For the blast radius of a CODE change specifically, use code-impact-analysis instead.
 allowed-tools: Bash(uv run python -m agent.tools.graph_query *), Bash(make impact *)
+compatibility: data-platform 색인(data/serving/index.sqlite)이 빌드되어 있어야 하며 uv 로 실행한다. 색인이 없으면 make build 가 선행되어야 한다.
 ---
 
 # Corpus graph
