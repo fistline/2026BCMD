@@ -24,9 +24,27 @@ dependencies = [
     # .env loading for the control-plane/data-plane split.
     "python-dotenv>=1.0.1",
     "hwpkit>=1.0.0,<2",
+    # PDF text extraction on the BUILD path. Pure python (no compiled extension),
+    # BSD-3-Clause, Production/Stable. Chosen over pymupdf, which is AGPL and
+    # compiled -- acceptable for the operator-only `ocr` extra below, not for a
+    # default dependency of an MIT project. Chosen over pdfminer.six because a
+    # born-digital bill needs the text layer, not layout analysis.
+    "pypdf>=6,<7",
 ]
 
 [project.optional-dependencies]
+# Optional Office 97-2003 BINARY formats (.doc/.xls/.ppt) for pipeline/extract.py.
+# NOT installed by default: no document in the corpus uses them, and this is the
+# one format group with no maintained pure-python reader -- the text sits behind
+# a piece table in an OLE compound file. office-oxide (MIT OR Apache-2.0, pure
+# Rust, no native deps) is young (first release 2026-04, still 0.x), so it is
+# scoped to exactly the formats that have no alternative: .docx/.xlsx/.pptx are
+# read with the standard library instead, and a misparse here is caught by
+# `_validate` rather than indexed. Enable with: uv sync --extra legacy
+# Encrypted Word 97 (RC4) is NOT decrypted by it; convert such a file first.
+legacy = [
+    "office-oxide>=0.1.8,<0.2",
+]
 # Optional context-preserving embedder: an int8-quantized ONNX sentence encoder
 # run torch-free on CPU via onnxruntime. NOT installed by default -- the default
 # `hashing` provider needs none of this. Enable with: uv sync --extra onnx-embed

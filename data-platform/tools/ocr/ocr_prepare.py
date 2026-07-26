@@ -27,9 +27,16 @@ never committed (git carries logic, not data).
 Install (operators only; the core build never needs this):
     uv sync --extra ocr
 
+Images (.png/.jpg) are handled here and NOWHERE else. They are not in the
+pipeline's SUPPORTED_SUFFIXES and must not be: an image carries no text at all,
+so there is no deterministic extraction of it -- only a model's reading of it,
+which is what this file exists to keep outside `make build`.
+
 Usage:
     uv run python tools/ocr/ocr_prepare.py <scan.pdf> -o out.md
     uv run python tools/ocr/ocr_prepare.py <scan.pdf> --vl -o out.md
+    uv run python tools/ocr/ocr_prepare.py page_01.png page_02.png -o out.md
+    uv run python tools/ocr/ocr_prepare.py <scans_dir>/ -o out.md
     # then review out.md, and save the corrected text as
     #   data/inbox/documents/<name>.txt   (control chars already stripped)
 """
@@ -53,6 +60,10 @@ HOTSPOT_THRESHOLD = 0.92
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 INSTALL_HINT = "uv sync --extra ocr"
+
+# Image formats the recognisers read directly. Kept deliberately narrow: these
+# are what a scanner and `rasterize` actually emit.
+IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"})
 
 
 def _require():
@@ -182,31 +193,79 @@ def _render(pages: list, hotspot_threshold: float = HOTSPOT_THRESHOLD):
     return "\n".join(out_lines), hotspots
 
 
-def ocr_pdf(pdf_path: Path, out_path: Path, use_vl: bool = False, dpi: int = 200, scratch: Optional[Path] = None) -> Path:
+def collect_pages(inputs: list, dpi: int, scratch: Path) -> tuple:
+    """Resolve inputs to an ordered page-image list, rasterising any PDF.
+
+    Accepts PDFs, image files and directories of images, in the order given, so a
+    scan that arrives as one PDF and a scan that arrives as `page_01.png ...
+    page_12.png` both become one document. A directory is expanded in sorted
+    order, which is why scanner output should be zero-padded -- `page_10.png`
+    sorts before `page_2.png` otherwise, and the pages land shuffled.
+
+    Images are passed through untouched: they are already what the recognisers
+    consume, so there is nothing to render and nothing to lose to a re-encode.
+    """
+    images: list = []
+    labels: list = []
+    for candidate in inputs:
+        path = Path(candidate)
+        if not path.exists():
+            raise SystemExit(f"no such file: {path}")
+        if path.is_dir():
+            members = sorted(
+                child for child in path.iterdir()
+                if child.is_file() and child.suffix.lower() in IMAGE_SUFFIXES
+            )
+            if not members:
+                raise SystemExit(f"{path} holds no images ({', '.join(sorted(IMAGE_SUFFIXES))})")
+            images.extend(members)
+            labels.append(f"{path.name}/ ({len(members)} image(s))")
+        elif path.suffix.lower() == ".pdf":
+            if pdf_has_text(path):
+                print(
+                    f"note: {path.name} already has extractable text -- OCR may be "
+                    "unnecessary; `make build` reads a born-digital PDF directly.",
+                    file=sys.stderr,
+                )
+            rendered = rasterize(path, dpi, scratch / path.stem)
+            images.extend(rendered)
+            labels.append(f"{path.name} ({len(rendered)} page(s) at {dpi} DPI)")
+        elif path.suffix.lower() in IMAGE_SUFFIXES:
+            images.append(path)
+            labels.append(path.name)
+        else:
+            raise SystemExit(
+                f"{path}: expected a .pdf, a directory, or an image "
+                f"({', '.join(sorted(IMAGE_SUFFIXES))})"
+            )
+    if not images:
+        raise SystemExit("no pages to OCR")
+    return images, labels
+
+
+def ocr_pdf(inputs, out_path: Path, use_vl: bool = False, dpi: int = 200, scratch: Optional[Path] = None) -> Path:
     """Rasterise, OCR, strip control chars, write the draft. Returns out_path."""
     _require()
-    pdf_path = Path(pdf_path)
+    if isinstance(inputs, (str, Path)):
+        inputs = [inputs]
+    inputs = [Path(item) for item in inputs]
     out_path = Path(out_path)
-    if not pdf_path.exists():
-        raise SystemExit(f"no such file: {pdf_path}")
-    if pdf_has_text(pdf_path):
-        print(
-            f"note: {pdf_path.name} already has extractable text -- OCR may be "
-            "unnecessary; pdftotext -nopgbrk may be enough.",
-            file=sys.stderr,
-        )
 
-    scratch = Path(scratch) if scratch else out_path.parent / (".ocr_pages_" + pdf_path.stem)
-    images = rasterize(pdf_path, dpi, scratch)
+    scratch = Path(scratch) if scratch else out_path.parent / (".ocr_pages_" + out_path.stem)
+    images, labels = collect_pages(inputs, dpi, scratch)
+    source_name = inputs[0].name if len(inputs) == 1 else f"{len(inputs)} input(s)"
     engine = "PaddleOCR-VL" if use_vl else "PP-OCRv5(korean)"
-    print(f"[ocr] {pdf_path.name}: {len(images)} page(s) at {dpi} DPI via {engine}", file=sys.stderr)
+    print(
+        f"[ocr] {'; '.join(labels)}: {len(images)} page(s) total via {engine}",
+        file=sys.stderr,
+    )
 
     pages = ocr_vl(images) if use_vl else ocr_ppocr(images)
     text, hotspots = _render(pages)
     text = strip_control(text)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    header = f"<!-- OCR draft: {pdf_path.name} via {engine}. REVIEW against the source before landing. -->\n\n"
+    header = f"<!-- OCR draft: {source_name} via {engine}. REVIEW against the source before landing. -->\n\n"
     out_path.write_text(header + text + "\n", encoding="utf-8")
 
     # Sidecar for the HITL review server: the hotspots (low-confidence lines) and
@@ -214,8 +273,9 @@ def ocr_pdf(pdf_path: Path, out_path: Path, use_vl: bool = False, dpi: int = 200
     sidecar = out_path.with_suffix(".ocr.json")
     sidecar.write_text(
         json.dumps(
-            {"source": pdf_path.name, "engine": engine, "header_lines": 2,
-             "hotspots": hotspots, "images_dir": str(scratch), "pages": len(images)},
+            {"source": source_name, "engine": engine, "header_lines": 2,
+             "hotspots": hotspots, "images_dir": str(scratch), "pages": len(images),
+             "page_images": [str(image) for image in images]},
             ensure_ascii=False, indent=2,
         ),
         encoding="utf-8",
@@ -231,12 +291,16 @@ def ocr_pdf(pdf_path: Path, out_path: Path, use_vl: bool = False, dpi: int = 200
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("pdf", help="Scanned PDF to OCR.")
+    parser.add_argument(
+        "inputs",
+        nargs="+",
+        help="Scanned PDFs, image files, or directories of images, in page order.",
+    )
     parser.add_argument("-o", "--out", required=True, help="Output draft path (.md).")
     parser.add_argument("--vl", action="store_true", help="Use PaddleOCR-VL (tables/stamps) instead of PP-OCRv5.")
-    parser.add_argument("--dpi", type=int, default=200, help="Rasterisation DPI (default 200).")
+    parser.add_argument("--dpi", type=int, default=200, help="Rasterisation DPI for PDF input (default 200).")
     args = parser.parse_args(argv)
-    ocr_pdf(Path(args.pdf), Path(args.out), use_vl=args.vl, dpi=args.dpi)
+    ocr_pdf(args.inputs, Path(args.out), use_vl=args.vl, dpi=args.dpi)
     return 0
 
 

@@ -1515,6 +1515,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "hwpkit" },
     { name = "meltano" },
+    { name = "pypdf" },
     { name = "python-dotenv" },
     { name = "singer-sdk" },
     { name = "sqlite-vec" },
@@ -1525,6 +1526,9 @@ dependencies = [
 kiwi = [
     { name = "kiwipiepy" },
     { name = "kiwipiepy-model" },
+]
+legacy = [
+    { name = "office-oxide" },
 ]
 ocr = [
     { name = "paddleocr" },
@@ -1551,10 +1555,12 @@ requires-dist = [
     { name = "kiwipiepy-model", marker = "extra == 'kiwi'", specifier = ">=0.21" },
     { name = "meltano", specifier = ">=4.2.1,<5" },
     { name = "numpy", marker = "extra == 'onnx-embed'", specifier = ">=1.24" },
+    { name = "office-oxide", marker = "extra == 'legacy'", specifier = ">=0.1.8,<0.2" },
     { name = "onnxruntime", marker = "extra == 'onnx-embed'", specifier = ">=1.17,<2" },
     { name = "paddleocr", marker = "extra == 'ocr'", specifier = ">=3,<4" },
     { name = "paddlepaddle", marker = "extra == 'ocr'", specifier = ">=3,<4" },
     { name = "pymupdf", marker = "extra == 'ocr'", specifier = ">=1.24" },
+    { name = "pypdf", specifier = ">=6,<7" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "scrapling", extras = ["fetchers"], marker = "extra == 'web'", specifier = ">=0.2" },
     { name = "singer-sdk", specifier = ">=0.54.5,<0.55" },
@@ -1562,7 +1568,7 @@ requires-dist = [
     { name = "sqlmesh", specifier = ">=0.236.0,<0.237" },
     { name = "tokenizers", marker = "extra == 'onnx-embed'", specifier = ">=0.20,<1" },
 ]
-provides-extras = ["onnx-embed", "ocr", "web", "kiwi"]
+provides-extras = ["legacy", "onnx-embed", "ocr", "web", "kiwi"]
 
 [[package]]
 name = "lxml"
@@ -2178,6 +2184,21 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/17/f4/09b2fa1b58f0fb4f7c7963a1649c64c4d315752240377ed74d9cd878f7b5/numpy-2.2.6-pp310-pypy310_pp73-macosx_14_0_x86_64.whl", hash = "sha256:7befc596a7dc9da8a337f79802ee8adb30a552a94f792b9c9d18c840055907db", size = 6786754, upload-time = "2025-05-17T21:44:47.446Z" },
     { url = "https://files.pythonhosted.org/packages/af/30/feba75f143bdc868a1cc3f44ccfa6c4b9ec522b36458e738cd00f67b573f/numpy-2.2.6-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ce47521a4754c8f4593837384bd3424880629f718d87c5d44f8ed763edd63543", size = 16643476, upload-time = "2025-05-17T21:45:11.871Z" },
     { url = "https://files.pythonhosted.org/packages/37/48/ac2a9584402fb6c0cd5b5d1a91dcf176b15760130dd386bbafdbfe3640bf/numpy-2.2.6-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:d042d24c90c41b54fd506da306759e06e568864df8ec17ccc17e9e884634fd00", size = 12812666, upload-time = "2025-05-17T21:45:31.426Z" },
+]
+
+[[package]]
+name = "office-oxide"
+version = "0.1.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/d2/d39a449c43c7a35026f36d4021d647b3018f9ee8cd23201ca76a7cc6e799/office_oxide-0.1.8.tar.gz", hash = "sha256:bb1cc81deacc640f14510a65af6ccc789ca212c85fc0c334c3dc8a18d9b29380", size = 316767, upload-time = "2026-07-22T05:28:56.796Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/dc/065685b7c3f9db5d00e742f40ee55e5512d000fdec8f840c17d9d8e225e9/office_oxide-0.1.8-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:495a2bcb23fd216751351b2bf8994f4f20297317719c0fee75c424889cbfd489", size = 1288032, upload-time = "2026-07-22T05:28:47.687Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/bf/2a8ffc779dbf8bb3e24baa4e6c786fcb775b44059213ad0d6630ab34674b/office_oxide-0.1.8-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:2179881fa81ef1ac590ba23ff088023629a110163d2ee28793a2c196acaf6994", size = 1249162, upload-time = "2026-07-22T05:28:48.922Z" },
+    { url = "https://files.pythonhosted.org/packages/23/bd/e38e100f99c93a94e4091319b205abfe7ed1fc37d3f664a22bee870af56b/office_oxide-0.1.8-cp38-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:85b3b4df9bfffd0f27634d918176cb0c7bdb797824222eac50c47ae5dfaf51c0", size = 1286503, upload-time = "2026-07-22T05:28:49.912Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/13/e2a2ed1a188da6c2c31f8e87a6a0066d243053b5efa4c15e55640503e9cd/office_oxide-0.1.8-cp38-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:cd1cfa7059d5f9dd16ce27a41d35a6454dcb4e1385d0edf03511c24cadd4bab1", size = 1313695, upload-time = "2026-07-22T05:28:51.237Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/7e/ad5d1e425052b87cdb8f16610e145f8a475211487533c0a1adbeda905713/office_oxide-0.1.8-cp38-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:637200bcb0aa79b353a4b9a04d0172418423b865afe88006af6071a79c63eb20", size = 1464291, upload-time = "2026-07-22T05:28:52.53Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/74/f1db5b37e209671005535e2dccf49dde8d8640cf1b0c9857c4a4acb15a0b/office_oxide-0.1.8-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:e2171d38d0c21da9fe09c71e8747cd7b5072519b8f7330b4a010366e3dc3c733", size = 1527777, upload-time = "2026-07-22T05:28:54.111Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/e6/8690f216067dadb54336d89a8b0adadb91339c47b208f71437ffb7c16de1/office_oxide-0.1.8-cp38-abi3-win_amd64.whl", hash = "sha256:53e557be8c86946731f295a731052c35ab090bb3bda01dae4c1b212dd00888b6", size = 1268448, upload-time = "2026-07-22T05:28:55.785Z" },
 ]
 
 [[package]]
@@ -3208,6 +3229,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2e/5d/1a03f53eb0449900469335fcfc742ca28e3ba159b7d650e0921d50b8b308/pymupdf-1.28.0-cp310-abi3-win_amd64.whl", hash = "sha256:e01e90fd86abfeb37ceb921eddb951f988a11d45ff6ce6b7664f2039849068ec", size = 19773102, upload-time = "2026-06-29T09:04:49.773Z" },
     { url = "https://files.pythonhosted.org/packages/72/f6/1e52ce243ca792254f6223b4017c5667194c146ce9b88baf37bc5eb3d1c9/pymupdf-1.28.0-cp313-abi3-pyemscripten_2025_0_wasm32.whl", hash = "sha256:74c6d00ba2a9aad3a635db73b07c15db462b480741d831a34a75a56535ebc22b", size = 18357011, upload-time = "2026-06-29T20:50:50.353Z" },
     { url = "https://files.pythonhosted.org/packages/62/b1/46b5b3d8ef3cc71114667cf10c4d8b33f39af97253af32e9a0986775b638/pymupdf-1.28.0-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:b3e1399c7a64c6914239116a369efcdaac4cfb9e838bde2656d7accc4a85c72d", size = 25753599, upload-time = "2026-06-29T09:05:09.398Z" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.14.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/03/72/7dfd5ff1c9c37de97a731701f51af091325f123d9d4270361c9c69e4431f/pypdf-6.14.2.tar.gz", hash = "sha256:7873f502fe4385e79539b21d872392dc0c4e3714327c15881cbc7fbfd1f95b25", size = 6491182, upload-time = "2026-06-23T14:18:30.859Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/e6/136aa8993a2ae7214e0b0ef2edaa0d2e08d1d4e4982635b08a835ff31ec8/pypdf-6.14.2-py3-none-any.whl", hash = "sha256:3f07891af76dc002657e04993ab9b4de81de29f9013b9761d0b7968bff12e946", size = 349514, upload-time = "2026-06-23T14:18:28.867Z" },
 ]
 
 [[package]]

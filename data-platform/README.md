@@ -301,6 +301,46 @@ Every pin traces to a source. Nothing here is from memory.
 and is a compatibility choice for the Meltano plugin venvs, not a hard
 requirement.
 
+## Document formats
+
+`SUPPORTED_SUFFIXES` in `pipeline/chunking.py` is the whole list; a file whose
+suffix is not in it is skipped silently by the tap.
+
+| Group | Formats | Reader | Installed by default |
+| --- | --- | --- | --- |
+| Text | `.md` `.markdown` `.txt` `.rst` | none needed | yes |
+| Code | `.py` | none needed | yes |
+| Hancom | `.hwp` | `hwpkit` | yes |
+| OOXML | `.hwpx` `.docx` `.xlsx` `.pptx` | standard library | yes |
+| PDF | `.pdf` | `pypdf` (text layer only) | yes |
+| Office 97-2003 | `.doc` `.xls` `.ppt` | `office-oxide` | **no** — `uv sync --extra legacy` |
+
+The OOXML readers use no third-party parser at all. An OOXML file is a zip of
+XML, so extraction is a sweep over every text node rather than a schema-aware
+parse, which is what makes it pick up tables, text boxes and footnotes without
+knowing the schema. `.doc`/`.xls`/`.ppt` are the exception: their text sits
+behind a piece table in an OLE compound file and no maintained pure-python reader
+exists, so they are the one place a young parser is used — scoped to exactly the
+formats with no alternative, kept opt-in, and still subject to `_validate`, which
+rejects a document rather than index a misparse.
+
+**Images are not a supported format, on purpose.** A `.png` has no text to
+extract deterministically, only a model's reading of it, and `make build` runs no
+model. Scans go through the operator path instead:
+
+```bash
+uv sync --extra ocr
+uv run python tools/ocr/ocr_prepare.py scan.pdf -o draft.md      # scanned PDF
+uv run python tools/ocr/ocr_prepare.py page_01.png page_02.png -o draft.md
+uv run python tools/ocr/ocr_prepare.py scans_dir/ -o draft.md
+# review draft.md against the source, then save the corrected text as
+#   data/inbox/documents/<name>.txt
+```
+
+A born-digital PDF needs none of this — `make build` reads its text layer
+directly. A PDF with no text layer raises rather than indexing an empty
+document, which is the signal to run OCR on it.
+
 ## Enabling optional pieces
 
 **S3 sync.** Set `DATA_REMOTE=s3://bucket/prefix` in `.env` and

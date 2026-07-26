@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from pipeline import Paths, get_paths
-from pipeline.chunking import BINARY_SUFFIXES, SUPPORTED_SUFFIXES
+from pipeline.chunking import BINARY_SUFFIXES, FORMAT_PRIORITY, SUPPORTED_SUFFIXES
 
 POLL_SECONDS = 2.0
 QUIET_SECONDS = 1.0
@@ -59,10 +59,24 @@ def seed_inbox(paths: Paths) -> int:
         `norms` (`collection_of` = first inbox folder). Fixtures stay flat, so they
         remain the `_root` collection the smoke/eval floors expect.
 
-    Only SUPPORTED_SUFFIXES are materialised, so a human-facing PDF sitting beside
-    each `.hwp` original stays in `source/` and never enters the pipeline. An
-    existing inbox file is never overwritten, which keeps this idempotent and lets
-    a manual drop win over a re-seed.
+    Only SUPPORTED_SUFFIXES are materialised, and of a curated TWIN SET only the
+    top-ranked rendition is: a human-facing `.pdf` sitting beside its `.hwp`
+    original stays in `source/` and never enters the pipeline.
+
+    That skip used to happen by accident, because `.pdf` was not a supported
+    suffix at all. It is now explicit, because the accident stopped holding the
+    moment PDF became readable -- and the content fingerprint cannot be relied on
+    to clean up afterwards. Measured on the 10 HWP/PDF twins in this corpus
+    (`make dupes-twins`), hwpkit and pypdf agree on the CHARACTERS of a bill and
+    disagree on their ORDER: each extractor linearises the cover-page 의안번호
+    table at a different point, so 0 of 10 pairs produce the same fingerprint
+    under whitespace-and-page-furniture normalisation. Dedup by content is the
+    right net for twins that arrive through the inbox, where nothing is known
+    about provenance; for `source/`, where a twin set is a curation fact, seeding
+    one rendition is exact rather than probabilistic.
+
+    An existing inbox file is never overwritten, which keeps this idempotent and
+    lets a manual drop win over a re-seed.
     """
     # (candidate, destination-relative-to-inbox). Fixtures flatten by basename;
     # source keeps its subfolder so the folder-as-collection convention survives a
@@ -78,9 +92,13 @@ def seed_inbox(paths: Paths) -> int:
         return 0
     paths.inbox.mkdir(parents=True, exist_ok=True)
 
+    superseded = _superseded_renditions(entry[0] for entry in entries)
+
     copied = 0
     for candidate, dest_rel in entries:
         if not candidate.is_file() or candidate.suffix.lower() not in SUPPORTED_SUFFIXES:
+            continue
+        if candidate in superseded:
             continue
         destination = paths.inbox / dest_rel
         if destination.exists():
@@ -89,6 +107,36 @@ def seed_inbox(paths: Paths) -> int:
         shutil.copy2(candidate, destination)
         copied += 1
     return copied
+
+
+def _superseded_renditions(candidates) -> set:
+    """Twin-set members that a higher-ranked rendition already covers.
+
+    A twin set is "same directory, same file stem, different format" -- the shape
+    the curated corpus actually stores, `01_법안.hwp` beside `01_법안.pdf`. Only
+    formats named in FORMAT_PRIORITY take part; a `.txt` note that happens to share
+    a stem with a bill is left alone, because it is a different document rather
+    than another rendition of one.
+    """
+    rank = {f".{suffix}": position for position, suffix in enumerate(FORMAT_PRIORITY)}
+    best: dict = {}
+    members: dict = {}
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        position = rank.get(candidate.suffix.lower())
+        if position is None:
+            continue
+        key = str(candidate.with_suffix(""))
+        members.setdefault(key, []).append((position, candidate))
+        if key not in best or position < best[key]:
+            best[key] = position
+    return {
+        candidate
+        for key, entries in members.items()
+        for position, candidate in entries
+        if position != best[key]
+    }
 
 
 def _append_manifest(paths: Paths, entry: dict) -> None:

@@ -25,6 +25,8 @@ package reaches the pipeline only once the plugins are reinstalled.
 | `make eval-ask` | Related-section floor for `make ask` (graph arm membership) |
 | `make gate` | Acceptance gate for document-type profiles |
 | `make triage` | Which profile claims each document in `data/raw` |
+| `make dupes` | Content-duplicate renditions the fingerprint dedup collapsed |
+| `make dupes-twins` | Do `source/` twin renditions (`X.hwp` beside `X.pdf`) match? Reads no lake state |
 | `make verify` | Full verification gate |
 | `make clean` | Delete regenerable state only |
 
@@ -105,19 +107,43 @@ mistakes; everything else is recoverable.
 - **Push logic to the lowest layer that can express it.** Bronze preserves shape
   and only casts types; silver cleans and de-duplicates; gold is the index input
   and nothing else reads it.
-- **One rendition per document, chosen by content, not by format.** `document_id`
-  keeps `.hwp`/`.hwpx`/`.pdf` as distinct ids on purpose, so the same bill in two
-  formats would otherwise double-index (duplicate chunks, duplicate graph nodes).
-  `silver.documents` collapses that in a second stage: one row per
-  `content_fingerprint` (normalised extracted text, `normalize_for_fingerprint`)
-  above a length floor, keeping the highest-priority format (hwp > hwpx > pdf).
-  Downstream collapses for free through the existing INNER JOINs to
-  `silver.documents`. **Before enabling PDF parsing** (adding `.pdf` to
-  `BINARY_SUFFIXES` and a `_extract_pdf`), run `make dupes`: if a known HWP/PDF
-  twin does NOT appear as a collapsed group, the two extractions diverge on page
-  furniture and were NOT merged -- strengthen `normalize_for_fingerprint` or
-  escalate to MinHash before trusting the PDF renditions. An empty `make dupes` is
-  correct only while no twin has been ingested.
+- **Supported formats live in ONE table**, `SUPPORTED_SUFFIXES` in
+  `pipeline/chunking.py`. Text (`.md .markdown .txt .rst`), code (`.py`), and
+  binaries decoded by `pipeline/extract.py`: `.hwp` (hwpkit), `.hwpx` `.docx`
+  `.xlsx` `.pptx` (standard library only -- a sweep over every XML text node, not
+  a schema-aware parse), `.pdf` (pypdf, text layer only), and `.doc` `.xls` `.ppt`
+  behind `uv sync --extra legacy` (office-oxide; the one format group with no
+  maintained pure-python reader). A file whose suffix is absent is skipped
+  SILENTLY by the tap, so adding a format means adding it here, not anywhere else.
+  **Images (`.png`/`.jpg`) are deliberately NOT supported** and must not be added:
+  an image has no text to extract deterministically, only a model's reading of it.
+  That belongs to `tools/ocr/ocr_prepare.py`, which OCRs images or scanned PDFs
+  offline, a human reviews the draft, and the reviewed `.txt` enters the inbox --
+  the build stays model-free.
+- **One rendition per document.** `document_id` keeps `.hwp`/`.hwpx`/`.pdf` as
+  distinct ids on purpose, so the same bill in two formats would otherwise
+  double-index (duplicate chunks, duplicate graph nodes). Two mechanisms collapse
+  that, at different boundaries, because they know different things:
+  - **Curated twins, by provenance.** `watcher._superseded_renditions` seeds only
+    the top-ranked rendition of a same-directory, same-stem twin set in `source/`.
+    Ranking is `chunking.FORMAT_PRIORITY` (hwp > hwpx > docx > doc > pptx > ppt >
+    xlsx > xls > pdf); `silver.documents` restates it in SQL and `smoke_test`
+    asserts the two agree.
+  - **Inbox arrivals, by content.** `silver.documents` keeps one row per
+    `content_fingerprint` (`normalize_for_fingerprint`) above a length floor,
+    highest-priority format winning. This is the net for twins dropped straight
+    into the inbox, where no curation is known.
+  **The content net does NOT catch HWP/PDF twins, and that is measured, not
+  assumed.** `make dupes-twins` extracts both renditions of the 10 twins in
+  `source/` and compares: 0 of 10 match. hwpkit and pypdf agree on a bill's
+  CHARACTERS and disagree on their ORDER, because each linearises the cover-page
+  의안번호 table at a different point -- page-furniture and whitespace
+  normalisation do not touch that. Sorting characters to make order irrelevant
+  reached 7 of 10 and was REJECTED: an order-insensitive key makes any anagram a
+  duplicate, which is too weak for a key that decides what gets indexed. Hence the
+  provenance rule above. Re-run `make dupes-twins` after any change to an
+  extractor or to `normalize_for_fingerprint`, and `make dupes` to see what the
+  content net actually collapsed.
 - **The retrieval surface holds one row per distinct chunk content.** A standard
   약관 clause (예: 제1조(목적)) is copied verbatim into dozens of filings; indexing
   it once per copy lets N identical hits fill every top-K and bury the

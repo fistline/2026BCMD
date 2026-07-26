@@ -184,7 +184,7 @@ def _statute_text_from_drf(xml_bytes: bytes) -> str:
 
 # DRF search/body differ per document class only in the element name, the id
 # field, the 현행 flag, and the body's id-param key. The body XML uses the same
-# 조문내용/항내용/... "내용" tags for both, so _statute_text_from_drf serves both.
+# 조문내용/항내용/… "내용" tags for both, so _statute_text_from_drf serves both.
 _DRF_TARGETS = {
     # target -> (search element, id field, name field, 현행 field, body id-param)
     "law": ("law", "법령일련번호", "법령명한글", "현행연혁코드", "MST"),

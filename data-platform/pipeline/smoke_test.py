@@ -20,9 +20,12 @@ Exits non-zero on the first failed assertion.
 from __future__ import annotations
 
 import os
+import re
 import sys
+import tempfile
 import traceback
 import unicodedata
+from pathlib import Path
 
 # Smoke pins the FUSED core (deterministic retrieval + graph). The opt-in
 # reranker is a query-time reordering with its own coverage -- test_reranker
@@ -37,6 +40,7 @@ from pipeline.build_graph import graph_query, resolve_node
 from pipeline import chunking
 from pipeline.chunking import (
     BINARY_SUFFIXES,
+    FORMAT_PRIORITY,
     MAX_CHUNK_CHARS,
     SUPPORTED_SUFFIXES,
     ChunkingError,
@@ -51,6 +55,8 @@ from pipeline.chunking import (
 from pipeline.aliases import expand_query
 from pipeline.export import DocumentChunks
 from pipeline.extract import ExtractionCorrupt, ExtractionEmpty, extract_text
+from pipeline import extract as extract_module
+from pipeline.watcher import _superseded_renditions
 from pipeline.build_rag import (
     CJK_RUN,
     HashingEmbedder,
@@ -654,6 +660,12 @@ def test_chunking() -> None:
         "01_디지털자산기본법안.hwp",
         "01_디지털자산기본법안.hwpx",
         "01_디지털자산기본법안.pdf",
+        "감정평가서.docx",
+        "감정평가서.doc",
+        "수익률표.xlsx",
+        "수익률표.xls",
+        "설명자료.pptx",
+        "설명자료.ppt",
     ]
     mismatched = [name for name in suffix_table if document_id(name) != normalise_entity(name)]
     check("document_id agrees with normalise_entity over the suffix table", not mismatched, mismatched)
@@ -744,6 +756,168 @@ def _synthetic_hwpx(paragraphs) -> bytes:
     return buffer.getvalue()
 
 
+def _ooxml(parts: dict) -> bytes:
+    """Build a minimal OOXML package in memory from {part name: xml}."""
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, content in parts.items():
+            archive.writestr(name, content)
+    return buffer.getvalue()
+
+
+_W_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+_A_NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+_P_NS = 'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'
+
+
+def test_ooxml_extraction() -> None:
+    """DOCX, XLSX and PPTX reading, which uses no third-party parser at all."""
+    print("OOXML extraction")
+
+    # A paragraph with a tab and a line break, a TABLE cell, and a text box whose
+    # DrawingML paragraph is NESTED inside a Word paragraph. The nesting is the
+    # point: a naive walk emits the cell and the box twice, which double-indexes
+    # the 신구조문대비표 of a bill while every count still looks plausible.
+    docx = _ooxml({
+        "word/document.xml": (
+            f"<w:document {_W_NS} {_A_NS}><w:body>"
+            "<w:p><w:r><w:t>제1조(목적)</w:t><w:tab/><w:t>이 법은</w:t>"
+            "<w:br/><w:t>둘째 줄</w:t></w:r></w:p>"
+            "<w:tbl><w:tr><w:tc><w:p><w:r><w:t>셀</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"
+            "<w:p><w:r><w:drawing><a:p><a:r><a:t>상자</a:t></a:r></a:p></w:drawing></w:r></w:p>"
+            "</w:body></w:document>"
+        ),
+        "word/footnotes.xml": f"<w:footnotes {_W_NS}><w:p><w:r><w:t>각주</w:t></w:r></w:p></w:footnotes>",
+    })
+    check(
+        "DOCX reads tabs, breaks, tables, text boxes and footnotes exactly once",
+        extract_text("a.docx", docx) == "제1조(목적)\t이 법은\n둘째 줄\n셀\n상자\n각주",
+        repr(extract_text("a.docx", docx)),
+    )
+
+    # slide10 before slide2 in the zip. Lexicographic order would reverse the
+    # deck and move every chunk id in it.
+    slide = f"<p:sld {_P_NS} {_A_NS}><p:cSld><p:spTree>%s</p:spTree></p:cSld></p:sld>"
+    pptx = _ooxml({
+        "ppt/slides/slide10.xml": slide % "<a:p><a:r><a:t>열번째</a:t></a:r></a:p>",
+        "ppt/slides/slide2.xml": slide % "<a:p><a:r><a:t>두번째</a:t></a:r></a:p>",
+        "ppt/notesSlides/notesSlide2.xml": slide % "<a:p><a:r><a:t>메모</a:t></a:r></a:p>",
+    })
+    check(
+        "PPTX orders slides numerically and pairs notes with their slide",
+        extract_text("b.pptx", pptx)
+        == "# 슬라이드 1\n두번째\n## 슬라이드 1 노트\n메모\n# 슬라이드 2\n열번째",
+        repr(extract_text("b.pptx", pptx)),
+    )
+
+    # Sheets are declared 손익-then-재무 but stored sheet1-then-sheet2, so zip
+    # order and declaration order disagree. Declaration order is the visible one.
+    xlsx = _ooxml({
+        "xl/workbook.xml": (
+            '<workbook xmlns:r="R"><sheets>'
+            '<sheet name="손익" r:id="rId2"/><sheet name="재무" r:id="rId1"/>'
+            "</sheets></workbook>"
+        ),
+        "xl/_rels/workbook.xml.rels": (
+            "<Relationships>"
+            '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/>'
+            '<Relationship Id="rId2" Target="worksheets/sheet2.xml"/>'
+            "</Relationships>"
+        ),
+        "xl/sharedStrings.xml": "<sst><si><t>매출액</t></si><si><t>영업이익</t></si></sst>",
+        "xl/worksheets/sheet1.xml": (
+            '<worksheet><sheetData><row><c t="s"><v>0</v></c><c><v>1000</v></c>'
+            "</row></sheetData></worksheet>"
+        ),
+        "xl/worksheets/sheet2.xml": (
+            '<worksheet><sheetData><row><c t="s"><v>1</v></c>'
+            '<c t="inlineStr"><is><t>흑자</t></is></c><c t="b"><v>1</v></c></row>'
+            "<row><c/></row></sheetData></worksheet>"
+        ),
+    })
+    check(
+        "XLSX follows workbook declaration order and resolves shared strings",
+        extract_text("c.xlsx", xlsx) == "# 시트: 손익\n영업이익\t흑자\tTRUE\n# 시트: 재무\n매출액\t1000",
+        repr(extract_text("c.xlsx", xlsx)),
+    )
+
+    for name, payload, expected in (
+        ("d.docx", b"not a zip at all", ExtractionCorrupt),
+        ("e.xlsx", _ooxml({"xl/workbook.xml": "<workbook><sheets/></workbook>"}), ExtractionCorrupt),
+        ("f.pptx", _ooxml({"unrelated.xml": "<a/>"}), ExtractionCorrupt),
+        ("g.doc", b"not an OLE compound file", ExtractionCorrupt),
+        (
+            "h.docx",
+            _ooxml({"word/document.xml": f"<w:document {_W_NS}><w:p><w:r><w:t> </w:t></w:r></w:p></w:document>"}),
+            ExtractionEmpty,
+        ),
+    ):
+        try:
+            extract_text(name, payload)
+            raised = None
+        except Exception as error:  # noqa: BLE001 - reported as a check failure
+            raised = error
+        check(
+            f"{name} is rejected as {expected.__name__}",
+            isinstance(raised, expected) and name in str(raised),
+            f"{type(raised).__name__}: {raised}",
+        )
+
+    # An OLE container that is NOT an encrypted package must stay a plain
+    # corruption, or a merely damaged file would be reported as needing a
+    # password. A real HWP is the OLE file this repo always has to hand.
+    bills = sorted((get_paths().root / "source").rglob("*.hwp"))
+    if bills:
+        try:
+            extract_text("mislabelled.docx", bills[0].read_bytes())
+            raised = None
+        except Exception as error:  # noqa: BLE001 - reported as a check failure
+            raised = error
+        check(
+            "an OLE file that is not an encrypted package is corrupt, not protected",
+            isinstance(raised, ExtractionCorrupt),
+            f"{type(raised).__name__}: {raised}",
+        )
+
+
+def test_format_ladder() -> None:
+    """The rendition ladder in Python and the one in SQL must be one ladder."""
+    print("format ladder")
+
+    model = (get_paths().root / "transform" / "models" / "silver" / "documents.sql").read_text(
+        encoding="utf-8"
+    )
+    ranked = re.findall(r"WHEN\s+'(\w+)'\s+THEN\s+(\d+)", model)
+    sql_order = [doc_type for doc_type, _rank in sorted(ranked, key=lambda p: -int(p[1]))]
+    check(
+        "silver.documents ranks formats in FORMAT_PRIORITY order",
+        sql_order == list(FORMAT_PRIORITY),
+        f"sql={sql_order} python={list(FORMAT_PRIORITY)}",
+    )
+    check(
+        "every ranked format is a suffix the pipeline ingests",
+        all(f".{doc_type}" in SUPPORTED_SUFFIXES for doc_type in FORMAT_PRIORITY),
+        [d for d in FORMAT_PRIORITY if f".{d}" not in SUPPORTED_SUFFIXES],
+    )
+
+    # A curated twin set seeds only its top-ranked rendition. Measured on this
+    # corpus, an HWP and its PDF twin do NOT share a content fingerprint, so the
+    # content dedup downstream would not catch what this skip prevents.
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch)
+        for name in ("bill.hwp", "bill.pdf", "bill.txt", "solo.pdf"):
+            (root / name).write_bytes(b"x")
+        skipped = {path.name for path in _superseded_renditions(sorted(root.iterdir()))}
+    check(
+        "a PDF beside its HWP original is not seeded, and a lone PDF still is",
+        skipped == {"bill.pdf"},
+        sorted(skipped),
+    )
+
+
 def test_binary_extraction() -> None:
     """HWP and HWPX ingestion, and the guards that keep the raw zone clean."""
     print("binary extraction")
@@ -797,6 +971,25 @@ def test_binary_extraction() -> None:
         BINARY_SUFFIXES <= SUPPORTED_SUFFIXES,
         sorted(SUPPORTED_SUFFIXES),
     )
+    # chunking restates the list so it can stay importable without the extractor.
+    # A format added to one copy and forgotten in the other would be accepted by
+    # the tap and then have no reader, or have a reader the tap never reaches.
+    check(
+        "the two BINARY_SUFFIXES copies agree",
+        extract_module.BINARY_SUFFIXES == BINARY_SUFFIXES,
+        f"extract={sorted(extract_module.BINARY_SUFFIXES)} chunking={sorted(BINARY_SUFFIXES)}",
+    )
+    # Every registered suffix must reach a real extractor. Empty bytes are
+    # rejected by all of them, so what is checked is WHICH rejection: the
+    # dispatch fallthrough means the suffix was registered and then never wired.
+    unwired = []
+    for suffix in sorted(BINARY_SUFFIXES):
+        try:
+            extract_text(f"probe{suffix}", b"")
+        except Exception as error:  # noqa: BLE001 - reported as a check failure
+            if "no extractor for" in str(error):
+                unwired.append(suffix)
+    check("every binary suffix reaches an extractor", not unwired, unwired)
 
     # Real HWP bills, when the user's corpus is present. Skipped on a fresh
     # clone so `make build` stays hermetic.
@@ -1309,6 +1502,8 @@ def main() -> int:
         test_chunking()
         print()
         test_binary_extraction()
+        test_ooxml_extraction()
+        test_format_ladder()
         print()
         test_chunk_export()
         print()

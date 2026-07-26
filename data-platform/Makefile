@@ -2,6 +2,14 @@
 SHELL := /bin/bash
 UV := uv
 PY := $(UV) run python
+# The extras this deployment uses (onnx_int8 embedder, KIWI_MORPH keyword
+# morphology, scrapling web fetch). ONE list on purpose: `uv sync` REMOVES
+# packages that are not requested, so any target that syncs with a shorter list
+# silently uninstalls the extras the .env-configured provider needs. That is not
+# hypothetical -- reset gained these extras first, setup caught up a commit
+# later (69af01e), and verify's bare sync kept stripping them until it was
+# pointed at this variable. Keep in step with .env.
+SYNC_EXTRAS := --extra onnx-embed --extra kiwi --extra web
 
 .PHONY: help setup reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline
 
@@ -9,18 +17,12 @@ help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 setup: ## Resolve dependencies (incl. configured extras) and install Meltano plugins
-	# Match reset: install the extras this deployment uses (onnx_int8 embedder,
-	# KIWI_MORPH keyword morphology, scrapling web fetch) so a fresh checkout can
-	# run the configured provider / fetch_web. Keep in step with .env and reset.
-	$(UV) sync --extra onnx-embed --extra kiwi --extra web
+	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano install
 
 reset: ## Rebuild every regenerable artefact after a checkout move/rename: venv, Meltano plugins, data plane. The venv and .meltano hardcode absolute paths that no project code controls, so a rename strands them; this recreates them. The DuckLake DATA_PATH is already relative and survives on its own.
 	rm -rf .venv .meltano
-	# Sync the extras this deployment uses (onnx_int8 embedder, KIWI_MORPH keyword
-	# morphology, web fetching via scrapling), or the rebuilt venv can't run the
-	# configured provider / fetch_web. Keep in step with .env and pipeline usage.
-	$(UV) sync --extra onnx-embed --extra kiwi --extra web
+	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano install
 	$(MAKE) clean
 	$(MAKE) build
@@ -72,6 +74,9 @@ triage: ## Report which profile claims each document in data/raw
 
 dupes: ## Report content-duplicate renditions collapsed by the fingerprint dedup
 	$(PY) -m pipeline.report_dupes
+
+dupes-twins: ## Do source/ twin renditions (X.hwp beside X.pdf) share a fingerprint? Reads no lake state
+	$(PY) -m pipeline.report_dupes --twins
 
 export: ## Rewrite data/processed/chunks/*.json from the gold layer
 	$(PY) -m pipeline.export
@@ -135,7 +140,7 @@ verify: ## Run the full verification gate
 	@echo "== document-type profile gate =="
 	$(PY) -m pipeline.doctypes.gate
 	@echo "== toolchain =="
-	$(UV) sync
+	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano --version && $(UV) run sqlmesh --version
 	@echo "== build =="
 	$(MAKE) build

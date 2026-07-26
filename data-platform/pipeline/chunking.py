@@ -38,9 +38,25 @@ class ChunkingError(RuntimeError):
 MARKDOWN_SUFFIXES = frozenset({".md", ".markdown", ".txt", ".rst"})
 PYTHON_SUFFIXES = frozenset({".py"})
 # Binary formats are decoded by pipeline/extract.py, which is the only module
-# that needs a third-party parser. Everything here stays pure.
-BINARY_SUFFIXES = frozenset({".hwp", ".hwpx"})
+# that needs a third-party parser. Everything here stays pure, so the list is
+# restated rather than imported; smoke_test asserts the two copies agree.
+BINARY_SUFFIXES = frozenset(
+    {".hwp", ".hwpx", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt", ".pdf"}
+)
 SUPPORTED_SUFFIXES = MARKDOWN_SUFFIXES | PYTHON_SUFFIXES | BINARY_SUFFIXES
+# Which rendition of one document is the AUTHORITATIVE one, highest first. An
+# editable original outranks a derived copy, and a modern container outranks the
+# legacy binary it was converted from; PDF is last because it is what all the
+# others are exported TO.
+#
+# Two places consume this and a third restates it:
+#   * `watcher.seed_inbox` seeds only the top-ranked rendition of a curated twin.
+#   * `report_dupes` pairs an original with its PDF for the twin measurement.
+#   * `transform/models/silver/documents.sql` repeats the ladder in SQL, because
+#     a model cannot import Python. `smoke_test` asserts the two agree, so the
+#     copy cannot drift.
+FORMAT_PRIORITY = ("hwp", "hwpx", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "pdf")
+
 # Formats that a document-type profile may claim: extracted document text, not
 # authored notes. `.md` and `.rst` keep the pure Markdown path, so a short memo
 # about a contract can never be routed away from front-matter and wiki-link

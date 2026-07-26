@@ -34,8 +34,13 @@ WITH latest_batch AS (
   -- Stage 2: collapse multiple FORMATS of the same content (a bill as both .hwp
   -- and .pdf) to a single served rendition. Documents shorter than the floor stay
   -- keyed by doc_id, so two short unrelated notes can never merge on a
-  -- coincidental fingerprint. Format priority hwp > hwpx > pdf keeps the
-  -- authoritative rendition. content_sha256 alone is NOT a total order: two
+  -- coincidental fingerprint. Format priority keeps the AUTHORITATIVE rendition:
+  -- an editable original outranks a derived one, and a modern container outranks
+  -- the legacy binary it was converted from, so the ladder runs
+  -- hwp > hwpx > docx > doc > pptx > ppt > xlsx > xls > pdf > everything else.
+  -- PDF sits last because it is what the others are exported TO. Leaving a new
+  -- format in the ELSE bucket would rank it BELOW pdf and let a derived PDF win
+  -- over its own source. content_sha256 alone is NOT a total order: two
   -- byte-identical twins of one filing dropped in different folders share it (and
   -- the same batch and doc_type), so doc_id is appended as the final total-order
   -- key to keep the surviving rendition -- and its collection/doc_id/chunk_ids --
@@ -50,7 +55,11 @@ WITH latest_batch AS (
         END
       ORDER BY
         CASE o.doc_type
-          WHEN 'hwp' THEN 3 WHEN 'hwpx' THEN 2 WHEN 'pdf' THEN 1 ELSE 0
+          WHEN 'hwp'  THEN 9 WHEN 'hwpx' THEN 8
+          WHEN 'docx' THEN 7 WHEN 'doc'  THEN 6
+          WHEN 'pptx' THEN 5 WHEN 'ppt'  THEN 4
+          WHEN 'xlsx' THEN 3 WHEN 'xls'  THEN 2
+          WHEN 'pdf'  THEN 1 ELSE 0
         END DESC,
         o.ingested_at DESC,
         o.content_sha256,
