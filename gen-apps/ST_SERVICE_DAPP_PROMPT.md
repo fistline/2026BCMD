@@ -84,16 +84,23 @@ SE-2 훅, `deployedContracts.ts` 자동 연결을 **전제한다.** 그 뼈대�
 Scaffold-ETH 2에서 받는 것이다. 손으로 흉내 내면 훅과 주소 자동연결이 동작하지 않는다.
 
 ```bash
-npx create-eth@latest <slug> -e foundry     # 대화형이면 Foundry(Hardhat 아님) 선택
+forge --version                              # 없으면 여기서 멈춘다 (아래 설명)
+npx create-eth@latest <slug> -s foundry      # -s = solidity-framework
 cd <slug> && yarn install
 ```
 
-받은 직후 다음을 확인하고, 어긋나면 **여기서 멈추고 사용자에게 알린다** — 뒤 단계는 전부
-이 구조 위에서 돌아간다.
+**`-s`(solidity-framework)이지 `-e`가 아니다.** `-e`는 확장(extension) 플래그라 `foundry`를
+확장 이름으로 찾다 실패한다. 대화형으로 뜨면 Hardhat 아닌 **Foundry**를 고른다.
+
+**`forge`가 PATH에 없으면 `create-eth`가 `FoundryValidationError`로 중단한다.** 설치돼
+있어도 PATH에 없으면 같은 결과다(`~/.foundry/bin`이 흔한 위치). 먼저 `forge --version`으로
+확인하고, 없으면 `foundryup`을 안내하고 **여기서 멈춘다** — 뒤 단계가 전부 Foundry에 의존한다.
+
+받은 직후 아래를 확인하고, 어긋나면 멈추고 사용자에게 알린다.
 
 - `packages/foundry/foundry.toml`, `packages/nextjs/` 존재
-- `yarn foundry:test` 가 템플릿 기본 테스트로 통과
-- `packages/nextjs/contracts/deployedContracts.ts` 가 (비어 있더라도) 존재
+- `packages/nextjs/contracts/deployedContracts.ts` 존재 (배포 전이라 비어 있는 게 정상)
+- `yarn foundry:test` 가 템플릿 기본 테스트로 통과 (루트 `yarn test`도 같은 것을 가리킨다)
 
 **게이트 0.5**: 템플릿이 그대로 기동된다. 여기서부터 템플릿 예제(`YourContract` 등)를
 지우고 PHASE 0에서 확정한 표면으로 대체한다.
@@ -286,6 +293,15 @@ interface ITransferPolicy {          // 축1 = "제약 필요" 일 때만 생성
 **인터페이스를 4개째 만들지 않는다.** 네 번째가 필요해 보이면 그건 대개 오프체인 계층의 문제다.
 
 토큰 컨트랙트는 내부 `canMove(...)`를 선택한 표준의 공식 시그니처로 노출하는 **어댑터 역할**만 한다.
+
+> **보유상한은 주소가 아니라 사람 단위로 건다.** `balanceOf(to) + amount <= cap` 만 검사하면
+> 지갑을 두 개 만드는 것으로 끝난다 — 규제상 "1인당 한도"를 온체인에서 주소 한도로 구현하면
+> 통제가 아니라 통제하는 시늉이다. 정책 컨트랙트가 **신원 → 보유 주소 집합**을 알고
+> 그 합계로 판정해야 한다(자격 판정과 같은 자리에서 이미 신원을 다루므로 추가 계층이 아니다).
+>
+> 개인정보는 온체인에 올리지 않는다 — 신원은 **오프체인 식별자의 해시**로만 두고, 정책은
+> `identityOf(address) → bytes32`와 그 신원의 주소 목록만 갖는다. 실명·연락처·서류는 SQLite.
+> 지갑 추가·교체는 발행인 승인 경로로만 가능하게 하고 그 이벤트를 남긴다.
 
 ### 6.2 AssetRegistry — 메타데이터 최소주의
 

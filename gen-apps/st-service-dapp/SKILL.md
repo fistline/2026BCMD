@@ -93,7 +93,8 @@ PHASE E로 간다. 사용자가 특정 항목을 고치라고 하면 해당 항�
 이 폴더가 **SE-2 프로젝트 루트**다.
 
 ```bash
-cd gen-apps && npx create-eth@latest <slug> -e foundry   # 대화형이면 Foundry 선택
+forge --version                                          # 없으면 여기서 멈춘다
+cd gen-apps && npx create-eth@latest <slug> -s foundry    # -s = solidity-framework (-e 아님)
 ```
 
 빈 폴더를 만들고 손으로 채우면 `useScaffoldReadContract` 같은 훅과 `deployedContracts.ts`
