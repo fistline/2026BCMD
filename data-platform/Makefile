@@ -17,6 +17,7 @@ SYNC_EXTRAS := --extra onnx-embed --extra kiwi --extra web
 # another `--extra`. macOS needs nothing: CoreML ships in the default wheel.
 #   make setup-gpu GPU=cuda        Linux/Windows + NVIDIA
 #   make setup-gpu GPU=directml    Windows, any DX12 GPU (NVIDIA/AMD/Intel)
+#   make setup-gpu GPU=qnn         Windows on ARM (Snapdragon X NPU) -- UNVERIFIED, see runtime.py
 GPU ?=
 ifeq ($(GPU),)
 GPU_SYNC_EXTRAS := $(SYNC_EXTRAS)
@@ -24,7 +25,7 @@ else
 GPU_SYNC_EXTRAS := --extra gpu-$(GPU) --extra kiwi --extra web
 endif
 
-.PHONY: help setup setup-gpu gpu-probe bench-ep ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
+.PHONY: help setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -33,8 +34,8 @@ setup: ## Resolve dependencies (incl. configured extras) and install Meltano plu
 	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano install
 
-setup-gpu: ## Install a GPU execution provider. Usage: make setup-gpu GPU=cuda|directml (macOS needs neither)
-	@test -n "$(GPU)" || (echo "usage: make setup-gpu GPU=cuda|directml   (macOS: CoreML is already in the default wheel; just run make gpu-probe)" && exit 1)
+setup-gpu: ## Install an accelerator wheel. Usage: make setup-gpu GPU=cuda|directml|qnn (macOS needs none)
+	@test -n "$(GPU)" || (echo "usage: make setup-gpu GPU=cuda|directml|qnn   (macOS: CoreML ships in the default wheel; just run make gpu-probe)" && exit 1)
 	$(UV) sync $(GPU_SYNC_EXTRAS)
 	$(UV) run meltano install
 	@echo
@@ -49,6 +50,9 @@ bench-ep: ## Measured throughput per execution provider x asset. Decides GPU-or-
 
 ep-equiv: ## Cross-hardware contract: same asset on two providers must agree (skips on a CPU-only box)
 	$(PY) tools/check_ep_equivalence.py
+
+bench-concurrent: ## Do two stages running at once help, or starve each other? Measures the interference before enabling it
+	RERANK=1 $(PY) tools/bench_concurrency.py
 
 warm-models: ## One-time online fetch of the configured embedder asset (and the reranker when RERANK=1)
 	$(PY) -c "from pipeline import get_settings; from pipeline.build_rag import get_embedder; s=get_settings(); e=get_embedder(s, allow_download=True); print(f'[warm] embedder {e.name}/{e.precision} on {e.provider} cached')"

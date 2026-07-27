@@ -116,6 +116,18 @@ gpu-directml = [
     "huggingface-hub>=0.24,<1",
     "numpy>=1.24",
 ]
+# Qualcomm NPU (Snapdragon X / Windows on ARM). UNVERIFIED on hardware here: NPU
+# runtimes compile for STATIC shapes and this embedder pads to the batch's
+# longest sequence, so the graph may simply be rejected -- `runtime.py` keeps QNN
+# opt-in for exactly that reason. The extra exists so that the wheel, which is
+# yet another distribution of the same `onnxruntime` module, is declared in the
+# conflict set instead of being installed alongside one of the others by hand.
+gpu-qnn = [
+    "onnxruntime-qnn>=1.17,<2 ; sys_platform == 'win32' and platform_machine == 'ARM64'",
+    "tokenizers>=0.20,<1",
+    "huggingface-hub>=0.24,<1",
+    "numpy>=1.24",
+]
 # Optional cross-platform OCR backend: the SAME PP-OCRv5 models as the `ocr`
 # extra, run through ONNX Runtime instead of PaddlePaddle, which is what lets OCR
 # use a GPU on macOS and on Windows without CUDA. Operator tool, never imported by
@@ -135,6 +147,7 @@ conflicts = [
         { extra = "onnx-embed" },
         { extra = "gpu-cuda" },
         { extra = "gpu-directml" },
+        { extra = "gpu-qnn" },
     ],
 ]
 
