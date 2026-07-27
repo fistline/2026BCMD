@@ -25,9 +25,6 @@ package reaches the pipeline only once the plugins are reinstalled.
 | `make eval-ask` | Related-section floor for `make ask` (graph arm membership) |
 | `make gate` | Acceptance gate for document-type profiles |
 | `make triage` | Which profile claims each document in `data/raw` |
-| `make dupes` | Content-duplicate renditions the fingerprint dedup collapsed |
-| `make dupes-twins` | Do `source/` twin renditions (`X.hwp` beside `X.pdf`) match? Reads no lake state |
-| `make dupes-controls` | Fuzzy-twin detector controls: 10 positives caught, 정정본·타문서·모법/시행령 rejected |
 | `make verify` | Full verification gate |
 | `make clean` | Delete regenerable state only |
 
@@ -44,9 +41,8 @@ mistakes; everything else is recoverable.
    claim the same bytes and diverge on the next sync. Two tracked trees seed the
    git-ignored inbox on every build: `pipeline/fixtures/` (the small smoke-test
    sample set) and `source/` (the curated real corpus, one subfolder per
-   collection). `seed_inbox` walks both and copies only SUPPORTED_SUFFIXES — so the
-   `.pdf` twin beside each `.hwp` original stays in `source/` and never enters the
-   pipeline. Fixtures land flat (the `_root` collection); a `source/` file keeps its
+   collection). `seed_inbox` walks both and copies only
+   SUPPORTED_SUFFIXES. Fixtures land flat (the `_root` collection); a `source/` file keeps its
    first subfolder as its inbox path, so `source/norms/x.txt → inbox/norms/x.txt`
    stays in collection `norms` on a fresh clone. Add corpus originals to `source/`
    (in the subfolder that names their collection) and fixtures to
@@ -121,37 +117,6 @@ mistakes; everything else is recoverable.
   That belongs to `tools/ocr/ocr_prepare.py`, which OCRs images or scanned PDFs
   offline, a human reviews the draft, and the reviewed `.txt` enters the inbox --
   the build stays model-free.
-- **One rendition per document.** `document_id` keeps `.hwp`/`.hwpx`/`.pdf` as
-  distinct ids on purpose, so the same bill in two formats would otherwise
-  double-index (duplicate chunks, duplicate graph nodes). Three mechanisms collapse
-  that, at different boundaries, because they know different things:
-  - **Curated twins, by provenance.** `watcher._superseded_renditions` seeds only
-    the top-ranked rendition of a same-directory, same-stem twin set in `source/`.
-    Ranking is `chunking.FORMAT_PRIORITY` (hwp > hwpx > docx > doc > pptx > ppt >
-    xlsx > xls > pdf); `silver.documents` restates it in SQL and `smoke_test`
-    asserts the two agree.
-  - **Inbox arrivals, by exact content.** `silver.documents` keeps one row per
-    `content_fingerprint` (`normalize_for_fingerprint`) above a length floor,
-    highest-priority format winning. This is the net for a twin dropped straight
-    into the inbox whose two formats extract to the SAME normalized bytes.
-  - **Inbox HWP/PDF twins, by fuzzy content.** An HWP and its PDF do NOT share a
-    `content_fingerprint` (measured `make dupes-twins`: 0 of 10 match -- hwpkit and
-    pypdf agree on a bill's CHARACTERS and disagree on their ORDER, linearising the
-    cover-page 의안번호 table at a different point), so the exact net above misses
-    them. `silver.document_twins` catches them: character w=10 shingles over the
-    whitespace-stripped text, exact set Jaccard >= 0.85 (measured margin: twins
-    0.910-0.948 vs cross-format different-doc <= 0.610), gated by format-different
-    + length-ratio < 0.15 on the SAME norm length. `silver.documents` LEFT JOINs it
-    and drops the lower-priority rendition from serving; the loser stays in
-    bronze/raw and is RECORDED in `document_twins` (auditable, reversible), so this
-    is non-destructive. Deterministic (exact set arithmetic, no hash() on the
-    decision path; Jaccard is computed per-pair with `list_intersect`, never a
-    shingle self-join, which OOM'd on shared 제N조 boilerplate). An order-insensitive
-    character-multiset key reached 7/10 but was REJECTED -- it makes any anagram a
-    duplicate; w-shingling keeps local order, so anagrams stay low-Jaccard.
-    `report_dupes --controls` (`make dupes-controls`) is the negative-control gate;
-    re-run it and `make dupes-twins` after any change to an extractor, to
-    `normalize_for_fingerprint`, or to the twin thresholds.
 - **The retrieval surface holds one row per distinct chunk content.** A standard
   약관 clause (예: 제1조(목적)) is copied verbatim into dozens of filings; indexing
   it once per copy lets N identical hits fill every top-K and bury the

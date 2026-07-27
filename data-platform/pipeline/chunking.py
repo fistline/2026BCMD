@@ -175,9 +175,12 @@ def normalize_for_fingerprint(text: str) -> str:
     NFC plus whitespace-collapse ONLY, deliberately conservative. It does NOT
     strip running headers, page numbers or 의안번호, so a born-digital PDF whose
     extracted text carries that page furniture will not yet match its HWP twin;
-    that gap is measured with `make dupes` and closed (stronger normalisation, or
-    a MinHash escalation) before PDF renditions are trusted -- see AGENTS.md. Case
-    is preserved, so two distinct code identifiers can never fold together.
+    that gap is measured by `pipeline/report_dupes.py` and closed downstream by
+    `silver.document_twins`, which scores the pair on shingle overlap instead of
+    exact equality. Do not widen this key to close it here: it is also the key
+    two SHORT documents are compared on, where aggressive normalisation folds
+    unrelated notes together. Case is preserved for the same reason, so two
+    distinct code identifiers can never collapse onto one.
     """
     return _FINGERPRINT_WS_RE.sub(" ", unicodedata.normalize("NFC", text)).strip()
 

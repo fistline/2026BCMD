@@ -5,11 +5,11 @@ prints nothing, because no two documents share a content fingerprint. Its purpos
 is the moment PDF parsing is enabled: run it against a corpus that contains an
 HWP and its PDF twin and it shows whether the twin actually merged.
 
-A silent EMPTY report after PDFs are added is the failure signal -- it means the
-two renditions produced different fingerprints (page furniture, OCR drift) and
-were double-indexed rather than collapsed. That is the gate described in
-AGENTS.md: strengthen `normalize_for_fingerprint` or escalate to MinHash before
-the PDF renditions can be trusted.
+A silent EMPTY report after PDFs are added is NOT proof of health -- it also
+looks like this when two renditions produced different fingerprints (page
+furniture, extractor ordering) and were double-indexed rather than collapsed.
+`--twins` and `--controls` below exist because of that ambiguity: they measure
+the answer directly instead of inferring it from an empty table.
 
 The query reads bronze.documents (pre-dedup) so it can SEE the collision that
 silver then resolves; silver keeps only one row per fingerprint, so querying it
@@ -156,8 +156,8 @@ def main() -> int:
         print(
             "[dupes] no content-duplicate renditions above the "
             f"{FINGERPRINT_MIN_CHARS}-char floor. "
-            "If PDF twins are present and expected to merge, this empty result "
-            "means the fingerprints diverged -- see AGENTS.md."
+            "If PDF twins are present and expected to merge, an empty result "
+            "instead means the fingerprints diverged -- check with --twins."
         )
         return 0
 
@@ -200,7 +200,7 @@ def _first_divergence(left: str, right: str) -> str:
 
 
 def report_twins() -> int:
-    """The measurement AGENTS.md requires before `.pdf` joins BINARY_SUFFIXES.
+    """Does a PDF collapse onto its original rendition by EXACT fingerprint?
 
     `make dupes` reads bronze.documents, so it can only see formats the tap
     already ingests -- it cannot answer "would a PDF collapse onto its HWP twin"
