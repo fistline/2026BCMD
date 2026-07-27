@@ -48,7 +48,13 @@ FALLBACK_QUERIES = ["전매제한", "예치금 분리보관", "시행일", "증�
 
 
 def _corpus(limit: int) -> tuple:
-    """Real chunks when an index exists, a small fixed set otherwise."""
+    """Real chunks when an index exists, a small fixed set otherwise.
+
+    The caller must treat the fallback as INSUFFICIENT EVIDENCE, not as a corpus:
+    `_top_k` is asked for a top-10 over 5 documents, which two providers agree on
+    unconditionally. `make clean` removes data/serving, so without that rule a
+    clean tree turns this gate into a formality.
+    """
     paths = get_paths()
     if not paths.index_sqlite.exists():
         return FALLBACK_TEXTS, FALLBACK_QUERIES
@@ -121,10 +127,14 @@ def _encode_isolated(provider: str, precision: str, docs: int, model: str) -> di
             check=False,
         )
         if out.exists() and out.stat().st_size:
-            return json.loads(out.read_text(encoding="utf-8"))
+            try:
+                return json.loads(out.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return {"error": f"{provider}/{precision} produced truncated output"}
+    signal_number = runtime.crash_signal(completed.returncode)
     detail = (
-        f"crashed with signal {-completed.returncode}"
-        if completed.returncode < 0
+        f"crashed with signal/status {signal_number}"
+        if signal_number is not None
         else f"exited {completed.returncode} without a result"
     )
     tail = (completed.stderr or "").strip().splitlines()
@@ -172,6 +182,13 @@ def main(argv=None) -> int:
 
     precision = args.precision or runtime.precision_for(provider_b)
     texts, queries = _corpus(args.docs)
+    if texts is FALLBACK_TEXTS:
+        print(
+            f"[ep-equiv] no index at {get_paths().index_sqlite}; only the {len(FALLBACK_TEXTS)}-sentence "
+            f"fallback corpus is available, and a top-{args.k} over {len(FALLBACK_TEXTS)} documents "
+            f"agrees unconditionally.\nSKIPPED: no index, insufficient evidence. Build first."
+        )
+        return 0
     print(f"[ep-equiv] {args.a} vs {provider_b}, asset={precision}, {len(texts)} passages")
 
     left_result = _encode_isolated(args.a, precision, args.docs, settings.embedding_model)

@@ -65,12 +65,34 @@ def vector_signature(embedder, dimensions: int) -> str:
 
     Deliberately narrower than `index_signature`: the keyword half, the doctype
     profiles and Kiwi all belong there and none of them belong here.
+
+    IT DOES INCLUDE THE EXECUTION PROVIDER, and index_signature deliberately does
+    not. That asymmetry is the whole point and it is not an inconsistency:
+
+      * index_signature travels. `make sync` ships the index to spokes, so putting
+        the provider in it would hand every CPU-only spoke an index it refuses to
+        read.
+      * This cache does NOT travel. It lives under data/processed/ and is never
+        synced, so it can afford to be stricter -- and it has to be. The cache
+        commits every 256 passages, so a build that runs on one provider and a
+        later build that runs on another leave ONE cache holding vectors from two
+        providers. Measured, two providers on the same asset agree to cosine
+        0.999991 and still flipped a top-10 -- and `verify_sample`'s 0.97 floor is
+        far too loose to notice. index_signature would stay byte-identical
+        throughout.
+
+    Appended only when non-empty (the CPU provider contributes nothing), so every
+    cache that exists today keeps its exact signature and nothing re-encodes.
     """
     model = getattr(embedder, "model_name", "") or ""
     # Empty for providers with no precision axis (hashing, sentence_transformers),
     # so their signature is unchanged by the existence of this field.
     precision = getattr(embedder, "precision", "") or ""
-    return "|".join((CACHE_LAYOUT, embedder.name, model, str(dimensions), precision))
+    parts = [CACHE_LAYOUT, embedder.name, model, str(dimensions), precision]
+    suffix = getattr(embedder, "vector_space_suffix", "") or ""
+    if suffix:
+        parts.append(suffix)
+    return "|".join(parts)
 
 
 def cache_enabled() -> bool:

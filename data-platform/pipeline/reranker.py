@@ -26,7 +26,6 @@ reuses onnxruntime / tokenizers / huggingface_hub.
 
 from __future__ import annotations
 
-import importlib.util
 from collections.abc import Sequence
 from functools import cache
 
@@ -63,7 +62,7 @@ class OnnxReranker:
             from huggingface_hub.errors import LocalEntryNotFoundError
             from tokenizers import Tokenizer
 
-            if importlib.util.find_spec("onnxruntime") is None:
+            if not runtime.have_onnx():
                 raise ImportError("onnxruntime")
         except ImportError as error:
             raise RuntimeError(
@@ -106,7 +105,7 @@ class OnnxReranker:
         asset_path = _fetch(_ASSETS[precision])
         self._session = runtime.make_session(asset_path, self.profile, threads=threads)
         runtime.note_resident("reranker", asset_path, self.profile.provider)
-        self.provider = self._session.get_providers()[0]
+        self.provider = runtime.warn_if_demoted("reranker", self.profile, self._session)
         self._input_names = {node.name for node in self._session.get_inputs()}
 
     def _score_batch(self, pairs) -> list:

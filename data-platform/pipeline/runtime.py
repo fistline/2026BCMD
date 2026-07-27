@@ -126,8 +126,11 @@ _DEMOTED = {
     # UNVERIFIED, not measured-bad. The blocker is specific: NPU runtimes
     # generally compile for STATIC shapes, and this embedder pads to the batch's
     # longest sequence, so the graph it would have to accept is dynamic. Forcing
-    # a fixed 512 would both slow it down and change every vector. Try the short,
-    # fixed-shape stages (reranker, OCR) first, and report `make bench-ep`.
+    # a fixed 512 would both slow it down and CHANGE EVERY VECTOR, and that is
+    # true on the query path as much as on the build path -- a query vector is
+    # compared against persisted ones, so it lives in the same space and cannot
+    # be bucketed either. Try first the short, fixed-shape stages WHOSE OUTPUT IS
+    # NOT A PERSISTED VECTOR (reranker, OCR), and report `make bench-ep`.
     "QNNExecutionProvider": "unverified on hardware; dynamic sequence length may not compile",
     "VitisAIExecutionProvider": "unverified on hardware",
 }
@@ -309,6 +312,41 @@ def class_of(provider: str) -> str:
 def precision_for(provider: str) -> str:
     """The asset a provider's device class wants: GPU fp16, CPU and NPU int8."""
     return _CLASS_ASSET.get(class_of(provider), "int8")
+
+
+def have_onnx() -> bool:
+    """Is onnxruntime installed? Answered WITHOUT importing it, and never raises.
+
+    The seam's job is to keep every other module in `pipeline/` from naming
+    onnxruntime at all -- including in an availability test. `_import_ort` is not
+    usable for that: it raises RuntimeError, and the two call sites that need this
+    catch ImportError, so the actionable install message would be lost.
+    """
+    import importlib.util
+
+    return importlib.util.find_spec("onnxruntime") is not None
+
+
+def warn_if_demoted(stage: str, profile: DeviceProfile, session) -> str:
+    """Report when the session did NOT come up on the device the profile chose.
+
+    make_session degrades to the CPU rather than failing a build, which is the
+    right default and also a silent one: the documented harm of onnxruntime's own
+    silent CPU fallback is an unnoticed throughput collapse. So the degradation is
+    announced here, and only announced -- this runs on the READ path (`make query`,
+    `make ask`), where writing a new device profile would let a read-only query
+    change what the next build does.
+    """
+    actual = session.get_providers()[0] if session.get_providers() else CPU_EP
+    if actual == profile.provider:
+        return actual
+    print(
+        f"[runtime] {stage}: asked for {profile.provider}, running on {actual}. "
+        f"The result is correct and slower; `make gpu-probe` says what this machine "
+        f"registered.",
+        file=sys.stderr,
+    )
+    return actual
 
 
 def gpu_provider() -> str | None:
@@ -732,14 +770,33 @@ def load_profile(path) -> dict | None:
 
 
 def save_profile(path, profile: DeviceProfile, measurements: dict | None = None) -> None:
+    """Record the chosen profile. `measurements=None` PRESERVES what is on disk.
+
+    Read-modify-write, and the distinction between None and {} is load-bearing.
+    This used to write `measurements or {}`, which meant every `pipeline.runtime
+    --save` -- run by BOTH `make gpu-probe` and `make verify` -- silently erased
+    `measurements.encode_split`, the ratio `_hybrid_split` measures once and reads
+    back to decide which execution provider encodes which batch. Losing it does
+    not raise: the next hybrid build re-measures under a different thermal state,
+    gets a different split, assigns batches to different providers, and produces
+    DIFFERENT VECTORS while index_signature stays byte-identical. A cache-clearing
+    caller that means it passes `{}`.
+
+    Written via a temporary file and os.replace so an interrupted write leaves the
+    previous profile intact rather than a truncated one that load_profile then
+    discards (taking the recorded split with it).
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    existing = load_profile(path) or {}
     payload = {
         "fingerprint": machine_fingerprint(),
         "profile": asdict(profile),
-        "measurements": measurements or {},
+        "measurements": existing.get("measurements", {}) if measurements is None else measurements,
     }
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
 
 
 # --------------------------------------------------------------------------
@@ -795,6 +852,130 @@ def _capture_native_stderr():
             holder["text"] = sink.read().decode("utf-8", "replace")
 
 
+def crash_signal(returncode: int) -> int | None:
+    """The signal a child died from, or None if it exited normally. Portable.
+
+    `returncode < 0` is a POSIX-only idiom. On Windows TerminateProcess passes the
+    signal number through as the EXIT CODE, and a real access violation surfaces as
+    an unsigned NTSTATUS (0xC0000005) -- so the POSIX test classifies a genuine
+    crash as a clean non-zero exit, on the one platform where the unverified NPU
+    actually lives.
+    """
+    if returncode is None:
+        return None
+    if returncode < 0:
+        return -returncode
+    if os.name == "nt":
+        unsigned = returncode & 0xFFFFFFFF
+        # The NTSTATUS error range. 0xC0000005 is an access violation, 0xC000001D
+        # an illegal instruction, 0xC00000FD a stack overflow.
+        if 0xC0000000 <= unsigned <= 0xCFFFFFFF:
+            return unsigned
+    return None
+
+
+def parse_partitions(captured: str) -> int | None:
+    """Partition count from onnxruntime's GetCapability line. None = NOT REPORTED.
+
+    None is not zero and not a rejection: most providers never emit this line at
+    all, so an integer default would read as "perfectly partitioned" for exactly
+    the providers that said nothing.
+    """
+    anchor = "number of partitions supported by"
+    for line in captured.splitlines():
+        index = line.find(anchor)
+        if index < 0:
+            continue
+        # Read AFTER the anchor only. The whole line is prefixed by two timestamps
+        # and a pid, so scanning it for the first integer returns the hour.
+        for token in line[index + len(anchor) :].replace(":", " ").split():
+            if token.isdigit():
+                return int(token)
+    return None
+
+
+def probe_provider(onnx_path, provider: str, timeout: float | None = None) -> dict:
+    """Build one session in a CHILD process and report what happened.
+
+    The supervision matters as much as the isolation. `subprocess.run(timeout=)`
+    handles an expiry by kill() then communicate() with NO second timeout, so a
+    child wedged in an uninterruptible driver call blocks the parent forever --
+    strictly worse than the crash the child was introduced to contain. So:
+    terminate, grace, kill, grace, and if it still will not be reaped, say so and
+    leave it rather than hanging the gate.
+    """
+    import json as _json
+    import subprocess
+    import tempfile
+
+    seconds = float(os.environ.get("PROBE_TIMEOUT_S", timeout or 300))
+    with tempfile.TemporaryDirectory() as directory:
+        out = Path(directory) / "probe.json"
+        popen_kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if os.name != "nt":
+            popen_kwargs["start_new_session"] = True  # own process group; signal the group
+        child = subprocess.Popen(  # noqa: S603
+            [sys.executable, "-m", "pipeline.runtime", "--probe-one", provider,
+             "--model", str(onnx_path), "--out", str(out)],
+            **popen_kwargs,
+        )
+        try:
+            child.wait(timeout=seconds)
+        except subprocess.TimeoutExpired:
+            _terminate(child)
+            if child.poll() is None:
+                return {"error": f"unreapable after {seconds:.0f}s; child left running"}
+            return {"error": f"timed out after {seconds:.0f}s"}
+
+        if out.exists() and out.stat().st_size:
+            try:
+                return _json.loads(out.read_text(encoding="utf-8"))
+            except (OSError, _json.JSONDecodeError):
+                # A child killed mid-write leaves a truncated file. A probe that
+                # raises defeats its own purpose.
+                return {"error": "no_result (truncated output)"}
+
+    signal_number = crash_signal(child.returncode)
+    if signal_number is not None:
+        return {"error": f"CRASHED (signal/status {signal_number})"}
+    return {"error": f"exited {child.returncode} without a result"}
+
+
+def _terminate(child) -> None:
+    """SIGTERM the group, then SIGKILL it, each with a bounded wait."""
+    import subprocess
+
+    for stopper in (child.terminate, child.kill):
+        try:
+            stopper()
+        except OSError:
+            return
+        try:
+            child.wait(timeout=5)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def _probe_one(onnx_path, provider: str) -> dict:
+    """The child half: build the session, report partitions. May legitimately die."""
+    with _capture_native_stderr() as holder:
+        try:
+            make_session(
+                onnx_path,
+                DeviceProfile(provider=provider, provider_options=provider_options(provider)),
+            )
+            failed = None
+        except Exception as error:  # noqa: BLE001
+            failed = f"{type(error).__name__}: {error}"
+    note: dict = {}
+    if failed:
+        note["error"] = failed
+    partitions = parse_partitions(holder["text"])
+    note["partitions"] = partitions if partitions is not None else "not reported"
+    return note
+
+
 def probe(onnx_path=None, save_to=None) -> dict:
     """Report what this machine can do. Operator tool; `make gpu-probe`."""
     report = {
@@ -836,23 +1017,16 @@ def probe(onnx_path=None, save_to=None) -> dict:
         # Partition counts: how much of the graph the EP will actually run. A
         # heavily partitioned graph copies tensors back and forth at every
         # boundary and is why an "accelerated" run can be slower than the CPU.
-        # Only the providers this machine would actually CHOOSE are built here:
-        # an opt-in-only provider is on that list because it was measured to
-        # crash, and a probe must not take itself down proving it again.
+        # ADVISORY ONLY -- printed, never gated on. Only CoreML and QNN emit the
+        # message this is parsed from, so a threshold would silently accept every
+        # CUDA and DirectML box while rejecting the ones that report honestly.
+        #
+        # Each session is built in a CHILD process. `pipeline.runtime --save` is a
+        # step of `make verify`, and building a session is exactly the operation
+        # measured to SIGSEGV here -- an uncatchable signal that would end the gate
+        # with a bare number instead of a finding.
         for provider in [ep for ep in report["candidates"] if ep not in _OPT_IN_ONLY]:
-            with _capture_native_stderr() as holder:
-                try:
-                    make_session(onnx_path, DeviceProfile(provider=provider,
-                                                          provider_options=provider_options(provider)))
-                    failed = None
-                except Exception as error:  # noqa: BLE001
-                    failed = f"{type(error).__name__}: {error}"
-            captured = holder["text"]
-            note = {"error": failed} if failed else {}
-            for line in captured.splitlines():
-                if "number of partitions supported by" in line:
-                    note["partitions"] = line.split("GetCapability,")[-1].strip()
-            report.setdefault("graph_support", {})[provider] = note or {"partitions": "not reported"}
+            report.setdefault("graph_support", {})[provider] = probe_provider(onnx_path, provider)
 
     if save_to:
         save_profile(save_to, profile)
@@ -866,7 +1040,16 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Report the ONNX execution provider this machine will use.")
     parser.add_argument("--model", help="Optional .onnx path to report per-EP graph support for.")
     parser.add_argument("--save", action="store_true", help="Write the chosen profile to the data plane.")
+    parser.add_argument("--probe-one", help="Internal: build a session on this provider and write --out.")
+    parser.add_argument("--out", help="Internal: where --probe-one writes its result.")
     args = parser.parse_args(argv)
+
+    if args.probe_one:
+        import json as _json
+
+        result = _probe_one(args.model, args.probe_one)
+        Path(args.out).write_text(_json.dumps(result), encoding="utf-8")
+        return 0
 
     from pipeline import get_paths
 

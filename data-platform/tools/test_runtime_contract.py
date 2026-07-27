@@ -257,6 +257,44 @@ def test_profile_cache() -> None:
         path.write_text("{not json", encoding="utf-8")
         check("a corrupt profile is ignored rather than raising", runtime.load_profile(path) is None)
 
+    # A measurement-less save must PRESERVE what is on disk. It used to write
+    # `measurements or {}`, so every `pipeline.runtime --save` -- which both
+    # `make gpu-probe` and `make verify` run -- erased the Tier B split that
+    # decides which provider encodes which batch. Losing it moves vectors while
+    # index_signature stays byte-identical, so nothing downstream notices.
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "device_profile.json"
+        profile = runtime.detect("int8")
+        runtime.save_profile(path, profile, {"encode_split": [7, 2]})
+        runtime.save_profile(path, profile)  # the --save call, carrying no measurements
+        after = runtime.load_profile(path) or {}
+        check(
+            "a measurement-less save preserves the recorded split",
+            after.get("measurements", {}).get("encode_split") == [7, 2],
+            str(after.get("measurements")),
+        )
+        runtime.save_profile(path, profile, {})  # explicit clear
+        cleared = runtime.load_profile(path) or {}
+        check("an explicit empty measurements clears them", cleared.get("measurements") == {})
+
+    # detect() must read NO file. It is @cache'd and must stay a pure function of
+    # (environment, enumeration), or its answer starts depending on call order.
+    real_load = runtime.load_profile
+
+    def _explode(_path):
+        raise AssertionError("detect() must not read the device profile")
+
+    runtime.load_profile = _explode
+    runtime.detect.cache_clear()
+    try:
+        runtime.detect("int8")
+        check("detect() reads no profile from disk", True)
+    except AssertionError as error:
+        check("detect() reads no profile from disk", False, str(error))
+    finally:
+        runtime.load_profile = real_load
+        runtime.detect.cache_clear()
+
 
 class _FakeEmbedder:
     """Deterministic, model-free stand-in: the cache's contract is about keys."""
@@ -316,6 +354,40 @@ def test_vector_cache() -> None:
             check("EMBED_CACHE=0 bypasses the cache", stats["cache"] == "off" and vectors == first)
         finally:
             os.environ.pop("EMBED_CACHE", None)
+
+        # The cache must not serve a vector produced by another execution
+        # provider. Two providers on the same asset measured cosine 0.999991 --
+        # close enough that verify_sample's 0.97 floor cannot see it, and index
+        # _signature deliberately never records the provider at all.
+        from pipeline.vector_cache import vector_signature
+
+        class _OnGpu(_FakeEmbedder):
+            vector_space_suffix = "CUDAExecutionProvider"
+
+        class _Hybrid(_FakeEmbedder):
+            vector_space_suffix = "CUDAExecutionProvider+split7:2"
+
+        cpu_sig = vector_signature(_FakeEmbedder(), 4)
+        gpu_sig = vector_signature(_OnGpu(), 4)
+        hybrid_sig = vector_signature(_Hybrid(), 4)
+        check(
+            "a CPU cache signature is unchanged by the provider slot existing",
+            cpu_sig.count("|") == 4 and not cpu_sig.endswith("|"),
+            cpu_sig,
+        )
+        check(
+            "two providers produce different cache signatures",
+            len({cpu_sig, gpu_sig, hybrid_sig}) == 3,
+            f"{cpu_sig} / {gpu_sig} / {hybrid_sig}",
+        )
+        gpu_embedder = _OnGpu()
+        encode_with_cache(_FakeEmbedder(), ["가상자산"], path, 4)
+        before = gpu_embedder.encoded
+        encode_with_cache(gpu_embedder, ["가상자산"], path, 4)
+        check(
+            "a different provider does not reuse the CPU cache's vectors",
+            gpu_embedder.encoded > before,
+        )
 
         broken = Path(directory) / "broken.sqlite"
         broken.write_bytes(b"this is not a database")

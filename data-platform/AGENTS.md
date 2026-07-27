@@ -109,7 +109,36 @@ mistakes; everything else is recoverable.
    the tokenizer pads to the batch's longest sequence, so batch composition moves
    the vectors (measured: cosine 0.9918, three orders of magnitude more than any
    provider difference). It is not a throughput knob and the GPU does not get a
-   bigger one.
+   bigger one. The VECTOR CACHE goes the other way and records the execution
+   provider (`vector_cache.vector_signature`), because it is node-local under
+   `data/processed/` and never synced: it commits every 256 passages, so without
+   that slot one cache can hold vectors from two providers, and the 0.999991
+   agreement between providers is far too close for `verify_sample`'s 0.97 floor
+   to catch. Also: `detect()` reads no timing and no file — it must stay a pure
+   function of (environment, enumeration) so it can be cached and tested without
+   hardware. The Tier B split DOES read a recorded timing, which is why
+   `ENCODE_SPLIT` exists as the deterministic override.
+
+10. **Nothing on the read path or the build path may download, probe or compile.**
+    Invariant 7 covers the download; the other two are the same rule. A probe
+    builds a real session, and building a session is the operation measured to
+    crash the process — so `make gpu-probe` runs each one in a supervised child
+    (`runtime.probe_provider`), and a probe's result is ADVISORY: the partition
+    count is printed, never gated on, because only CoreML and QNN report it at all.
+    What breaks if ignored: `pipeline.runtime --save` is a step of `make verify`,
+    so an in-parent probe ends the whole gate with a bare signal number.
+
+11. **To put the embedder on an accelerator while the control loop stays on the
+    CPU, use `DEVICE_PLACEMENT="embedder=gpu,reranker=cpu"`.** That is the whole
+    mechanism — one environment variable, no controller code. It is not a tier
+    system on purpose: (a) the embedder's asset is fleet-wide because it is in
+    `index_signature`, while the reranker's is machine-local, so one policy cannot
+    own both; (b) two stages on one device were measured to cost the light stage
+    2.17x; (c) two models resident on one accelerator doubles the memory where
+    overshoot is a SIGKILL, not an exception; (d) they then share a blast radius.
+    Moving the reranker is the operator's decision and the operator owns the
+    `make eval-rerank-baseline` re-record, because a provider change was measured
+    to flip a top-10 at cosine 0.999991.
 
 ## Conventions
 

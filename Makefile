@@ -19,7 +19,9 @@ RUFF := uvx ruff@0.16.0
 help: ## 이 목록
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 
-check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매터 + dist 최신성)
+check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매터 + dist 최신성 + 하드웨어 seam)
+	@echo "== hardware seam (pipeline/ 은 runtime.py 를 통해서만 가속기를 안다) =="
+	@$(PY) data-platform/tools/check_seam.py
 	@echo "== skill frontmatter (루트 + data-platform) =="
 	@$(PY) $(SKILL_CHECK) .agents/skills data-platform/.agents/skills
 	@echo "== sto-filing dist/ 가 스킬 정본과 일치하는가 =="

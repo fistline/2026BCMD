@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import math
 import os
@@ -389,7 +388,7 @@ class OnnxEmbedder:
             from huggingface_hub.errors import LocalEntryNotFoundError
             from tokenizers import Tokenizer
 
-            if importlib.util.find_spec("onnxruntime") is None:
+            if not runtime.have_onnx():
                 raise ImportError("onnxruntime")
         except ImportError as error:
             raise RuntimeError(
@@ -444,7 +443,14 @@ class OnnxEmbedder:
         runtime.note_resident("embedder", onnx_path, self.profile.provider)
         # What the session ACTUALLY got, which is not always what was asked for:
         # make_session degrades to the CPU rather than failing the build.
-        self.provider = self._session.get_providers()[0]
+        self.provider = runtime.warn_if_demoted("embedder", self.profile, self._session)
+        # What the vector CACHE keys on beyond the asset. The session's provider is
+        # part of the vector space in practice (two providers on one asset measured
+        # cosine 0.999991 and still flipped a top-10), and the cache is node-local
+        # so it can say so -- index_signature, which travels to spokes, must not.
+        # Empty for the CPU so no existing cache is invalidated by this existing.
+        self._split = None
+        self.vector_space_suffix = "" if self.provider == runtime.CPU_EP else self.provider
         if precision == "fp16" and self.provider == runtime.CPU_EP:
             # The misconfiguration that costs the most and shows the least: the
             # GPU asset running on the CPU. MEASURED on this box: query encoding
@@ -461,7 +467,10 @@ class OnnxEmbedder:
         self._batch = max(1, int(self.profile.batch))
         self._input_names = {node.name for node in self._session.get_inputs()}
         self._output_name = self._session.get_outputs()[0].name
+        # One batch, so this never takes the hybrid path -- which is why the split
+        # can be resolved immediately after it.
         self.dimensions = len(self.encode(["차원 확인"])[0])
+        self._resolve_hybrid_split()
 
     def _tokenize(self, batch) -> dict:
         """CPU half of a batch. Split out so it can overlap the device half."""
@@ -596,6 +605,8 @@ class OnnxEmbedder:
         promise as before, just with one more thing written down. `ENCODE_SPLIT=g:c`
         skips the measurement entirely and is the deterministic path.
         """
+        if self._split is not None:
+            return self._split
         override = os.environ.get("ENCODE_SPLIT", "").strip()
         if override:
             device_share, _, cpu_share = override.partition(":")
@@ -633,6 +644,27 @@ class OnnxEmbedder:
         )
         runtime.save_profile(profile_path, self.profile, {"encode_split": [device_share, cpu_share]})
         return device_share, cpu_share
+
+    def _resolve_hybrid_split(self) -> None:
+        """Fix the Tier B split NOW, before anything is encoded or cached.
+
+        Under Tier B a batch's vectors depend on WHICH device encoded it, and that
+        is a function of the split -- so the split belongs in the cache's
+        vector-space key. It has to be known EARLY: `encode_with_cache` computes
+        the signature and opens the cache before it calls encode(), so a split
+        discovered during the first encode would arrive after the key it belongs
+        to was already chosen. Resolving it here also makes the ratio a property
+        of the session rather than of whichever batch happened to be measured
+        first.
+        """
+        if self._devices != "hybrid" or self.provider == runtime.CPU_EP:
+            return
+        sample = ["가상자산 이용자 보호에 관한 법률 제1조(목적)"] * self._batch
+        device_share, cpu_share = self._hybrid_split(sample)
+        self._split = (device_share, cpu_share)
+        if cpu_share <= 0:
+            return
+        self.vector_space_suffix = f"{self.provider}+split{device_share}:{cpu_share}"
 
     def _run_on(self, session, feeds) -> list:
         return self._run_with_backoff(feeds, session)

@@ -179,10 +179,13 @@ ocr-compare: ## Do the paddle and onnx OCR backends read a page the same way? Us
 	$(PY) tools/ocr/compare_backends.py "$(FILE)"
 
 verify: ## Run the full verification gate
+	@echo "== accelerator layer contract (no GPU, no model, no index needed) =="
+	# The only thing that ran this before was the CI workflow, so `make verify` went
+	# green through the EP report, the doctype gate, a full build and three eval
+	# floors while the twelve invariants it all rests on were never checked locally.
+	$(PY) tools/test_runtime_contract.py
 	@echo "== execution provider and asset =="
 	$(PY) -m pipeline.runtime --save
-	@echo "== cross-hardware provider contract (skips on a CPU-only box) =="
-	$(PY) tools/check_ep_equivalence.py
 	@echo "== no evasion tokens =="
 	@! grep -rInE '$(EVASION_PATTERN)' pipeline transform agent .agents Makefile meltano.yml || (echo "FAIL: evasion token found" && exit 1)
 	@echo "OK"
@@ -200,6 +203,11 @@ verify: ## Run the full verification gate
 	@echo "== build =="
 	$(MAKE) build
 	@test -f data/serving/index.sqlite || (echo "FAIL: no index.sqlite" && exit 1)
+	@echo "== cross-hardware provider contract (skips on a CPU-only box) =="
+	# AFTER the build, not before: `make clean` deletes data/serving, so running this
+	# first meant that on a clean tree it always measured its 5-sentence fallback
+	# corpus -- where "identical top-10" over 5 documents passes unconditionally.
+	$(PY) tools/check_ep_equivalence.py
 	@echo "== retrieval regression floor =="
 	$(PY) -m pipeline.eval_retrieval --assert-baseline
 	@echo "== graph-reachability floor =="

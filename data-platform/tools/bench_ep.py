@@ -73,6 +73,7 @@ def _bench(provider: str, precision: str, texts: list, repeat: int) -> dict:
         embedder.encode(texts)
         elapsed = time.perf_counter() - started
         best = elapsed if best is None else min(best, elapsed)
+    batches = max(1, (len(texts) + embedder._batch - 1) // embedder._batch)
     return {
         "provider": provider,
         "asset": precision,
@@ -80,6 +81,9 @@ def _bench(provider: str, precision: str, texts: list, repeat: int) -> dict:
         "load_s": round(load, 2),
         "ms_per_text": round(best / len(texts) * 1000, 1),
         "texts_per_s": round(len(texts) / best, 2),
+        # Printed because it is the number that makes a CPU row comparable: the
+        # CPU tier is only as fast as the worker count the run actually reached.
+        "workers": embedder._encode_workers(batches) if provider == runtime.CPU_EP else 1,
     }
 
 
@@ -108,9 +112,17 @@ def _bench_isolated(provider: str, precision: str, texts: int, repeat: int) -> d
             check=False,
         )
         if out.exists() and out.stat().st_size:
-            return json.loads(out.read_text(encoding="utf-8"))
-    if completed.returncode < 0:
-        status = f"CRASHED (signal {-completed.returncode})"
+            try:
+                return json.loads(out.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                # A child killed mid-write leaves a truncated file.
+                return {"provider": provider, "asset": precision, "status": "no result (truncated)"}
+    # runtime.crash_signal, not `returncode < 0`: on Windows a real access
+    # violation arrives as an unsigned NTSTATUS, which the POSIX test reads as a
+    # clean non-zero exit -- on the one platform where the unverified NPU lives.
+    signal_number = runtime.crash_signal(completed.returncode)
+    if signal_number is not None:
+        status = f"CRASHED (signal/status {signal_number})"
     elif completed.returncode != 0:
         status = f"failed (exit {completed.returncode})"
     else:
@@ -120,7 +132,12 @@ def _bench_isolated(provider: str, precision: str, texts: int, repeat: int) -> d
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--texts", type=int, default=32, help="Passages per timed run (default 32).")
+    # 160, not 32. The CPU row runs _encode_workers = min(cores-2, 8, n_batches)
+    # PARALLEL sessions, so 32 passages is 2 batches and therefore 2 workers -- a
+    # 4x understatement of the CPU tier against the build this tool advises on. A
+    # GPU that beats one CPU thread can lose badly to eight parallel CPU sessions,
+    # and that is exactly the trap this tool exists to keep an operator out of.
+    parser.add_argument("--texts", type=int, default=160, help="Passages per timed run (default 160).")
     parser.add_argument("--repeat", type=int, default=2, help="Timed runs; the best is reported.")
     parser.add_argument("--one", nargs=2, metavar=("PROVIDER", "PRECISION"),
                         help="Internal: benchmark a single row and write JSON to --out.")
@@ -144,11 +161,12 @@ def main(argv=None) -> int:
 
     width = max(len(row["provider"]) for row in rows)
     print(f"\n{len(texts)} passages, best of {args.repeat}\n")
-    print(f"{'provider'.ljust(width)}  asset  {'ms/text':>9}  {'texts/s':>8}  status")
+    print(f"{'provider'.ljust(width)}  asset  {'ms/text':>9}  {'texts/s':>8}  {'workers':>7}  status")
     for row in rows:
         print(
             f"{row['provider'].ljust(width)}  {row['asset']:5}  "
-            f"{row.get('ms_per_text', '-'):>9}  {row.get('texts_per_s', '-'):>8}  {row['status']}"
+            f"{row.get('ms_per_text', '-'):>9}  {row.get('texts_per_s', '-'):>8}  "
+            f"{row.get('workers', '-'):>7}  {row['status']}"
         )
     ok = [row for row in rows if row["status"] == "ok"]
     if ok:
