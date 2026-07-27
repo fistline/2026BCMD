@@ -10,17 +10,27 @@
 
 PY ?= python3
 SKILL_CHECK := data-platform/tools/check_skills.py
+# 버전을 박아 둔다 — ruff 는 기본 규칙셋이 릴리스마다 바뀌어서, 핀이 없으면 어제 통과한
+# 코드가 오늘 실패한다. 올릴 때는 올리고 나서 한 번 돌려보고 커밋한다.
+RUFF := uvx ruff@0.16.0
 
-.PHONY: help check verify prompts
+.PHONY: help check lint fmt verify prompts
 
 help: ## 이 목록
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 
-check: ## 루트에 걸친 것만 빠르게 (스킬 프론트매터 + dist 최신성)
+check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매터 + dist 최신성)
 	@echo "== skill frontmatter (루트 + data-platform) =="
 	@$(PY) $(SKILL_CHECK) .agents/skills data-platform/.agents/skills
 	@echo "== sto-filing dist/ 가 스킬 정본과 일치하는가 =="
 	@cd gen-docs/st_prospectus && $(PY) build_prompts.py --check
+
+lint: ## ruff (설정·제외 대상은 ruff.toml)
+	@echo "== ruff =="
+	@$(RUFF) check .
+
+fmt: ## ruff 자동수정 (import 정렬·현대화 등). 의미를 바꾸는 것은 손대지 않는다
+	@$(RUFF) check --fix .
 
 verify: check ## check + data-platform 전체 게이트 (빌드 포함, 느림)
 	@echo

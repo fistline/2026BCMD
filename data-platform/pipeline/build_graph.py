@@ -22,7 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from pipeline import Paths, get_paths
 from pipeline.build_rag import connect_index, open_lake
@@ -67,7 +67,7 @@ def _create_schema(connection: sqlite3.Connection) -> None:
     )
 
 
-def build_graph(paths: Optional[Paths] = None) -> dict:
+def build_graph(paths: Paths | None = None) -> dict:
     """Rebuild nodes and edges from the gold layer. Idempotent by construction."""
     paths = paths or get_paths()
     paths.ensure()
@@ -191,10 +191,10 @@ def graph_query(
     start_node: str,
     direction: str = "downstream",
     max_depth: int = 3,
-    relations: Optional[Sequence[str]] = None,
+    relations: Sequence[str] | None = None,
     limit: int = 50,
-    connection: Optional[sqlite3.Connection] = None,
-    paths: Optional[Paths] = None,
+    connection: sqlite3.Connection | None = None,
+    paths: Paths | None = None,
 ) -> list:
     """Walk the dependency graph outward from one node.
 
@@ -237,8 +237,8 @@ def graph_query(
 
 def resolve_node(
     text: str,
-    connection: Optional[sqlite3.Connection] = None,
-    paths: Optional[Paths] = None,
+    connection: sqlite3.Connection | None = None,
+    paths: Paths | None = None,
     limit: int = 5,
 ) -> list:
     """Find candidate node ids for a human-typed name."""

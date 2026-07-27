@@ -26,9 +26,8 @@ reuses onnxruntime / tokenizers / huggingface_hub.
 
 from __future__ import annotations
 
-import os
-from functools import lru_cache
-from typing import Sequence
+from collections.abc import Sequence
+from functools import cache
 
 RERANK_DEFAULT_MODEL = "onnx-community/bge-reranker-v2-m3-ONNX"
 _ONNX_FILE = "onnx/model_int8.onnx"
@@ -108,7 +107,7 @@ class OnnxReranker:
         return out
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_reranker(model: str, allow_download: bool, threads: int):
     """One reranker per (model, allow_download, threads) for the process."""
     return OnnxReranker(model, allow_download=allow_download, threads=threads)

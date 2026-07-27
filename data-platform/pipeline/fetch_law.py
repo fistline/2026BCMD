@@ -64,7 +64,6 @@ import xml.etree.ElementTree as ET
 import zipfile
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional
 
 from pipeline import get_paths
 
@@ -126,7 +125,7 @@ class FetchError(RuntimeError):
 # --------------------------------------------------------------------------
 # HTTP (stdlib only, to keep this tool dependency-free like pipeline/extract.py)
 # --------------------------------------------------------------------------
-def _http_get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None, timeout: int = 30) -> bytes:
+def _http_get(url: str, params: dict | None = None, headers: dict | None = None, timeout: int = 30) -> bytes:
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
@@ -150,7 +149,7 @@ def _sanitise_filename(name: str) -> str:
     return cleaned or "document"
 
 
-def _land(filename: str, data: bytes, dest_dir: Optional[Path] = None) -> Path:
+def _land(filename: str, data: bytes, dest_dir: Path | None = None) -> Path:
     """Write bytes into the inbox (or a caller-supplied directory) and return the path.
 
     Writes to data/inbox/documents/ by default, never straight to data/raw or the
@@ -194,9 +193,9 @@ _DRF_TARGETS = {
 
 def fetch_law(
     query: str,
-    oc: Optional[str] = None,
-    ef_yd: Optional[str] = None,
-    dest_dir: Optional[Path] = None,
+    oc: str | None = None,
+    ef_yd: str | None = None,
+    dest_dir: Path | None = None,
     target: str = "law",
 ) -> Path:
     """Fetch an enacted 법령 or 행정규칙 body by name and land it as a .txt in the inbox.
@@ -263,10 +262,10 @@ def _assembly_rows(payload: dict, service: str) -> list:
 
 
 def resolve_bill(
-    name: Optional[str] = None,
-    bill_no: Optional[str] = None,
-    key: Optional[str] = None,
-    age: Optional[str] = "22",
+    name: str | None = None,
+    bill_no: str | None = None,
+    key: str | None = None,
+    age: str | None = "22",
     service: str = ASSEMBLY_BILL_SERVICE,
 ) -> list:
     """Resolve bill metadata (including BILL_ID) from open.assembly. Robots-clean.
@@ -313,15 +312,15 @@ def _parse_filegate(html: str) -> list:
 
 
 def fetch_bill(
-    name: Optional[str] = None,
-    bill_no: Optional[str] = None,
-    key: Optional[str] = None,
-    age: Optional[str] = "22",
+    name: str | None = None,
+    bill_no: str | None = None,
+    key: str | None = None,
+    age: str | None = "22",
     service: str = ASSEMBLY_BILL_SERVICE,
     allow_likms: bool = False,
-    dest_dir: Optional[Path] = None,
+    dest_dir: Path | None = None,
     stream=sys.stdout,
-) -> Optional[Path]:
+) -> Path | None:
     """Resolve a bill's metadata; with allow_likms, also download its 원문 HWP.
 
     Without allow_likms this only prints metadata and the official billDetail.do
@@ -395,9 +394,9 @@ def _dart_list(
     crtfc_key: str,
     bgn_de: str,
     end_de: str,
-    pblntf_ty: Optional[str],
-    corp_code: Optional[str],
-    detail_ty: Optional[str] = None,
+    pblntf_ty: str | None,
+    corp_code: str | None,
+    detail_ty: str | None = None,
 ) -> list:
     """One paginated list.json sweep of a window. Raises on a real error status;
     treats 013 (no data for the window) as an empty result, not a failure."""
@@ -485,7 +484,7 @@ def _report_matches(report_nm: str, terms: list) -> bool:
     return any(term in text for term in terms)
 
 
-def _dart_corp_index(crtfc_key: str, refresh: bool = False, cache_dir: Optional[Path] = None) -> list:
+def _dart_corp_index(crtfc_key: str, refresh: bool = False, cache_dir: Path | None = None) -> list:
     """Return the corp master as a list of (corp_code, corp_name, stock_code).
 
     corpCode.xml is one ZIP of the whole DART register (~100k corps, listed and
@@ -566,20 +565,20 @@ def _dart_related(key: str, corp_code: str, anchor_rcept_dt: str, pre_days: int,
 def fetch_dart(
     keyword: str = "투자계약증권",
     since: str = DART_INVESTMENT_CONTRACT_EPOCH,
-    until: Optional[str] = None,
+    until: str | None = None,
     pblntf_ty: str = "C",
-    detail_ty: Optional[str] = None,
-    corp: Optional[str] = None,
-    corp_code: Optional[str] = None,
+    detail_ty: str | None = None,
+    corp: str | None = None,
+    corp_code: str | None = None,
     refresh_corp: bool = False,
     related: bool = False,
     related_pre_days: int = 7,
     related_post_days: int = 365,
-    rcept_no: Optional[str] = None,
-    key: Optional[str] = None,
+    rcept_no: str | None = None,
+    key: str | None = None,
     list_only: bool = False,
     force: bool = False,
-    dest_dir: Optional[Path] = None,
+    dest_dir: Path | None = None,
     stream=sys.stdout,
 ) -> list:
     """Fetch 증권신고서 bodies whose report_nm matches `keyword` into the inbox.

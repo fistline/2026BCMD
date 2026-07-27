@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Optional
 
 from pipeline import get_paths, get_settings
 from pipeline.build_rag import hybrid_search, read_index_meta
@@ -33,7 +32,7 @@ def hybrid_search_tool(
     limit: int = 5,
     candidates: int = 40,
     full_content: bool = False,
-    collection: Optional[str] = None,
+    collection: str | None = None,
     include_fixtures: bool = False,
 ) -> dict:
     """Run a fused vector+keyword search over the serving index.
@@ -129,7 +128,7 @@ def list_collections() -> dict:
     return {"collections": [dict(row) for row in rows]}
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("query", nargs="?", help="Question or exact identifier to search for.")
     parser.add_argument("--limit", type=int, default=5)

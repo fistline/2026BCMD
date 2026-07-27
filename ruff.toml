@@ -1,0 +1,32 @@
+# 저장소 전역 린트 설정. ruff 는 상위로 올라가며 설정을 찾으므로 data-platform 안에서
+# 돌려도 이 파일이 적용된다(data-platform/pyproject.toml 에는 [tool.ruff] 를 두지 않는다).
+#
+# **얇게 유지한다.** 이 저장소가 실제로 깨진 지점은 스타일이 아니라 의미였다 — 잘못된 CLI
+# 플래그, 스킬 내부 모순, 채점기 오탐. 그건 eval 과 게이트가 잡는다. 린터는 위생을 맡고,
+# 위생 규칙이 늘어나 진짜 신호를 덮지 않게 한다.
+
+target-version = "py310"          # pyproject 의 requires-python 과 같은 바닥
+exclude = [
+    ".venv", ".meltano", "node_modules",
+    "gen-apps/*/",                # 생성물 dApp — 스킬이 만든 것이지 손으로 고치지 않는다
+    "*-workspace/",               # eval 산출물
+]
+
+[lint]
+# E4/E7/E9 = import·statement·런타임 오류. **E501(줄 길이)은 일부러 뺐다** —
+# 이 코드베이스는 한글 주석이 길어 100자 초과가 317줄인데, 그걸 다 접으면 설명이 끊긴다.
+# 줄 길이는 읽는 사람이 판단할 문제이지 게이트가 강제할 것이 아니다.
+select = [
+    "E4", "E7", "E9",  # pycodestyle — 진짜 오류만
+    "F",               # pyflakes — 미사용 import/변수, 정의되지 않은 이름
+    "I",               # isort — import 순서. 자동수정되고 diff 를 조용하게 만든다
+    "UP",              # pyupgrade — 낡은 표기 현대화
+    "B",               # bugbear — 실제 버그 패턴(가변 기본인자, 루프 변수 캡처 등)
+]
+
+# BLE001(blind-except)은 넣지 않았다. 이 저장소의 광범위 except 는 대부분 의도적이고
+# 코드에 사유 주석이 붙어 있다(예: "a broken source must not take the server down").
+# 규칙을 켜면 noqa 를 흩뿌리게 되는데, 그건 코드를 더 낫게 만들지 않는다.
+
+[lint.isort]
+known-first-party = ["pipeline", "agent", "tools"]

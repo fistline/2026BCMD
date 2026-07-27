@@ -42,7 +42,6 @@ import sys
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Optional
 
 ASSETS = Path(__file__).with_name("assets")
 # The C0 control set pipeline/extract.py rejects; strip it so an approved file

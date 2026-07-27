@@ -201,9 +201,12 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   포인터다(Claude Code만 `CLAUDE.md`를 읽으므로). 규약은 `AGENTS.md`에서만 고친다.
 - **스킬은 `.agents/skills/`에서만 편집**하고 `.claude/skills/`는 미러다.
   Windows에서 심링크가 깨지면 `data-platform`의 `make sync-skills`로 복사한다.
-- **커밋 전에 `make check`.** 저장소 루트에서 몇 초면 끝난다 — 스킬 프론트매터를 **YAML
-  파서로** 확인하고(`name`↔디렉터리 일치 포함), `dist/`가 스킬 정본과 어긋나지 않았는지 본다.
+- **커밋 전에 `make check`.** 저장소 루트에서 몇 초면 끝난다 — `ruff` 린트, 스킬
+  프론트매터를 **YAML 파서로** 확인(`name`↔디렉터리 일치 포함), `dist/`가 스킬 정본과
+  어긋나지 않았는지 확인. 자동수정은 `make fmt`(import 정렬·표기 현대화만 건드린다).
   data-platform까지 포함한 전체 게이트는 `make verify`(빌드가 돌아 느리다).
+  린트 규칙은 `ruff.toml`에 얇게 두었다 — 줄 길이는 강제하지 않고, 의도적인 광범위
+  `except`도 규칙으로 막지 않는다.
 - **sto-filing 패키징** — `sto-filing/` 또는 `prompt-templates/`를 고쳤으면
   `make prompts`(= `python3 build_prompts.py`)로 `dist/` 프롬프트 3종을 재생성한다.
   잊으면 배포본이 옛 버전을 조용히 서빙하는데, 이제 `make check`가 그걸 잡는다.

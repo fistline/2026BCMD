@@ -27,7 +27,6 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Optional
 
 import duckdb
 from singer_sdk import Sink, Target

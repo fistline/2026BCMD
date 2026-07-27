@@ -22,7 +22,6 @@ import argparse
 import json
 import os
 import shutil
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -40,10 +39,10 @@ class ChunkOut(BaseModel):
     chunk_index: int
     heading: str = ""
     content: str
-    char_start: Optional[int] = None
-    char_end: Optional[int] = None
-    token_estimate: Optional[int] = None
-    content_sha256: Optional[str] = None
+    char_start: int | None = None
+    char_end: int | None = None
+    token_estimate: int | None = None
+    content_sha256: str | None = None
 
 
 class DocumentChunks(BaseModel):
@@ -53,7 +52,7 @@ class DocumentChunks(BaseModel):
     doc_id: str
     rel_path: str
     doc_type: str
-    title: Optional[str] = None
+    title: str | None = None
     chunk_count: int
     # Typed on purpose. A bare `list` would make model_validate_json return
     # plain dicts, so a malformed or truncated export would load without
@@ -61,7 +60,7 @@ class DocumentChunks(BaseModel):
     chunks: list[ChunkOut]
 
 
-def export_chunks(paths: Optional[Paths] = None) -> dict:
+def export_chunks(paths: Paths | None = None) -> dict:
     """Rewrite data/processed/chunks/ from gold. Idempotent by construction.
 
     The directory is emptied first, so a document removed from the raw zone
@@ -139,7 +138,7 @@ def export_chunks(paths: Optional[Paths] = None) -> dict:
     }
 
 
-def load_document(doc_id: str, paths: Optional[Paths] = None) -> DocumentChunks:
+def load_document(doc_id: str, paths: Paths | None = None) -> DocumentChunks:
     """Read one exported document back, validating it against the schema."""
     paths = paths or get_paths()
     path = paths.processed / "chunks" / f"{doc_id}.json"

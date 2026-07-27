@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import importlib
 import re
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 # Adding a document type is one line here plus one module beside this file.
 # Declaration order is the tiebreak when two profiles both claim a document; the
@@ -86,7 +86,7 @@ def load_profiles() -> tuple:
     return tuple(profiles)
 
 
-def classify(rel_path: str, text: str) -> Optional[object]:
+def classify(rel_path: str, text: str) -> object | None:
     """Return the profile that claims this document, or None.
 
     Boolean, not scored: every REQUIRE pattern must match and no REJECT pattern

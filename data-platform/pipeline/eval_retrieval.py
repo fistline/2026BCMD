@@ -36,7 +36,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 from pipeline import Paths, Settings, get_paths, get_settings
 from pipeline.build_rag import (
@@ -63,7 +62,7 @@ DEPTH = 10
 MIN_RESOLVABLE = 0.6
 
 
-def load_queries(path: Optional[Path] = None) -> list:
+def load_queries(path: Path | None = None) -> list:
     payload = json.loads((path or QUERY_FILE).read_text(encoding="utf-8"))
     return payload["queries"]
 
@@ -171,7 +170,7 @@ def _source_sha() -> str:
         return ""
 
 
-def evaluate(paths: Optional[Paths] = None, settings: Optional[Settings] = None) -> Optional[dict]:
+def evaluate(paths: Paths | None = None, settings: Settings | None = None) -> dict | None:
     """Run all three arms. Returns None when the corpus does not match."""
     paths = paths or get_paths()
     settings = settings or get_settings()

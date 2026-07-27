@@ -45,7 +45,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from pipeline import Paths, Settings, get_paths, get_settings
 from pipeline.aliases import expand_query
@@ -207,7 +207,7 @@ def _discover_related(
     seed_docs: Sequence[str],
     documents: frozenset,
     depth: int,
-    relations: Optional[Sequence[str]],
+    relations: Sequence[str] | None,
     hidden_docs: frozenset,
     max_related_docs: int,
     collect_diagnostics: bool = True,
@@ -576,16 +576,16 @@ def graph_rag_search(
     limit: int = 5,
     candidates: int = 40,
     seed_limit: int = 5,
-    depth: Optional[int] = None,
-    relations: Optional[Sequence[str]] = None,
+    depth: int | None = None,
+    relations: Sequence[str] | None = None,
     max_related_docs: int = DEFAULT_MAX_RELATED_DOCS,
     per_doc_chunks: int = PER_DOC_CHUNKS,
-    collection: Optional[str] = None,
+    collection: str | None = None,
     include_fixtures: bool = False,
-    expand: Optional[bool] = None,
-    connection: Optional[sqlite3.Connection] = None,
-    paths: Optional[Paths] = None,
-    settings: Optional[Settings] = None,
+    expand: bool | None = None,
+    connection: sqlite3.Connection | None = None,
+    paths: Paths | None = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Hybrid retrieval plus graph-related context, in separate sections.
 

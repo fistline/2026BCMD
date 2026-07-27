@@ -14,8 +14,8 @@ import ast
 import hashlib
 import re
 import unicodedata
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import Iterable, Iterator
 
 # --------------------------------------------------------------------------
 # Tunables. Sizes are in characters, not model tokens: chunking must not depend
@@ -587,7 +587,9 @@ def _parse_with_profile(doc_id, rel_path, suffix, text, raw_bytes):
     idempotence. Profile edges are MERGED with the generic extractors rather
     than replacing them, so front-matter and wiki-link relations survive.
     """
-    from pipeline.doctypes import classify, edges as profile_edges, sections as profile_sections
+    from pipeline.doctypes import classify
+    from pipeline.doctypes import edges as profile_edges
+    from pipeline.doctypes import sections as profile_sections
 
     profile = classify(rel_path, text)
     if profile is None:

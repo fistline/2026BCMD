@@ -20,9 +20,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Optional
 
-from pipeline import get_paths, get_settings
+from pipeline import get_paths
 from pipeline.build_rag import read_index_meta
 from pipeline.graph_rag import DEPTH_CEILING, graph_rag_search
 
@@ -40,12 +39,12 @@ def _snippet(row: dict, full_content: bool) -> dict:
 def graph_rag_tool(
     query: str,
     limit: int = 5,
-    depth: Optional[int] = None,
+    depth: int | None = None,
     seed_limit: int = 5,
-    relations: Optional[list] = None,
+    relations: list | None = None,
     max_related_docs: int = 5,
     full_content: bool = False,
-    collection: Optional[str] = None,
+    collection: str | None = None,
     include_fixtures: bool = False,
 ) -> dict:
     """Run hybrid retrieval with graph-related context.
@@ -138,7 +137,7 @@ def graph_rag_tool(
     }
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("query", help="Question or exact identifier to search for.")
     parser.add_argument("--limit", type=int, default=5)

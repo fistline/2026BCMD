@@ -18,7 +18,7 @@ def knn_lookup(query_vector, table, limit=10):
 
 def cosine_distance(left, right):
     """Cosine distance between two equal-length sequences of floats."""
-    dot = sum(a * b for a, b in zip(left, right))
+    dot = sum(a * b for a, b in zip(left, right, strict=True))
     left_norm = math.sqrt(sum(a * a for a in left))
     right_norm = math.sqrt(sum(b * b for b in right))
     if left_norm == 0.0 or right_norm == 0.0:

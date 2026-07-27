@@ -43,7 +43,6 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from pathlib import Path
-from typing import Optional
 
 from pipeline.fetch_law import FetchError, _decode, _http_get, _land
 
@@ -71,7 +70,7 @@ class _ScraplingUnavailable(RuntimeError):
     """scrapling is not installed; the static path falls back to stdlib urllib."""
 
 
-def is_antibot_response(status: int, headers: Optional[dict], body: str) -> Optional[str]:
+def is_antibot_response(status: int, headers: dict | None, body: str) -> str | None:
     """Return a reason string if the response is an active bot-block, else None.
 
     Conservative on purpose: a bare 403/permission error is NOT flagged, so we do
@@ -155,7 +154,7 @@ def _scrapling_fetch(url: str, mode: str, timeout: int) -> tuple[int, dict, byte
     try:
         from scrapling.fetchers import DynamicFetcher, Fetcher, StealthyFetcher
     except Exception as error:  # noqa: BLE001
-        raise _ScraplingUnavailable(str(error))
+        raise _ScraplingUnavailable(str(error)) from error
     if mode == "stealth":
         page = StealthyFetcher.fetch(url, headless=True, network_idle=True)
     elif mode == "render":
@@ -179,7 +178,7 @@ def _fetch(url: str, mode: str, user_agent: str, timeout: int) -> tuple[int, dic
             raise FetchError(
                 f"--{mode} needs scrapling with a browser engine: {error}. Install it with "
                 f"`uv sync --extra web` then `uv run scrapling install`."
-            )
+            ) from error
     try:
         return _scrapling_fetch(url, "static", timeout)
     except _ScraplingUnavailable:
@@ -189,10 +188,10 @@ def _fetch(url: str, mode: str, user_agent: str, timeout: int) -> tuple[int, dic
 def fetch_web(
     url: str,
     *,
-    dest_dir: Optional[str] = None,
+    dest_dir: str | None = None,
     stealth: str = "auto",
     render: bool = False,
-    name: Optional[str] = None,
+    name: str | None = None,
     user_agent: str = USER_AGENT,
     stream=sys.stdout,
 ) -> Path:

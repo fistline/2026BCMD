@@ -9,7 +9,8 @@
 1. **같은 뜻의 다른 표현을 떨어뜨리지 않는다.** `채권적 청구권` 하나만 찾다가, 올바르게
    `수익 받을 계약상 권리`라고 쓴 출력을 실패로 셌다. 대안 표현을 `any_of` 로 묶는다.
 2. **금지 표현은 문맥을 본다.** 신고서는 "원금·수익 보장과 무관함"을 **반드시 써야** 하므로
-   `수익 보장` 키워드 검사는 필연적으로 오탐을 낸다. `banned_hits` 가 부정 표지를 걸러낸다.
+   `수익 보장` 키워드 검사는 필연적으로 오탐을 낸다. 그래서 **투자자를 향한 문서만**
+   줄 단위로 보고, 같은 줄에 경고·고지 표지가 있으면 위반으로 세지 않는다.
 """
 from __future__ import annotations
 
@@ -59,7 +60,7 @@ def pick(files: dict, *pats: str) -> str:
 def judge(a: str, ctx: dict):
     """assertion 하나를 판정한다. (passed, evidence) 또는 판정 불가면 None."""
     text, names, files = ctx["text"], ctx["names"], ctx.get("files", {})
-    has, any_of, banned_hits = ctx["has"], ctx["any_of"], ctx["banned_hits"]
+    has, any_of = ctx["has"], ctx["any_of"]
 
     # ---- 공통 ----
     if "법률자문" in a:
@@ -186,8 +187,9 @@ def judge(a: str, ctx: dict):
         review = pick(files, r"심사검토서")
         # 미충족·부분충족 판정을 내린 줄에 분량·비율·개수 논거가 섞였는지만 본다.
         # 문서가 '분량은 기준이 아니다'라고 쓰는 것은 위반이 아니므로 판정줄로 한정한다.
-        bad = [l for l in review.splitlines()
-               if re.search(r"미충족|부분충족", l) and re.search(r"분량|전체의 \d+\s*%|개수 (미달|부족)", l)]
+        bad = [line for line in review.splitlines()
+               if re.search(r"미충족|부분충족", line)
+               and re.search(r"분량|전체의 \d+\s*%|개수 (미달|부족)", line)]
         return not bad, ("판정줄에 분량·개수 논거 없음" if not bad else f"검출 {len(bad)}건: {bad[0][:70]}")
 
     if "집계표" in a and "미충족 항목의 ID" in a:

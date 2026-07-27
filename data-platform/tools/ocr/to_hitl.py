@@ -19,7 +19,6 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Optional
 
 from pipeline import get_paths
 
@@ -29,7 +28,7 @@ _HEADER_RE = re.compile(r"\A<!--.*?-->\n\n", re.DOTALL)
 def build_manifest(
     drafts_dir: Path,
     inbox: Path,
-    collection: Optional[str],
+    collection: str | None,
     task: str,
     hotspot_threshold: float = 0.80,
 ) -> dict:

@@ -41,7 +41,7 @@ class Paths:
     fixtures: Path
     source: Path
 
-    def ensure(self) -> "Paths":
+    def ensure(self) -> Paths:
         """Create the data-plane directories. Safe to call repeatedly."""
         for directory in (
             self.data,

@@ -26,7 +26,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 from pipeline import Paths, get_paths
 from pipeline.build_rag import connect_index, read_index_meta
@@ -45,7 +44,7 @@ def load_queries() -> list:
     return json.loads(QUERIES_PATH.read_text(encoding="utf-8"))["queries"]
 
 
-def evaluate(paths: Optional[Paths] = None) -> Optional[dict]:
+def evaluate(paths: Paths | None = None) -> dict | None:
     paths = paths or get_paths()
     if not paths.index_sqlite.exists():
         print("[eval_graph_rag] no index; run `make build` first")

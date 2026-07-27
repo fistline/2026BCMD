@@ -30,9 +30,10 @@ import re
 import sqlite3
 import struct
 import unicodedata
-from functools import lru_cache
+from collections.abc import Sequence
+from functools import cache, lru_cache
+from itertools import pairwise
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
 
 import duckdb
 import sqlite_vec
@@ -148,7 +149,7 @@ def _features(text: str) -> dict:
             units.append(token)
             counts[token] = counts.get(token, 0) + 1
 
-    for left, right in zip(units, units[1:]):
+    for left, right in pairwise(units):
         pair = f"{left}_{right}"
         counts[pair] = counts.get(pair, 0) + 1
     return counts
@@ -443,7 +444,7 @@ class OnnxInt8Embedder:
         return [vector for batch_result in results for vector in batch_result]
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_embedder(provider: str, model: str, dim: int, allow_download: bool):
     """Construct the embedder once per (provider, model, dim, allow_download).
 
@@ -566,7 +567,7 @@ def collection_of(rel_path: str) -> str:
     return head if sep and head else ROOT_COLLECTION
 
 
-def build_index(paths: Optional[Paths] = None, settings: Optional[Settings] = None) -> dict:
+def build_index(paths: Paths | None = None, settings: Settings | None = None) -> dict:
     """Rebuild the retrieval tables from gold.chunks. Idempotent by construction."""
     paths = paths or get_paths()
     settings = settings or get_settings()
@@ -639,7 +640,7 @@ def build_index(paths: Optional[Paths] = None, settings: Optional[Settings] = No
                 "INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)",
                 [
                     (row[0], serialize_vector(vector))
-                    for row, vector in zip(representatives, embeddings)
+                    for row, vector in zip(representatives, embeddings, strict=True)
                 ],
             )
             # The FTS copy is bigram-expanded, so `chunks_fts.content` is NOT
@@ -760,7 +761,7 @@ def assert_index_current(connection: sqlite3.Connection, embedder, dimensions: i
         )
 
 
-def read_index_meta(paths: Optional[Paths] = None, connection: Optional[sqlite3.Connection] = None) -> dict:
+def read_index_meta(paths: Paths | None = None, connection: sqlite3.Connection | None = None) -> dict:
     """The index's own build identity (index_meta rows), for a provenance footer.
 
     Read-only and cheap: lets a caller report WHICH index answered (signature,
@@ -865,7 +866,10 @@ def _fixture_doc_ids() -> frozenset:
     index, so the read path hides them from a real answer by default. Derived
     locally via the same document_id() the build uses -- no schema column, so no
     rebuild, and it stays in sync if a fixture is added or renamed."""
-    from pipeline.chunking import SUPPORTED_SUFFIXES, document_id  # lazy: avoid an import cycle
+    from pipeline.chunking import (  # lazy: avoid an import cycle
+        SUPPORTED_SUFFIXES,
+        document_id,
+    )
 
     fixtures_dir = Path(__file__).parent / "fixtures"
     return frozenset(
@@ -883,13 +887,13 @@ def hybrid_search(
     query: str,
     limit: int = 5,
     candidates: int = 40,
-    connection: Optional[sqlite3.Connection] = None,
-    paths: Optional[Paths] = None,
-    settings: Optional[Settings] = None,
-    expand: Optional[bool] = None,
-    collection: Optional[str] = None,
+    connection: sqlite3.Connection | None = None,
+    paths: Paths | None = None,
+    settings: Settings | None = None,
+    expand: bool | None = None,
+    collection: str | None = None,
     include_fixtures: bool = False,
-    rerank: Optional[bool] = None,
+    rerank: bool | None = None,
 ) -> list:
     """Vector + keyword retrieval fused with RRF.
 
@@ -943,7 +947,7 @@ def _search_once(
     candidates: int,
     connection: sqlite3.Connection,
     settings: Settings,
-    collection: Optional[str] = None,
+    collection: str | None = None,
     include_fixtures: bool = False,
 ) -> list:
     """One retrieval: the weighted RRF of the vector and keyword arms."""
@@ -993,10 +997,10 @@ def multi_hybrid_search(
     queries: Sequence[str],
     limit: int = 5,
     candidates: int = 40,
-    connection: Optional[sqlite3.Connection] = None,
-    paths: Optional[Paths] = None,
-    settings: Optional[Settings] = None,
-    collection: Optional[str] = None,
+    connection: sqlite3.Connection | None = None,
+    paths: Paths | None = None,
+    settings: Settings | None = None,
+    collection: str | None = None,
     include_fixtures: bool = False,
 ) -> list:
     """Retrieve each query variant separately, then fuse the ranked lists.

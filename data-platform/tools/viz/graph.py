@@ -35,7 +35,6 @@ import argparse
 import json
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from pipeline import Paths, get_paths
 from pipeline.build_rag import _fixture_doc_ids, connect_index, open_lake
@@ -190,8 +189,8 @@ def render_html(graph: dict) -> str:
     return template.replace(PLACEHOLDER, json.dumps(graph, ensure_ascii=False), 1)
 
 
-def build_viz(paths: Optional[Paths] = None, source: str = "auto",
-              out: Optional[Path] = None, include_fixtures: bool = False) -> dict:
+def build_viz(paths: Paths | None = None, source: str = "auto",
+              out: Path | None = None, include_fixtures: bool = False) -> dict:
     """Render the graph HTML. Idempotent: same inputs, same file."""
     paths = paths or get_paths()
     paths.ensure()

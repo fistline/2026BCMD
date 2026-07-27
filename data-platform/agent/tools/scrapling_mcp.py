@@ -34,13 +34,12 @@ import json
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional
 
 SERVER_NAME = "ScraplingServer"
 INSTALL_HINT = 'uv add "scrapling[ai]" && uv run scrapling install'
 
 
-def _scrapling_executable() -> Optional[str]:
+def _scrapling_executable() -> str | None:
     """Prefer the copy inside this project's venv over anything on PATH."""
     candidate = Path(sys.executable).parent / "scrapling"
     if candidate.exists():
@@ -106,7 +105,7 @@ def fetch(url: str, stealthy: bool = False, headless: bool = True):
     return Fetcher.fetch(url)
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", action="store_true", help="Print the MCP client JSON entry.")
     parser.add_argument("--http", action="store_true", help="Configure Streamable HTTP transport.")

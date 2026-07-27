@@ -245,7 +245,7 @@ def report_twins() -> int:
 
     total = len(pairs)
     print(f"[twins] {len(matched)}/{total} pair(s) share a fingerprint after normalisation")
-    for stem, original, _derived in pairs:
+    for _stem, original, _derived in pairs:
         print(f"  seeded: {original.name}")
     for stem, _left, _right in matched:
         print(f"  MATCH     {stem}")

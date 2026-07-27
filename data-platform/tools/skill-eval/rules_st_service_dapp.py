@@ -26,7 +26,6 @@ CODE_SUFFIX = re.compile(r"\.(sol|ts|tsx|json|toml)$", re.I)
 def judge(a: str, ctx: dict):
     """assertion 하나를 판정한다. (passed, evidence) 또는 판정 불가면 None."""
     text, names = ctx["text"], ctx["names"]
-    any_of = ctx["any_of"]
 
     if "컨트랙트 코드나 프로젝트 폴더를 생성하지 않는다" in a or "곧바로 코드 생성에 들어가지 않는다" in a:
         code = [n for n in names if CODE_SUFFIX.search(n)]

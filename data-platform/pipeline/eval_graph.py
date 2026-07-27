@@ -32,7 +32,6 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
 
 from pipeline import Paths, get_paths
 from pipeline.build_graph import graph_query
@@ -47,7 +46,7 @@ MIN_RESOLVABLE = 0.5
 METRICS = ("reach", "p_at_1", "mrr", "path_strength")
 
 
-def load_queries(path: Optional[Path] = None) -> list:
+def load_queries(path: Path | None = None) -> list:
     return json.loads((path or QUERY_FILE).read_text(encoding="utf-8"))["queries"]
 
 
@@ -66,7 +65,7 @@ def _score(result: list, relevant: set) -> dict:
     }
 
 
-def evaluate(paths: Optional[Paths] = None) -> Optional[dict]:
+def evaluate(paths: Paths | None = None) -> dict | None:
     paths = paths or get_paths()
     if not paths.index_sqlite.exists():
         print("[eval-graph] no index; run `make build` first.", file=sys.stderr)

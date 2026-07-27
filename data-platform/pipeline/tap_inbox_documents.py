@@ -17,9 +17,9 @@ in pyproject.toml (`pipeline.tap_inbox_documents:TapInboxDocuments.cli`).
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Optional
 
 from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
@@ -92,7 +92,7 @@ class DocumentsStream(_InboxStreamBase):
         th.Property("ingested_at", th.DateTimeType),
     ).to_dict()
 
-    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
+    def get_records(self, context: dict | None) -> Iterable[dict]:
         for parsed, path, ingested_at in self.parsed_documents():
             modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
             yield {
@@ -128,7 +128,7 @@ class ChunksStream(_InboxStreamBase):
         th.Property("ingested_at", th.DateTimeType),
     ).to_dict()
 
-    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
+    def get_records(self, context: dict | None) -> Iterable[dict]:
         for parsed, _path, ingested_at in self.parsed_documents():
             for chunk in parsed.chunks:
                 yield {
@@ -164,7 +164,7 @@ class RelationsStream(_InboxStreamBase):
         th.Property("ingested_at", th.DateTimeType),
     ).to_dict()
 
-    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
+    def get_records(self, context: dict | None) -> Iterable[dict]:
         for parsed, _path, ingested_at in self.parsed_documents():
             for relation in parsed.relations:
                 yield {

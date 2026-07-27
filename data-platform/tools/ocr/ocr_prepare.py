@@ -48,7 +48,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 # A line the recogniser is less sure about than this is flagged as a hotspot for
 # the review UI (matches the "confidence > 0.92" gate in the proposed design).
@@ -75,7 +74,7 @@ def _require():
         raise SystemExit(
             f"the OCR stack is not installed. Operators enable it with:\n    {INSTALL_HINT}\n"
             f"(missing: {error.name}). The core build never needs this."
-        )
+        ) from None
 
 
 def strip_control(text: str) -> str:
@@ -243,7 +242,7 @@ def collect_pages(inputs: list, dpi: int, scratch: Path) -> tuple:
     return images, labels
 
 
-def ocr_pdf(inputs, out_path: Path, use_vl: bool = False, dpi: int = 200, scratch: Optional[Path] = None) -> Path:
+def ocr_pdf(inputs, out_path: Path, use_vl: bool = False, dpi: int = 200, scratch: Path | None = None) -> Path:
     """Rasterise, OCR, strip control chars, write the draft. Returns out_path."""
     _require()
     if isinstance(inputs, (str, Path)):

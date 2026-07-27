@@ -27,8 +27,8 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 import duckdb
 
@@ -227,9 +227,9 @@ def stage_sync(paths: Paths, settings: Settings) -> None:
 
 
 def build(
-    paths: Optional[Paths] = None,
-    settings: Optional[Settings] = None,
-    only: Optional[Sequence[str]] = None,
+    paths: Paths | None = None,
+    settings: Settings | None = None,
+    only: Sequence[str] | None = None,
     seed: bool = True,
 ) -> int:
     """Run the pipeline end to end (or just the named stages)."""

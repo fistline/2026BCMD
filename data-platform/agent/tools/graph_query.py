@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from pipeline import get_paths
 from pipeline.build_graph import DIRECTIONS, graph_query, resolve_node
@@ -34,7 +34,7 @@ def graph_query_tool(
     node: str,
     direction: str = "upstream",
     max_depth: int = 3,
-    relations: Optional[Sequence[str]] = None,
+    relations: Sequence[str] | None = None,
     limit: int = 50,
 ) -> dict:
     """Traverse the graph from one node and report what is reachable.
@@ -90,7 +90,7 @@ def graph_query_tool(
     }
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("node", help="Node id (or a name close to one) to start from.")
     parser.add_argument("--direction", default="upstream", choices=sorted(DIRECTIONS))

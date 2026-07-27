@@ -25,6 +25,7 @@ import sys
 import tempfile
 import traceback
 import unicodedata
+from itertools import pairwise
 from pathlib import Path
 
 # Smoke pins the FUSED core (deterministic retrieval + graph). The opt-in
@@ -35,16 +36,32 @@ from pathlib import Path
 # this wins over .env.
 os.environ["RERANK"] = "0"
 
-from pipeline import get_paths, get_settings
+from pipeline import chunking, get_paths, get_settings
+from pipeline import extract as extract_module
+from pipeline.aliases import expand_query
 from pipeline.build_graph import graph_query, resolve_node
-from pipeline import chunking
+from pipeline.build_rag import (
+    CJK_RUN,
+    HashingEmbedder,
+    _features,
+    _fixture_doc_ids,
+    build_fts_query,
+    connect_index,
+    expand_cjk,
+    get_embedder,
+    index_signature,
+    serialize_vector,
+)
+from pipeline.build_rag import (
+    hybrid_search as _hybrid_search,
+)
 from pipeline.chunking import (
+    _KO_SECTION_RE,
     BINARY_SUFFIXES,
     FORMAT_PRIORITY,
     MAX_CHUNK_CHARS,
     SUPPORTED_SUFFIXES,
     ChunkingError,
-    _KO_SECTION_RE,
     _split_window,
     chunk_text,
     document_id,
@@ -52,24 +69,9 @@ from pipeline.chunking import (
     normalize_for_fingerprint,
     parse_document,
 )
-from pipeline.aliases import expand_query
 from pipeline.export import DocumentChunks
 from pipeline.extract import ExtractionCorrupt, ExtractionEmpty, extract_text
-from pipeline import extract as extract_module
 from pipeline.watcher import _superseded_renditions
-from pipeline.build_rag import (
-    CJK_RUN,
-    HashingEmbedder,
-    _features,
-    build_fts_query,
-    connect_index,
-    expand_cjk,
-    _fixture_doc_ids,
-    get_embedder,
-    hybrid_search as _hybrid_search,
-    index_signature,
-    serialize_vector,
-)
 
 
 # Smoke fixtures share the serving index but build_rag hides them from real answers
@@ -565,8 +567,8 @@ def test_chunking() -> None:
     )
     check(
         "every window advances by a meaningful amount",
-        all(later - earlier >= MAX_CHUNK_CHARS // 3 for earlier, later in zip(starts, starts[1:])),
-        [later - earlier for earlier, later in zip(starts, starts[1:])][:6],
+        all(later - earlier >= MAX_CHUNK_CHARS // 3 for earlier, later in pairwise(starts)),
+        [later - earlier for earlier, later in pairwise(starts)][:6],
     )
 
     # Article sectioning on text with no Markdown headings, which is what every
@@ -1395,8 +1397,9 @@ def test_reachability_diagnostics() -> None:
     only counts and pivot-node ids, never a document id.
     """
     print("reachability diagnostics")
-    import sqlite3 as _sqlite3
     import json as _json
+    import sqlite3 as _sqlite3
+
     from pipeline.graph_rag import _discover_related
 
     def graph(edges):
