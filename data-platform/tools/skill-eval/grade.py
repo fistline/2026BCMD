@@ -42,6 +42,7 @@ from pathlib import Path
 # 도메인 정규식(법 조문·문구)은 전부 규칙 모듈 쪽에 있다 — 이 파일은 스킬을 모른다.
 RULES = {
     "sto-filing": "rules_sto_filing",
+    "st-service-dapp": "rules_st_service_dapp",
 }
 
 # 보장성·금지 표현은 부정형·경고형으로도 반드시 등장한다. 증권신고서라면 오히려
