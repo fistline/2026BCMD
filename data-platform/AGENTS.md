@@ -25,6 +25,9 @@ package reaches the pipeline only once the plugins are reinstalled.
 | `make eval-ask` | Related-section floor for `make ask` (graph arm membership) |
 | `make gate` | Acceptance gate for document-type profiles |
 | `make triage` | Which profile claims each document in `data/raw` |
+| `make dupes` | Content-duplicate renditions the fingerprint dedup collapsed |
+| `make dupes-twins` | Do `source/` twin renditions (`X.hwp` beside `X.pdf`) match? Reads no lake state |
+| `make dupes-controls` | Fuzzy twin-detector controls; also runs blocking inside `make verify` |
 | `make verify` | Full verification gate |
 | `make clean` | Delete regenerable state only |
 
