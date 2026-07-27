@@ -28,6 +28,12 @@ TIER1 = {
     "이해상충": r"이해상충",
 }
 
+# 보장 표현이 **경고·고지·질문**으로 쓰였음을 알리는 표지. 신고서는 "원금·수익 보장과
+# 무관함"을 반드시 써야 하므로, 이 표지가 같은 줄에 있으면 위반이 아니다.
+WARNING_CONTEXT = re.compile(
+    r"않|무관|없|아니|금지|재분류|위험|불가|배제|되지|해서는|오인|주의|"
+    r"유사수신|채무증권|회색|미확정|확인 요망|유무|평가되어|읽[혀히]")
+
 BANNED = [r"수익\s*보장", r"원금\s*손실\s*없", r"안정적\s*수익", r"안정적\s*현금흐름", r"확실한\s*수익"]
 
 
@@ -120,9 +126,24 @@ def judge(a: str, ctx: dict):
         return ok, f"CSV {csv or '없음'} · '가정' 표기 {'있음' if '가정' in text else '없음'}"
 
     if "보장성 표현" in a:
-        hit = banned_hits(text, BANNED)
-        return not hit, ("긍정형 보장 표현 없음 (부정·경고형 용례는 제외)" if not hit
-                         else f"검출 {len(hit)}건: {hit[:2]}")
+        # 이 검사는 세 번 오탐을 냈다. 단어를 더 걸러내는 것으로는 안 되고, **어디를 보는지**를
+        # 좁혀야 한다. 금지되는 것은 투자자에게 하는 약속이지 보장 약정을 논하는 서술이 아니다.
+        #   · 증권유형판정서 — "최소수익 보장이 있으면 채무증권 재분류" (재분류 위험표)
+        #   · 입력요청서   — "원금·최소수익 보장 약정 유무" (질문 항목)
+        #   · 심사검토서   — "보장성 표현 스캔 결과 해당 없음" (심사 기록)
+        # 셋 다 그 표현을 **써야** 하는 문서다. 투자자를 향한 문서(신고서 본문·응답)만 본다.
+        scope = "\n".join(c for n, c in files.items()
+                           if re.search(r"증권신고서|response\.md", n)) or text
+        # 표는 한 줄에 근거와 판정이 같이 들어가므로 줄 단위가 60자 창보다 정확하다.
+        hits = []
+        for line in scope.splitlines():
+            if not any(re.search(pat, line) for pat in BANNED):
+                continue
+            if WARNING_CONTEXT.search(line):
+                continue
+            hits.append(line.strip()[:90])
+        return not hits, ("투자자용 문서에 긍정형 보장 표현 없음 (경고·고지 용례 제외)"
+                          if not hits else f"검출 {len(hits)}건: {hits[:2]}")
 
     if "손실(하락) 시나리오" in a:
         ok = has(text, r"하락", r"상승")
