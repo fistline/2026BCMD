@@ -38,6 +38,11 @@ class Paths:
     ducklake_data: Path
     sqlmesh_state: Path
     index_sqlite: Path
+    # Build cache, not a serving artefact: `make sync` ships data/serving to the
+    # spokes and a spoke has no use for it. Removed by `make clean` (which wipes
+    # data/processed) but NOT by `make clean-index`, so dropping the index to
+    # rebuild it stays cheap.
+    vector_cache: Path
     fixtures: Path
     source: Path
 
@@ -78,6 +83,7 @@ def get_paths() -> Paths:
         ducklake_data=processed / "ducklake",
         sqlmesh_state=processed / "sqlmesh_state.duckdb",
         index_sqlite=data / "serving" / "index.sqlite",
+        vector_cache=processed / "vector_cache.sqlite",
         fixtures=PROJECT_ROOT / "pipeline" / "fixtures",
         source=PROJECT_ROOT / "source",
     )
@@ -93,6 +99,10 @@ class Settings:
     embedding_provider: str
     embedding_dim: int
     embedding_model: str
+    # Which ONNX asset the fleet uses: int8 (CPU format, the default and the
+    # historical behaviour) or fp16 (what a GPU execution provider wants). A
+    # FLEET-wide setting, not a per-node one -- see resolve_precision().
+    embedding_precision: str
     rrf_k: int
     vector_weight: float
     keyword_weight: float
@@ -105,6 +115,9 @@ class Settings:
     rerank_candidates: int
     rerank_weight: float
     rerank_threads: int
+    # int8 (default, CPU) | fp16 (GPU) | auto. Unlike the embedder's precision
+    # this is machine-local: no reranker output is persisted or synced.
+    rerank_precision: str
 
 
 def get_settings() -> Settings:
@@ -123,6 +136,7 @@ def get_settings() -> Settings:
         embedding_model=os.environ.get(
             "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
         ),
+        embedding_precision=_embedding_precision(),
         rrf_k=int(os.environ.get("RRF_K", "60")),
         # Measured on 45 Korean queries; flat across 0.3-0.5, so no knife-edge.
         vector_weight=float(os.environ.get("VECTOR_WEIGHT", "0.3")),
@@ -143,7 +157,24 @@ def get_settings() -> Settings:
         # only breaks near-ties. Tune via `make eval-rerank`.
         rerank_weight=float(os.environ.get("RERANK_WEIGHT", "0.15")),
         rerank_threads=int(os.environ.get("RERANK_THREADS", "1")),
+        rerank_precision=_precision("RERANK_PRECISION"),
     )
+
+
+def _precision(variable: str) -> str:
+    """int8 (default) | fp16 | auto, for EMBEDDING_PRECISION and RERANK_PRECISION.
+
+    Validated on read, like GRAPH_DEPTH, so a typo fails on the first settings
+    load rather than at model-construction time deep inside a build.
+    """
+    value = os.environ.get(variable, "int8").strip().lower()
+    if value not in {"int8", "fp16", "auto"}:
+        raise ValueError(f"{variable} must be int8, fp16 or auto; got {value!r}")
+    return value
+
+
+def _embedding_precision() -> str:
+    return _precision("EMBEDDING_PRECISION")
 
 
 def _graph_depth() -> int:

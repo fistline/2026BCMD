@@ -26,11 +26,22 @@ reuses onnxruntime / tokenizers / huggingface_hub.
 
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Sequence
 from functools import cache
 
+from pipeline import runtime
+
 RERANK_DEFAULT_MODEL = "onnx-community/bge-reranker-v2-m3-ONNX"
-_ONNX_FILE = "onnx/model_int8.onnx"
+# Same asset rule as the embedder: int8 is the CPU format, fp16 is what a GPU
+# execution provider wants. Unlike the embedder this precision is NOT a fleet
+# decision -- no reranker output is persisted, so it never has to agree with
+# anything on another machine. It still defaults to int8 so the shipped
+# behaviour, and `eval-rerank`'s recorded floor, do not move on their own.
+_ASSETS = {
+    "int8": "onnx/model_int8.onnx",
+    "fp16": "onnx/model_fp16.onnx",
+}
 _MAX_TOKENS = 512
 _BATCH = 16   # mirror the embedder's cap so per-call batch memory stays bounded (8GB)
 _ROUND = 4    # round CE logits before ranking -> ties break on chunk_id -> deterministic
@@ -39,13 +50,21 @@ _ROUND = 4    # round CE logits before ranking -> ties break on chunk_id -> dete
 class OnnxReranker:
     name = "bge-reranker-v2-m3-onnx-int8"
 
-    def __init__(self, model_name: str, allow_download: bool = False, threads: int = 1):
+    def __init__(
+        self,
+        model_name: str,
+        allow_download: bool = False,
+        threads: int = 1,
+        precision: str = "int8",
+    ):
         try:
             import numpy as np
-            import onnxruntime as ort
             from huggingface_hub import hf_hub_download
             from huggingface_hub.errors import LocalEntryNotFoundError
             from tokenizers import Tokenizer
+
+            if importlib.util.find_spec("onnxruntime") is None:
+                raise ImportError("onnxruntime")
         except ImportError as error:
             raise RuntimeError(
                 "RERANK=1 needs the onnx-embed extra (onnxruntime, tokenizers, "
@@ -54,6 +73,9 @@ class OnnxReranker:
 
         self._np = np
         self.model_name = model_name
+        if precision not in _ASSETS:
+            raise ValueError(f"RERANK_PRECISION must be one of {sorted(_ASSETS)}, got {precision!r}")
+        self.precision = precision
 
         def _fetch(filename: str) -> str:
             # Same offline contract as OnnxInt8Embedder: local cache first on both
@@ -75,15 +97,14 @@ class OnnxReranker:
         self._tokenizer.enable_truncation(max_length=_MAX_TOKENS)
         self._tokenizer.enable_padding()
 
-        options = ort.SessionOptions()
         # Single-thread by default: a threaded matmul's accumulation order is not
         # fixed, so pinning threads keeps the logits -- and thus the ranking --
         # stable run-to-run, the same reason the embedder pins them.
-        options.intra_op_num_threads = max(1, int(threads))
-        options.inter_op_num_threads = 1
-        self._session = ort.InferenceSession(
-            _fetch(_ONNX_FILE), sess_options=options, providers=["CPUExecutionProvider"]
-        )
+        # runtime.detect() keeps this on the CPU unless the fp16 asset is asked
+        # for, so `RERANK=1` alone never silently moves onto a GPU.
+        self.profile = runtime.detect(precision)
+        self._session = runtime.make_session(_fetch(_ASSETS[precision]), self.profile, threads=threads)
+        self.provider = self._session.get_providers()[0]
         self._input_names = {node.name for node in self._session.get_inputs()}
 
     def _score_batch(self, pairs) -> list:
@@ -108,13 +129,32 @@ class OnnxReranker:
 
 
 @cache
-def _load_reranker(model: str, allow_download: bool, threads: int):
-    """One reranker per (model, allow_download, threads) for the process."""
-    return OnnxReranker(model, allow_download=allow_download, threads=threads)
+def _load_reranker(model: str, allow_download: bool, threads: int, precision: str):
+    """One reranker per (model, allow_download, threads, precision) for the process."""
+    return OnnxReranker(
+        model, allow_download=allow_download, threads=threads, precision=precision
+    )
+
+
+def resolve_precision(settings) -> str:
+    """`auto` means "fp16 if this box has an execution provider that wants it".
+
+    Safe to resolve per node here, unlike the embedder's precision: a reranker
+    score is computed and discarded within one query.
+    """
+    requested = (settings.rerank_precision or "int8").strip().lower()
+    if requested != "auto":
+        return requested
+    return runtime.precision_for(runtime.detect("fp16").provider)
 
 
 def get_reranker(settings, allow_download: bool = False):
-    return _load_reranker(settings.rerank_model, allow_download, settings.rerank_threads)
+    return _load_reranker(
+        settings.rerank_model,
+        allow_download,
+        settings.rerank_threads,
+        resolve_precision(settings),
+    )
 
 
 def rerank(query, variants, rows, settings, limit, allow_download: bool = False) -> list:

@@ -28,6 +28,10 @@ package reaches the pipeline only once the plugins are reinstalled.
 | `make dupes` | Content-duplicate renditions the fingerprint dedup collapsed |
 | `make dupes-twins` | Do `source/` twin renditions (`X.hwp` beside `X.pdf`) match? Reads no lake state |
 | `make dupes-controls` | Fuzzy twin-detector controls; also runs blocking inside `make verify` |
+| `make gpu-probe` | Which execution provider this machine selects, and whether `fp16` would change it |
+| `make bench-ep` | Measured ms/passage per (provider, asset). Decide GPU-or-not with numbers |
+| `make setup-gpu GPU=cuda\|directml` | Install a GPU wheel (they are mutually exclusive; macOS needs neither) |
+| `make ep-equiv` | Cross-hardware contract: same asset on two providers must agree. Skips on a CPU-only box |
 | `make verify` | Full verification gate |
 | `make clean` | Delete regenerable state only |
 
@@ -87,6 +91,24 @@ mistakes; everything else is recoverable.
    ignored: fetched pages must land in `data/inbox/documents/` and go through the
    normal pipeline — never straight into `data/raw` or the index, or the retrieved
    material loses the provenance every other document carries.
+
+9. **Reproducibility is scoped to a machine and its device profile — and the
+   cross-hardware promise is a TOLERANCE, not equality.** A rebuild on the same
+   machine with the same profile is byte-for-byte identical, and the pinned
+   single-thread sessions are what buy that. Across machines it cannot hold: a
+   GPU kernel accumulates in a different order than a CPU one, so the contract
+   there is "same asset, different provider ⇒ cosine ≥ 0.9999 and identical
+   top-10", asserted by `tools/check_ep_equivalence.py`. Two consequences worth
+   knowing before touching `pipeline/runtime.py`: the ASSET (int8 vs fp16) is in
+   `index_signature` because it is a different vector space, and the EXECUTION
+   PROVIDER deliberately is not, because an index built on a GPU box must stay
+   queryable on a CPU-only spoke. What breaks if ignored: put the provider in the
+   signature and the first `make sync` hands every spoke an index it refuses to
+   read. The ENCODE BATCH is in the signature for the same reason as the asset —
+   the tokenizer pads to the batch's longest sequence, so batch composition moves
+   the vectors (measured: cosine 0.9918, three orders of magnitude more than any
+   provider difference). It is not a throughput knob and the GPU does not get a
+   bigger one.
 
 ## Conventions
 

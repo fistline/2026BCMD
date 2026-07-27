@@ -12,6 +12,11 @@ resolution-markers = [
     "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
+conflicts = [[
+    { package = "local-agent-platform", extra = "gpu-cuda" },
+    { package = "local-agent-platform", extra = "gpu-directml" },
+    { package = "local-agent-platform", extra = "onnx-embed" },
+]]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -29,12 +34,12 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohappyeyeballs" },
     { name = "aiosignal" },
-    { name = "async-timeout", marker = "python_full_version < '3.11'" },
+    { name = "async-timeout", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "attrs" },
     { name = "frozenlist" },
     { name = "multidict" },
     { name = "propcache" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "yarl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/58/d9/22ce5786ac0c1653ae8b6c23bded02c1686d11f0dbb45b31ce128e0df985/aiohttp-3.14.3.tar.gz", hash = "sha256:9491196535a88924a60afd5b5f434b5b203b6cc616250878dbdb223a8f7844bc", size = 7971213, upload-time = "2026-07-23T01:57:27.037Z" }
@@ -165,7 +170,7 @@ version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "frozenlist" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/61/62/06741b579156360248d1ec624842ad0edf697050bbaf7c3e46394e106ad1/aiosignal-1.4.0.tar.gz", hash = "sha256:f47eecd9468083c2029cc99945502cb7708b082c232f9aca65da147157b251c7", size = 25007, upload-time = "2025-07-03T22:54:43.528Z" }
 wheels = [
@@ -195,7 +200,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mako" },
     { name = "sqlalchemy" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1a/cc/ac0bed8e562e7407fe55c3ba85a4dce86e6dbd8730887bd1e406a6c5c18a/alembic-1.18.5.tar.gz", hash = "sha256:1554982221dd17e9a749b53902407578eb305e453f71999e8c7f0a48389fff8e", size = 2060480, upload-time = "2026-06-25T15:20:54.888Z" }
@@ -213,13 +218,19 @@ wheels = [
 ]
 
 [[package]]
+name = "antlr4-python3-runtime"
+version = "4.9.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/38/7859ff46355f76f8d19459005ca000b6e7012f2f1ca597746cbcd1fbfe5e/antlr4-python3-runtime-4.9.3.tar.gz", hash = "sha256:f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b", size = 117034, upload-time = "2021-11-06T17:52:23.524Z" }
+
+[[package]]
 name = "anyio"
 version = "4.14.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "idna" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496eff839d4a6a1aed3bfafc7b3ab4b0d1b243a12573dd/anyio-4.14.2.tar.gz", hash = "sha256:cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f", size = 260176, upload-time = "2026-07-12T20:29:07.082Z" }
 wheels = [
@@ -347,7 +358,7 @@ name = "cffi"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/57/5f/ff100cae70ebe9d8df1c01a00e510e45d9adb5c1fdda84791b199141de97/cffi-2.1.0.tar.gz", hash = "sha256:efc1cdd798b1aaf39b4610bba7aad28c9bea9b910f25c784ccf9ec1fa719d1f9", size = 531036, upload-time = "2026-07-06T21:34:30.382Z" }
 wheels = [
@@ -587,7 +598,7 @@ name = "click"
 version = "8.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/bb/63/f9e1ea081ce35720d8b92acde70daaedace594dc93b693c869e0d5910718/click-8.3.3.tar.gz", hash = "sha256:398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2", size = 328061, upload-time = "2026-04-22T15:11:27.506Z" }
 wheels = [
@@ -620,7 +631,7 @@ name = "colorlog"
 version = "6.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8c/55/ba79756cb90c8d69d599d57785398ac87bba7b19c80e87f4e8a562197c93/colorlog-6.12.0.tar.gz", hash = "sha256:2a7924c1dadf18b22a0eb8b06d1c7b01d5341707ec1641eb6fcc4fde0c3e8e5f", size = 18151, upload-time = "2026-07-23T13:40:40.71Z" }
 wheels = [
@@ -846,7 +857,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (python_full_version == '3.11.*' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version == '3.11.*' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version == '3.11.*' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version >= '3.12' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version >= '3.12' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version >= '3.12' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version == '3.11.*' and extra != 'extra-20-local-agent-platform-gpu-cuda' and extra != 'extra-20-local-agent-platform-gpu-directml' and extra != 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1246,7 +1257,7 @@ name = "importlib-metadata"
 version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.12'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/01/15bb152d77b21318514a96f43af312635eb2500c96b55398d020c93d86ea/importlib_metadata-9.0.0.tar.gz", hash = "sha256:a4f57ab599e6a2e3016d7595cfd72eb4661a5106e787a95bcc90c7105b831efc", size = 56405, upload-time = "2026-03-20T06:42:56.999Z" }
 wheels = [
@@ -1272,17 +1283,17 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "colorama", marker = "python_full_version < '3.11' and sys_platform == 'win32'" },
-    { name = "decorator", marker = "python_full_version < '3.11'" },
-    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
-    { name = "jedi", marker = "python_full_version < '3.11'" },
-    { name = "matplotlib-inline", marker = "python_full_version < '3.11'" },
-    { name = "pexpect", marker = "python_full_version < '3.11' and sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "prompt-toolkit", marker = "python_full_version < '3.11'" },
-    { name = "pygments", marker = "python_full_version < '3.11'" },
-    { name = "stack-data", marker = "python_full_version < '3.11'" },
-    { name = "traitlets", marker = "python_full_version < '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "colorama", marker = "(python_full_version < '3.11' and sys_platform == 'win32') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "decorator", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "jedi", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "matplotlib-inline", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "pexpect", marker = "(python_full_version < '3.11' and sys_platform != 'emscripten' and sys_platform != 'win32') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "prompt-toolkit", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "pygments", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "stack-data", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "traitlets", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/40/18/f8598d287006885e7136451fdea0755af4ebcbfe342836f24deefaed1164/ipython-8.39.0.tar.gz", hash = "sha256:4110ae96012c379b8b6db898a07e186c40a2a1ef5d57a7fa83166047d9da7624", size = 5513971, upload-time = "2026-03-27T10:02:13.94Z" }
 wheels = [
@@ -1302,18 +1313,18 @@ resolution-markers = [
     "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "colorama", marker = "python_full_version >= '3.11' and sys_platform == 'win32'" },
-    { name = "decorator", marker = "python_full_version >= '3.11'" },
-    { name = "ipython-pygments-lexers", marker = "python_full_version >= '3.11'" },
-    { name = "jedi", marker = "python_full_version >= '3.11'" },
-    { name = "matplotlib-inline", marker = "python_full_version >= '3.11'" },
-    { name = "pexpect", marker = "python_full_version >= '3.11' and sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "prompt-toolkit", marker = "python_full_version >= '3.11'" },
-    { name = "psutil", marker = "python_full_version >= '3.11' and sys_platform != 'cygwin' and sys_platform != 'emscripten'" },
-    { name = "pygments", marker = "python_full_version >= '3.11'" },
-    { name = "stack-data", marker = "python_full_version >= '3.11'" },
-    { name = "traitlets", marker = "python_full_version >= '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version == '3.11.*'" },
+    { name = "colorama", marker = "(python_full_version >= '3.11' and sys_platform == 'win32') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "decorator", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "ipython-pygments-lexers", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "jedi", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "matplotlib-inline", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "pexpect", marker = "(python_full_version >= '3.11' and sys_platform != 'emscripten' and sys_platform != 'win32') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "prompt-toolkit", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "psutil", marker = "(python_full_version >= '3.11' and sys_platform != 'cygwin' and sys_platform != 'emscripten') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'cygwin' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'cygwin' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'cygwin' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'emscripten' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "pygments", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "stack-data", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "traitlets", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "typing-extensions", marker = "python_full_version == '3.11.*' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/53/59/165d3b4d75cc34add3122c4417ecb229085140ac573103c223cd01dde96f/ipython-9.15.0.tar.gz", hash = "sha256:da2819ce2aa83135257df830660b1176d986c3d2876db24df01974fa955b2756", size = 4442580, upload-time = "2026-06-26T11:03:35.913Z" }
 wheels = [
@@ -1325,7 +1336,7 @@ name = "ipython-pygments-lexers"
 version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pygments", marker = "python_full_version >= '3.11'" },
+    { name = "pygments", marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ef/4c/5dd1d8af08107f88c7f741ead7a40854b8ac24ddf9ae850afbcf698aa552/ipython_pygments_lexers-1.1.1.tar.gz", hash = "sha256:09c0138009e56b6854f9535736f4171d855c8c08a563a0dcd8022f78355c7e81", size = 8393, upload-time = "2025-01-17T11:24:34.505Z" }
 wheels = [
@@ -1338,8 +1349,8 @@ version = "8.1.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "comm" },
-    { name = "ipython", version = "8.39.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "ipython", version = "9.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "ipython", version = "8.39.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "ipython", version = "9.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "jupyterlab-widgets" },
     { name = "traitlets" },
     { name = "widgetsnbextension" },
@@ -1449,8 +1460,8 @@ dependencies = [
     { name = "attrs" },
     { name = "jsonschema-specifications" },
     { name = "referencing" },
-    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "rpds-py", version = "2026.6.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "rpds-py", version = "2026.6.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b3/fc/e067678238fa451312d4c62bf6e6cf5ec56375422aee02f9cb5f909b3047/jsonschema-4.26.0.tar.gz", hash = "sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326", size = 366583, upload-time = "2026-01-07T13:41:07.246Z" }
 wheels = [
@@ -1523,6 +1534,20 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+gpu-cuda = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "onnxruntime-gpu", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-20-local-agent-platform-gpu-cuda') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'darwin' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'darwin' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra != 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "onnxruntime-gpu", version = "1.28.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'darwin' and extra == 'extra-20-local-agent-platform-gpu-cuda') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform == 'darwin' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (sys_platform == 'darwin' and extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra != 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "tokenizers" },
+]
+gpu-directml = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "onnxruntime-directml", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "onnxruntime-directml", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml') or (python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (sys_platform != 'win32' and extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "tokenizers" },
+]
 kiwi = [
     { name = "kiwipiepy" },
     { name = "kiwipiepy-model" },
@@ -1535,11 +1560,15 @@ ocr = [
     { name = "paddlepaddle" },
     { name = "pymupdf" },
 ]
+ocr-onnx = [
+    { name = "pymupdf" },
+    { name = "rapidocr" },
+]
 onnx-embed = [
     { name = "huggingface-hub" },
     { name = "numpy" },
-    { name = "onnxruntime", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "onnxruntime", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "tokenizers" },
 ]
 web = [
@@ -1549,26 +1578,36 @@ web = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.5.2,<2" },
+    { name = "huggingface-hub", marker = "extra == 'gpu-cuda'", specifier = ">=0.24,<1" },
+    { name = "huggingface-hub", marker = "extra == 'gpu-directml'", specifier = ">=0.24,<1" },
     { name = "huggingface-hub", marker = "extra == 'onnx-embed'", specifier = ">=0.24,<1" },
     { name = "hwpkit", specifier = ">=1.0.0,<2" },
     { name = "kiwipiepy", marker = "extra == 'kiwi'", specifier = ">=0.18" },
     { name = "kiwipiepy-model", marker = "extra == 'kiwi'", specifier = ">=0.21" },
     { name = "meltano", specifier = ">=4.2.1,<5" },
+    { name = "numpy", marker = "extra == 'gpu-cuda'", specifier = ">=1.24" },
+    { name = "numpy", marker = "extra == 'gpu-directml'", specifier = ">=1.24" },
     { name = "numpy", marker = "extra == 'onnx-embed'", specifier = ">=1.24" },
     { name = "office-oxide", marker = "extra == 'legacy'", specifier = ">=0.1.8,<0.2" },
     { name = "onnxruntime", marker = "extra == 'onnx-embed'", specifier = ">=1.17,<2" },
+    { name = "onnxruntime-directml", marker = "sys_platform == 'win32' and extra == 'gpu-directml'", specifier = ">=1.17,<2" },
+    { name = "onnxruntime-gpu", marker = "sys_platform != 'darwin' and extra == 'gpu-cuda'", specifier = ">=1.17,<2" },
     { name = "paddleocr", marker = "extra == 'ocr'", specifier = ">=3,<4" },
     { name = "paddlepaddle", marker = "extra == 'ocr'", specifier = ">=3,<4" },
     { name = "pymupdf", marker = "extra == 'ocr'", specifier = ">=1.24" },
+    { name = "pymupdf", marker = "extra == 'ocr-onnx'", specifier = ">=1.24" },
     { name = "pypdf", specifier = ">=6,<7" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "rapidocr", marker = "extra == 'ocr-onnx'", specifier = ">=3,<4" },
     { name = "scrapling", extras = ["fetchers"], marker = "extra == 'web'", specifier = ">=0.2" },
     { name = "singer-sdk", specifier = ">=0.54.5,<0.55" },
     { name = "sqlite-vec", specifier = ">=0.1.9,<0.2" },
     { name = "sqlmesh", specifier = ">=0.236.0,<0.237" },
+    { name = "tokenizers", marker = "extra == 'gpu-cuda'", specifier = ">=0.20,<1" },
+    { name = "tokenizers", marker = "extra == 'gpu-directml'", specifier = ">=0.20,<1" },
     { name = "tokenizers", marker = "extra == 'onnx-embed'", specifier = ">=0.20,<1" },
 ]
-provides-extras = ["legacy", "onnx-embed", "ocr", "web", "kiwi"]
+provides-extras = ["legacy", "onnx-embed", "ocr", "web", "kiwi", "gpu-cuda", "gpu-directml", "ocr-onnx"]
 
 [[package]]
 name = "lxml"
@@ -1825,12 +1864,12 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
     { name = "anyio" },
-    { name = "backports-strenum", marker = "python_full_version < '3.11'" },
+    { name = "backports-strenum", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "click" },
     { name = "click-default-group" },
     { name = "dateparser" },
     { name = "fasteners" },
-    { name = "importlib-metadata", marker = "python_full_version < '3.12'" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.12' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "packaging" },
@@ -1960,7 +1999,7 @@ name = "multidict"
 version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1a/c2/c2d94cbe6ac1753f3fc980da97b3d930efe1da3af3c9f5125354436c073d/multidict-6.7.1.tar.gz", hash = "sha256:ec6652a1bee61c53a3e5776b6049172c53b6aaba34f18c9ad04f82712bac623d", size = 102010, upload-time = "2026-01-26T02:46:45.979Z" }
 wheels = [
@@ -2211,6 +2250,19 @@ wheels = [
 ]
 
 [[package]]
+name = "omegaconf"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "antlr4-python3-runtime" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ce/3d/e4b57b8d9008c6ebe0d5eff901f91d5700cf7bdb8c8863df817463a7fd5e/omegaconf-2.3.1.tar.gz", hash = "sha256:e5e7de64aeebeddaf8e6d3f7a783b32ac2a01c0fbd9c878012caecb891a1f42a", size = 3298472, upload-time = "2026-06-11T05:05:12.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a4/0e/152509871bf30df6fc38569f52a2db9b55dd41aae957adae50a053ac7778/omegaconf-2.3.1-py3-none-any.whl", hash = "sha256:3d701d14e9a8828f1edd28bb70b725908b34277cdd72cf7d6a83f94dadc6b6a0", size = 79502, upload-time = "2026-06-11T05:05:09.954Z" },
+]
+
+[[package]]
 name = "onnxruntime"
 version = "1.24.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2299,6 +2351,101 @@ wheels = [
 ]
 
 [[package]]
+name = "onnxruntime-directml"
+version = "1.24.3"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
+dependencies = [
+    { name = "flatbuffers", marker = "python_full_version < '3.11'" },
+    { name = "numpy", marker = "python_full_version < '3.11'" },
+    { name = "packaging", marker = "python_full_version < '3.11'" },
+    { name = "protobuf", marker = "python_full_version < '3.11'" },
+    { name = "sympy", marker = "python_full_version < '3.11'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/65/36ce5a5e79fb5d7b4d7636bc6e6c4024f3ff0571789e8eedb7149bb7c538/onnxruntime_directml-1.24.3-cp311-cp311-win_amd64.whl", hash = "sha256:442fecea5d52df315b6cecfbcbb44aff6681880b6bbf23546a6c00125fec66f1", size = 25106769, upload-time = "2026-03-05T16:27:07.495Z" },
+    { url = "https://files.pythonhosted.org/packages/05/40/c948c0ee42b7b6297dd45956092f5a53a6954610c3911a5847c7555b4930/onnxruntime_directml-1.24.3-cp312-cp312-win_amd64.whl", hash = "sha256:d889010e6ed2f30026522308173d295bcfdaf6f28d1df6054c748ffa750a7ad5", size = 25114531, upload-time = "2026-03-05T16:27:11.256Z" },
+    { url = "https://files.pythonhosted.org/packages/56/f0/9de329f39a66142aab4c1d9a48edc0e432de27c6ba09e8039e0dc51885e7/onnxruntime_directml-1.24.3-cp313-cp313-win_amd64.whl", hash = "sha256:f684adcb29dd48ee172b52fcf1d19a1da1a67a051384ac3418b36d200d0d105c", size = 25114902, upload-time = "2026-03-05T16:27:13.925Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/7a/8b3014ca4065a32bd6672221bf4cb0b5b9a726d28a9caafdb86a076a5981/onnxruntime_directml-1.24.3-cp314-cp314-win_amd64.whl", hash = "sha256:42b17de7030445e75a7e83a4a317f9c655ed2dd7045fe79a7a21dce7b60103b6", size = 25570589, upload-time = "2026-03-05T16:27:17.278Z" },
+]
+
+[[package]]
+name = "onnxruntime-directml"
+version = "1.24.4"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "(python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
+dependencies = [
+    { name = "flatbuffers", marker = "python_full_version >= '3.11'" },
+    { name = "numpy", marker = "python_full_version >= '3.11'" },
+    { name = "packaging", marker = "python_full_version >= '3.11'" },
+    { name = "protobuf", marker = "python_full_version >= '3.11'" },
+    { name = "sympy", marker = "python_full_version >= '3.11'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/90/99566dc6398028e7691a5b12720fd85f757a0901818b84599d28abb3f085/onnxruntime_directml-1.24.4-cp311-cp311-win_amd64.whl", hash = "sha256:96642a787e5a6f33bf043521c0f06eb1eb663f6b830e5862a2026d03f9c90543", size = 25106000, upload-time = "2026-03-17T21:47:15.438Z" },
+    { url = "https://files.pythonhosted.org/packages/88/ea/33814eb0ec96775eda4c1d30b0d86e91d7d2cd0d84c66d3915aef0e06fa3/onnxruntime_directml-1.24.4-cp312-cp312-win_amd64.whl", hash = "sha256:f2ecb68b7b7b259d2ef3112ae760149f9b5a1e7c0fbb73d539da6250a648a614", size = 25111930, upload-time = "2026-03-17T21:47:18.419Z" },
+    { url = "https://files.pythonhosted.org/packages/60/53/2bd2696fac19cf8ca55496a0bcfe431f3aff9579eabbb0e231dc238acf6f/onnxruntime_directml-1.24.4-cp313-cp313-win_amd64.whl", hash = "sha256:2f1031cb2281e5b27cca9efe0b9399317c7286e4d226f7a79d4ab79bbd94d19e", size = 25112253, upload-time = "2026-03-17T21:47:22.043Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/04/816932a3ade867a687e406716ca76e0774c6b921545b45818e3ebfcc54ce/onnxruntime_directml-1.24.4-cp314-cp314-win_amd64.whl", hash = "sha256:51d86bb949488e572b00422f344990a4a81d982416d73b6c0e4ced2bcd423d19", size = 25571098, upload-time = "2026-03-17T21:47:25.461Z" },
+]
+
+[[package]]
+name = "onnxruntime-gpu"
+version = "1.24.3"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
+dependencies = [
+    { name = "flatbuffers", marker = "python_full_version < '3.11'" },
+    { name = "numpy", marker = "python_full_version < '3.11'" },
+    { name = "packaging", marker = "python_full_version < '3.11'" },
+    { name = "protobuf", marker = "python_full_version < '3.11'" },
+    { name = "sympy", marker = "python_full_version < '3.11'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/28/f4/c8050f3f4916ab6c75432724f0ba51c1548dc1c3d66d40c0f8a9611e370f/onnxruntime_gpu-1.24.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ac922633819e1cdc81c9b3a28b5e37d788805307bbaa708a01a3d7150e345625", size = 252750845, upload-time = "2026-03-05T16:35:33.604Z" },
+    { url = "https://files.pythonhosted.org/packages/07/b7/81e8936354651915192a362a1718253c6d03da6b902a95237aa392b1d260/onnxruntime_gpu-1.24.3-cp311-cp311-win_amd64.whl", hash = "sha256:0fe6ece3042db149f36f4991cbebd19a690b7ffd82af89450a261b47f4704a37", size = 207192429, upload-time = "2026-03-05T16:39:57.015Z" },
+    { url = "https://files.pythonhosted.org/packages/24/fa/58ceca812214c9c1a286407c376e42e0b7de3e2c6e14b61cdf3caf6d6d9c/onnxruntime_gpu-1.24.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:537bdd6d95006a9200ae81f2e73ba9e621e723fdf0deb5901e2e62fb2cccf876", size = 252756089, upload-time = "2026-03-05T16:35:46.004Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/07/2f36920b513bd8939e25591153e37d9cfda94115bd119f2874da0750fce2/onnxruntime_gpu-1.24.3-cp312-cp312-win_amd64.whl", hash = "sha256:d72065b3ab5fdaef74d8b6b8f39b7ce20d89731610e3e63cb40e997d3dce177e", size = 207197001, upload-time = "2026-03-05T16:40:05.691Z" },
+    { url = "https://files.pythonhosted.org/packages/49/57/9e6206dac76e08f028d2ae95f2ab1b3a7c3317fb6c0374a530aad48dab5c/onnxruntime_gpu-1.24.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3242a70010934e5bb0aeaa9dde4c25c6c2da577b55c6308c0caa828ba3b7be23", size = 252753349, upload-time = "2026-03-05T16:35:58.09Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/ae/f0be395602c13a3a8d22fa6632133550a64536c58bc3623abbba5d0a575e/onnxruntime_gpu-1.24.3-cp313-cp313-win_amd64.whl", hash = "sha256:a423b164dbc26cb7f8736367b11698c2a7294748d3c144c39542ecac28d225c9", size = 207197331, upload-time = "2026-03-05T16:40:14.944Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/af/a64c9789769d8d7fabc6d35dcce2f2897b2d9e0fe113044efc2903f7cd07/onnxruntime_gpu-1.24.3-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9696d54974a1313ef0d87f4cbd04f9abfd13839194638d52bb5967a15615341d", size = 252762923, upload-time = "2026-03-05T16:36:10.043Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/bb/1cf7dffac2fb01e8de9f0882438165f7543f0aab57f86d1f587e6faa8528/onnxruntime_gpu-1.24.3-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b8ca744f40b33380bc9136988213e574c927d2b919ed42149977e006b138f74f", size = 252754914, upload-time = "2026-03-05T16:36:30.739Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/39/3949d56103bd9cd9381de59b060f9bce8dc2c7363f465bf207ebd0c7a5d0/onnxruntime_gpu-1.24.3-cp314-cp314-win_amd64.whl", hash = "sha256:c60c44e2b388720e6670a948b52626f3d089e960ef7da66e4fa6b2b33a11116f", size = 209599131, upload-time = "2026-03-05T16:40:24.074Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/60/51bfbcf2d0540dbfa426a73a9b80046b71a63de7303d16c0f2682c8edfd2/onnxruntime_gpu-1.24.3-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:29048407a2398361d93de5537c2d2079d79d720337a0743d4a2cc28db981e776", size = 252764115, upload-time = "2026-03-05T16:36:44.681Z" },
+]
+
+[[package]]
+name = "onnxruntime-gpu"
+version = "1.28.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
+dependencies = [
+    { name = "flatbuffers", marker = "python_full_version >= '3.11'" },
+    { name = "numpy", marker = "python_full_version >= '3.11'" },
+    { name = "packaging", marker = "python_full_version >= '3.11'" },
+    { name = "protobuf", marker = "python_full_version >= '3.11'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/51/fe4fbdb7a11beaebdad752973efd8dad3600f50d56e681fa861f65d6cb17/onnxruntime_gpu-1.28.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:774d4c307317f7a0fefc33930820b7ac2a62be2c595e6a1e63e318555f7176b8", size = 249753828, upload-time = "2026-07-25T01:25:25.614Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/1b/a634783c2455cca7c66261dc4e3e16f4058047b79679925737a30dd4c76e/onnxruntime_gpu-1.28.0-cp311-cp311-win_amd64.whl", hash = "sha256:d5004c1d38da77970d4534e2e20e34ade9c4fb167bfc685a9843d2863a58122a", size = 241446409, upload-time = "2026-07-25T01:24:55.933Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/9e/92554acd080db68f549fd0e653fcf51a9dea7cb31e70c497714a9f2310fc/onnxruntime_gpu-1.28.0-cp312-cp312-win_amd64.whl", hash = "sha256:3befb47dabd2843bb606a50abd6f14b1eb1324eb235d5e5f3b01dd8b8034af1f", size = 241459431, upload-time = "2026-07-25T01:25:05.77Z" },
+    { url = "https://files.pythonhosted.org/packages/47/e8/aab01c0b41cfc2cdcb24de9dbf546c7470e4a43d854c617220e425f2c6f5/onnxruntime_gpu-1.28.0-cp313-cp313-win_amd64.whl", hash = "sha256:4c89b8c192864582e04eb4b43574648f185bfd00fc754c3f085fd04d0cd81bc2", size = 241464688, upload-time = "2026-07-25T01:25:15.501Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/8f/7d0613468fda5c15c53095f971abe934145d174c025f7fc98649a9454a64/onnxruntime_gpu-1.28.0-cp314-cp314-win_amd64.whl", hash = "sha256:965f2cad344510bfe2a024ba5c485528caafcc3cf11b218dfb988b0f0e34057d", size = 242095308, upload-time = "2026-07-25T01:25:25.706Z" },
+]
+
+[[package]]
 name = "opencv-contrib-python"
 version = "4.10.0.84"
 source = { registry = "https://pypi.org/simple" }
@@ -2313,6 +2460,25 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b0/e0/8f5d065ebb2e5941d289c5f653f944318f9e418bc5167bc6a346ab5e0f6a/opencv_contrib_python-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a261223db41f6e512d76deaf21c8fcfb4fbbcbc2de62ca7f74a05f2c9ee489ef", size = 68681489, upload-time = "2024-06-17T18:30:32.918Z" },
     { url = "https://files.pythonhosted.org/packages/36/30/7041bd7350cb1a26fa80415a7664b6f04f7ccbf0c12b9318d564cdf35932/opencv_contrib_python-4.10.0.84-cp37-abi3-win32.whl", hash = "sha256:2a36257ec1375d1bec2a62177ea39828ff9804de6831ee39646bdc875c343cec", size = 34506122, upload-time = "2024-06-17T18:28:29.922Z" },
     { url = "https://files.pythonhosted.org/packages/a7/9e/7110d2c5d543ab03b9581dbb1f8e2429863e44e0c9b4960b766f230c1279/opencv_contrib_python-4.10.0.84-cp37-abi3-win_amd64.whl", hash = "sha256:47ec3160dae75f70e099b286d1a2e086d20dac8b06e759f60eaf867e6bdecba7", size = 45541421, upload-time = "2024-06-17T18:28:46.012Z" },
+]
+
+[[package]]
+name = "opencv-python"
+version = "5.0.0.93"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/4c/a438d23e09ce2033c09f7b784ad2fbdb0adf529e434101ed28f142226f98/opencv_python-5.0.0.93.tar.gz", hash = "sha256:66aac3e5b5faa48d4025816592f3af19e4bfc2c68dec067bae2dbb4ca10aa9e2", size = 81802749, upload-time = "2026-07-02T06:59:53.815Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/75/76f6ade78f6102c61034f828e2a22616708df2c9504bc8d6af9dd8f73dc5/opencv_python-5.0.0.93-cp37-abi3-macosx_13_0_arm64.whl", hash = "sha256:198a75138241810206a17c829dbcc40a7cb1841cda538ca86cbbfc6c7d95f898", size = 48322443, upload-time = "2026-07-02T05:50:25.466Z" },
+    { url = "https://files.pythonhosted.org/packages/15/8c/bc1bda6aae69a32e9d84fc34153ba104cd25226861eb4aea33b2cea4860d/opencv_python-5.0.0.93-cp37-abi3-macosx_14_0_x86_64.whl", hash = "sha256:6bbc32f59e1b1a7db7b39c81f63d00625f041d333037fd8702f6da52cc39108b", size = 34782755, upload-time = "2026-07-02T05:51:30.556Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/8a/b04776ec45d2dea08a1b176f1829201db3515d4ed16c35f8fcc9fa7beb16/opencv_python-5.0.0.93-cp37-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:e2b4272e736836f66c2d176e43ab8101f3a00d45654916399f52e150c58981ac", size = 50614064, upload-time = "2026-07-02T06:53:22.604Z" },
+    { url = "https://files.pythonhosted.org/packages/95/54/eb47866b94f2b5b42dde17644b78055ef1ee05aae59962c7290e55270803/opencv_python-5.0.0.93-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:f8b6d0a212253dd26ad338c812f1f23ca118fdf05a9c8c6b9444f161aa8c5881", size = 71064711, upload-time = "2026-07-02T06:54:13.148Z" },
+    { url = "https://files.pythonhosted.org/packages/93/da/962579f1e703cbf8c5422fd1f576467dcb3b5b0b0b81c1471c979764353a/opencv_python-5.0.0.93-cp37-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:08d5d91d967b58d6db86073b2ad3eaef88ca4ebdfd45c9059bf59f5ded0c7ad2", size = 49798576, upload-time = "2026-07-02T06:54:33.781Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/4c/c73f828fdbcd37eaf21d08fa852544a3ca7c2dbb3ea76873d64f2ea413d1/opencv_python-5.0.0.93-cp37-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:c8de2dec111122a02e8beb28e16c31904992dfd6186560b142a92c71403c1039", size = 73783032, upload-time = "2026-07-02T06:55:03.415Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/4b/edaf83b996ca5a1a3d8ccad485706b9c6d4742b13b9c4586bf1c1e7d9423/opencv_python-5.0.0.93-cp37-abi3-win32.whl", hash = "sha256:4b4b1a34c79bf8d3738e3cfe9a9e67b51a79663f6b692cbdad8c31f570da4157", size = 35564734, upload-time = "2026-07-02T05:49:57.704Z" },
+    { url = "https://files.pythonhosted.org/packages/21/f0/9fa6e85cb10c8eb36a0222d27e50fe381b86ce49a55446bf39f491727564/opencv_python-5.0.0.93-cp37-abi3-win_amd64.whl", hash = "sha256:f90ba04b8f73bc5c3814037699739f0156f597338a98f05956c684e7c3ca10d2", size = 44000345, upload-time = "2026-07-02T05:49:54.971Z" },
 ]
 
 [[package]]
@@ -2439,14 +2605,14 @@ version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
-    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "numpy" },
     { name = "opt-einsum" },
     { name = "pillow" },
     { name = "protobuf" },
     { name = "safetensors" },
-    { name = "setuptools", marker = "python_full_version >= '3.12'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "typing-extensions" },
 ]
 wheels = [
@@ -3236,7 +3402,7 @@ name = "pypdf"
 version = "6.14.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/03/72/7dfd5ff1c9c37de97a731701f51af091325f123d9d4270361c9c69e4431f/pypdf-6.14.2.tar.gz", hash = "sha256:7873f502fe4385e79539b21d872392dc0c4e3714327c15881cbc7fbfd1f95b25", size = 6491182, upload-time = "2026-06-23T14:18:30.859Z" }
 wheels = [
@@ -3473,14 +3639,35 @@ wheels = [
 ]
 
 [[package]]
+name = "rapidocr"
+version = "3.9.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorlog" },
+    { name = "numpy" },
+    { name = "omegaconf" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "pyclipper" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "shapely" },
+    { name = "six" },
+    { name = "tqdm" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/ed/0ee9b9281986974be9d2406ae0134c8d7c91d2fc613f16ffda9701eeda6f/rapidocr-3.9.2-py3-none-any.whl", hash = "sha256:04d6b8d151f823d930bd91910555f57bea897c0c44fa6794267b94cf9c1ef9a0", size = 27275208, upload-time = "2026-07-21T10:59:01.599Z" },
+]
+
+[[package]]
 name = "referencing"
 version = "0.37.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
-    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "rpds-py", version = "2026.6.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "rpds-py", version = "2026.6.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8", size = 78036, upload-time = "2025-10-13T15:30:48.871Z" }
 wheels = [
@@ -4127,10 +4314,10 @@ name = "singer-sdk"
 version = "0.54.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "backports-datetime-fromisoformat", marker = "python_full_version < '3.11'" },
+    { name = "backports-datetime-fromisoformat", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "click" },
     { name = "fsspec" },
-    { name = "importlib-metadata", marker = "python_full_version < '3.12'" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.12' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "inflection" },
     { name = "joblib" },
     { name = "jsonpath-ng" },
@@ -4144,7 +4331,7 @@ dependencies = [
     { name = "simpleeval" },
     { name = "simplejson" },
     { name = "sqlalchemy" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "universal-pathlib" },
     { name = "urllib3" },
 ]
@@ -4192,7 +4379,7 @@ name = "sqlalchemy"
 version = "2.0.51"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'" },
+    { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/02/f1/a7a892f18d4d224e6b26f706531eafccc41e37594d37d304786969ee13cb/sqlalchemy-2.0.51.tar.gz", hash = "sha256:804dccd8a4a6242c4e30ad961e540e18a588f6527202f2d6791b01845d59fdc9", size = 9912201, upload-time = "2026-06-15T15:41:20.012Z" }
@@ -4274,7 +4461,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "humanize" },
     { name = "hyperscript" },
-    { name = "importlib-metadata", marker = "python_full_version < '3.12'" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.12' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
     { name = "ipywidgets" },
     { name = "jinja2" },
     { name = "json-stream" },
@@ -4313,7 +4500,7 @@ name = "structlog"
 version = "25.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830, upload-time = "2025-10-27T08:28:23.028Z" }
 wheels = [
@@ -4572,7 +4759,7 @@ name = "tzlocal"
 version = "5.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/81/5b/879b2f932adfa7a053c360d50bc896c977fa6426109185f7c12ebdd0cb9d/tzlocal-5.4.4.tar.gz", hash = "sha256:8dbb8660838688a7b6ba4fed31d18dedf842afb4d47ca050d6d891c2c15f3be4", size = 31170, upload-time = "2026-06-29T08:03:40.026Z" }
 wheels = [
@@ -4736,7 +4923,7 @@ dependencies = [
     { name = "filelock" },
     { name = "platformdirs" },
     { name = "python-discovery" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-gpu-directml') or (extra == 'extra-20-local-agent-platform-gpu-cuda' and extra == 'extra-20-local-agent-platform-onnx-embed') or (extra == 'extra-20-local-agent-platform-gpu-directml' and extra == 'extra-20-local-agent-platform-onnx-embed')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fe/25/e367a7229b0914772ca8d81b41fde012d9feda68523b52644a571bb21ce8/virtualenv-21.7.0.tar.gz", hash = "sha256:7f9519b9432ff11b6e1a3e94061664efc2ff99ea21780e3cf4f6bd0a5da8b37c", size = 5527510, upload-time = "2026-07-21T13:12:14.109Z" }
 wheels = [

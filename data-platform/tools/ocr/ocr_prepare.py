@@ -7,17 +7,35 @@ operator REVIEWS it, and lands the reviewed .txt in data/inbox/documents/ -- the
 same seam as pipeline/fetch_law.py, and the same discipline as the doctype
 profiles: a model does its work once, offline; the build never calls a model.
 
-Two engines, both Apache-2.0, both fully local:
+Three engines, all Apache-2.0, all fully local:
 
   default   PaddleOCR PP-OCRv5 Korean recognizer. NON-generative (detect + argmax),
             so it is deterministic and it never fabricates text -- it misreads a
             character, it does not invent a 조문 number, 의안번호 or 금액. This is
             the right default for high-stakes legal text.
+  --backend onnx
+            THE SAME TWO MODELS (ch_PP-OCRv5_det_mobile + korean_PP-OCRv5_rec_mobile)
+            run through RapidOCR on ONNX Runtime instead of PaddlePaddle. The
+            reason to prefer it is hardware, not accuracy: paddlepaddle has no GPU
+            backend on macOS or on a Windows box without CUDA, so the paddle path
+            is CPU-only almost everywhere, while ONNX Runtime reaches CUDA on
+            Linux/Windows and DirectML on any DX12 Windows GPU -- selected by the
+            same pipeline/runtime.py the embedder uses. On a Mac it runs on the
+            CPU deliberately: CoreML cannot bound PP-OCRv5's dynamic input shape,
+            and enabling it was MEASURED 18x SLOWER for identical output (2.1 s ->
+            38.2 s per page, plus one exception per op). See _onnx_engine_flags.
+            Pre-/post-processing differs between the two implementations, so the
+            per-line `score` (and therefore the 0.92 hotspot threshold) can move:
+            compare on a known page (`make ocr-compare FILE=...`) before switching
+            a review workflow over.
+
   --vl      PaddleOCR-VL (0.9B). A generative VLM with stronger table / stamp /
             layout handling, for dense 감정평가서 / 신탁계약서 pages where flat
             line-OCR loses table structure. Greedy-decoded, so it is reproducible
             run-to-run on one machine but not bit-identical across machines --
             which is exactly why OCR stays OUTSIDE the deterministic build.
+            Paddle-only: there is no ONNX export of it, so on a non-CUDA box this
+            one stays on the CPU.
 
 A VLM can hallucinate plausible-but-wrong legal text, so the output is a DRAFT.
 REVIEW it against the source image (조문번호, 의안번호, 금액, 당사자명) before you
@@ -59,20 +77,26 @@ HOTSPOT_THRESHOLD = 0.92
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 INSTALL_HINT = "uv sync --extra ocr"
+ONNX_INSTALL_HINT = "uv sync --extra ocr-onnx"
 
 # Image formats the recognisers read directly. Kept deliberately narrow: these
 # are what a scanner and `rasterize` actually emit.
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"})
 
 
-def _require():
+def _require(backend: str = "paddle"):
     """Import the optional OCR stack, or fail with an actionable message."""
+    hint = INSTALL_HINT if backend == "paddle" else ONNX_INSTALL_HINT
     try:
         import fitz  # noqa: F401  (pymupdf)
-        import paddleocr  # noqa: F401
+
+        if backend == "paddle":
+            import paddleocr  # noqa: F401
+        else:
+            import rapidocr  # noqa: F401
     except ImportError as error:
         raise SystemExit(
-            f"the OCR stack is not installed. Operators enable it with:\n    {INSTALL_HINT}\n"
+            f"the OCR stack is not installed. Operators enable it with:\n    {hint}\n"
             f"(missing: {error.name}). The core build never needs this."
         ) from None
 
@@ -146,6 +170,83 @@ def ocr_ppocr(images: list) -> list:
                 score = float(scores[index]) if index < len(scores) else None
                 lines.append({"text": text, "score": score})
         pages.append(lines)
+    return pages
+
+
+def _onnx_engine_flags() -> dict:
+    """Map this machine's execution provider onto RapidOCR's engine switches.
+
+    RapidOCR does not take an EP name; it takes one boolean per backend. The
+    decision itself still comes from pipeline/runtime.py so the OCR tool and the
+    retrieval models agree about what this box has -- but it asks for the RAW
+    answer (`gpu_provider`), because the int8-is-a-CPU-format rule that keeps the
+    embedder on the CPU does not apply here: RapidOCR's PP-OCRv5 graphs are fp32.
+    """
+    try:
+        from pipeline import runtime
+    except ImportError:  # running the tool outside the project venv
+        return {}
+    provider = runtime.gpu_provider()
+    if provider == "CUDAExecutionProvider":
+        return {
+            "EngineConfig.onnxruntime.use_cuda": True,
+            # RapidOCR defaults this to EXHAUSTIVE, which re-benchmarks kernels at
+            # runtime and makes a rerun's output drift. OCR output is reviewed by
+            # a human against the page, so drift is worse than a few percent.
+            "EngineConfig.onnxruntime.cuda_ep_cfg.cudnn_conv_algo_search": "HEURISTIC",
+        }
+    if provider == "DmlExecutionProvider":
+        return {"EngineConfig.onnxruntime.use_dml": True}
+    # CoreML is deliberately NOT enabled for these graphs. MEASURED (2026-07-27,
+    # macOS/M4, rapidocr 3.9.2): PP-OCRv5's detector takes a dynamic input shape,
+    # CoreML cannot bound it ("has unbounded dimension which is not supported"),
+    # and it throws one E5RT exception PER OP before falling back -- hundreds of
+    # error lines for a result the CPU produces anyway. The page still OCRs
+    # correctly, which is the trap: it looks accelerated and is only noisy and
+    # slower. Same shape of finding as int8-on-CoreML for the embedder.
+    return {}
+
+
+def ocr_onnx(images: list) -> list:
+    """PP-OCRv5 Korean via RapidOCR on ONNX Runtime. Cross-platform GPU path.
+
+    The model pair is pinned to the SAME two models the paddle path pins --
+    `ch_PP-OCRv5_det_mobile` + `korean_PP-OCRv5_rec_mobile` -- and for the same
+    reason: RapidOCR's defaults are a Chinese PP-OCRv6 recogniser, which reads a
+    Korean page as CJK noise. Pinning only one of the two reproduces exactly the
+    trap documented on the paddle path.
+    """
+    from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion, RapidOCR
+
+    # These four keys take ENUM MEMBERS, not their string values -- RapidOCR
+    # rejects the strings with "must be Enum Type" at construction.
+    params = {
+        "Global.log_level": "warning",
+        # Detection is language-agnostic here; `CH` is the lang key the v5 mobile
+        # detector ships under, not a statement about the page's language.
+        "Det.engine_type": EngineType.ONNXRUNTIME,
+        "Det.lang_type": LangDet.CH,
+        "Det.model_type": ModelType.MOBILE,
+        "Det.ocr_version": OCRVersion.PPOCRV5,
+        "Rec.engine_type": EngineType.ONNXRUNTIME,
+        "Rec.lang_type": LangRec.KOREAN,
+        "Rec.model_type": ModelType.MOBILE,
+        "Rec.ocr_version": OCRVersion.PPOCRV5,
+    }
+    params.update(_onnx_engine_flags())
+    engine = RapidOCR(params=params)
+
+    pages = []
+    for image in images:
+        result = engine(str(image))
+        texts = list(getattr(result, "txts", None) or [])
+        scores = list(getattr(result, "scores", None) or [])
+        pages.append(
+            [
+                {"text": text, "score": float(scores[index]) if index < len(scores) else None}
+                for index, text in enumerate(texts)
+            ]
+        )
     return pages
 
 
@@ -242,9 +343,18 @@ def collect_pages(inputs: list, dpi: int, scratch: Path) -> tuple:
     return images, labels
 
 
-def ocr_pdf(inputs, out_path: Path, use_vl: bool = False, dpi: int = 200, scratch: Path | None = None) -> Path:
+def ocr_pdf(
+    inputs,
+    out_path: Path,
+    use_vl: bool = False,
+    dpi: int = 200,
+    scratch: Path | None = None,
+    backend: str = "paddle",
+) -> Path:
     """Rasterise, OCR, strip control chars, write the draft. Returns out_path."""
-    _require()
+    if use_vl and backend != "paddle":
+        raise SystemExit("--vl is PaddleOCR-VL only; drop --backend onnx or drop --vl.")
+    _require(backend)
     if isinstance(inputs, (str, Path)):
         inputs = [inputs]
     inputs = [Path(item) for item in inputs]
@@ -253,13 +363,23 @@ def ocr_pdf(inputs, out_path: Path, use_vl: bool = False, dpi: int = 200, scratc
     scratch = Path(scratch) if scratch else out_path.parent / (".ocr_pages_" + out_path.stem)
     images, labels = collect_pages(inputs, dpi, scratch)
     source_name = inputs[0].name if len(inputs) == 1 else f"{len(inputs)} input(s)"
-    engine = "PaddleOCR-VL" if use_vl else "PP-OCRv5(korean)"
+    if use_vl:
+        engine = "PaddleOCR-VL"
+    elif backend == "onnx":
+        engine = "PP-OCRv5(korean)/onnxruntime"
+    else:
+        engine = "PP-OCRv5(korean)"
     print(
         f"[ocr] {'; '.join(labels)}: {len(images)} page(s) total via {engine}",
         file=sys.stderr,
     )
 
-    pages = ocr_vl(images) if use_vl else ocr_ppocr(images)
+    if use_vl:
+        pages = ocr_vl(images)
+    elif backend == "onnx":
+        pages = ocr_onnx(images)
+    else:
+        pages = ocr_ppocr(images)
     text, hotspots = _render(pages)
     text = strip_control(text)
 
@@ -298,8 +418,15 @@ def main(argv=None) -> int:
     parser.add_argument("-o", "--out", required=True, help="Output draft path (.md).")
     parser.add_argument("--vl", action="store_true", help="Use PaddleOCR-VL (tables/stamps) instead of PP-OCRv5.")
     parser.add_argument("--dpi", type=int, default=200, help="Rasterisation DPI for PDF input (default 200).")
+    parser.add_argument(
+        "--backend",
+        choices=("paddle", "onnx"),
+        default="paddle",
+        help="Inference stack for PP-OCRv5. paddle (default, CPU almost everywhere) or "
+             "onnx (RapidOCR on ONNX Runtime: CUDA / DirectML / CoreML via pipeline/runtime.py).",
+    )
     args = parser.parse_args(argv)
-    ocr_pdf(args.inputs, Path(args.out), use_vl=args.vl, dpi=args.dpi)
+    ocr_pdf(args.inputs, Path(args.out), use_vl=args.vl, dpi=args.dpi, backend=args.backend)
     return 0
 
 

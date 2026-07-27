@@ -91,6 +91,52 @@ kiwi = [
     "kiwipiepy>=0.18",
     "kiwipiepy-model>=0.21",
 ]
+# --- GPU execution providers (OPT-IN, one per machine) ----------------------
+# `onnxruntime`, `onnxruntime-gpu` and `onnxruntime-directml` ALL install the same
+# `onnxruntime` module. They must never be installed together, and picking the
+# wrong one is not a degraded GPU path -- it can take the CPU path down with it
+# (an onnxruntime-gpu wheel on a box with no CUDA runtime can fail at import, and
+# then nothing runs). Hence: one extra per stack, environment markers so a wheel
+# cannot land on a platform that has no build of it, and `[tool.uv] conflicts`
+# below so uv refuses to resolve two of them at once instead of silently keeping
+# whichever unpacked last.
+#
+# `make setup` deliberately does NOT include these: `make setup-gpu` does, and
+# `make gpu-probe` tells you which one this machine wants and whether it worked.
+# macOS needs NO extra at all -- CoreML ships inside the default wheel.
+gpu-cuda = [
+    "onnxruntime-gpu>=1.17,<2 ; sys_platform != 'darwin'",
+    "tokenizers>=0.20,<1",
+    "huggingface-hub>=0.24,<1",
+    "numpy>=1.24",
+]
+gpu-directml = [
+    "onnxruntime-directml>=1.17,<2 ; sys_platform == 'win32'",
+    "tokenizers>=0.20,<1",
+    "huggingface-hub>=0.24,<1",
+    "numpy>=1.24",
+]
+# Optional cross-platform OCR backend: the SAME PP-OCRv5 models as the `ocr`
+# extra, run through ONNX Runtime instead of PaddlePaddle, which is what lets OCR
+# use a GPU on macOS and on Windows without CUDA. Operator tool, never imported by
+# the build. Enable with: uv sync --extra ocr-onnx
+ocr-onnx = [
+    "rapidocr>=3,<4",
+    "pymupdf>=1.24",
+]
+
+[tool.uv]
+# The onnxruntime wheels are the same module under different names. Declaring the
+# conflict makes `uv sync --extra onnx-embed --extra gpu-cuda --extra gpu-directml`
+# fail with a resolution error instead of producing an environment whose behaviour
+# depends on install order.
+conflicts = [
+    [
+        { extra = "onnx-embed" },
+        { extra = "gpu-cuda" },
+        { extra = "gpu-directml" },
+    ],
+]
 
 [project.scripts]
 # Executables Meltano invokes (meltano.yml -> executable:).

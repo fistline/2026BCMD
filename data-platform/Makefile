@@ -11,7 +11,20 @@ PY := $(UV) run python
 # pointed at this variable. Keep in step with .env.
 SYNC_EXTRAS := --extra onnx-embed --extra kiwi --extra web
 
-.PHONY: help setup reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline
+# GPU execution provider for this machine, chosen ONCE here (see `make setup-gpu`).
+# The onnxruntime wheels are mutually exclusive -- gpu-cuda / gpu-directml REPLACE
+# onnx-embed rather than adding to it, which is why this is a substitution and not
+# another `--extra`. macOS needs nothing: CoreML ships in the default wheel.
+#   make setup-gpu GPU=cuda        Linux/Windows + NVIDIA
+#   make setup-gpu GPU=directml    Windows, any DX12 GPU (NVIDIA/AMD/Intel)
+GPU ?=
+ifeq ($(GPU),)
+GPU_SYNC_EXTRAS := $(SYNC_EXTRAS)
+else
+GPU_SYNC_EXTRAS := --extra gpu-$(GPU) --extra kiwi --extra web
+endif
+
+.PHONY: help setup setup-gpu gpu-probe bench-ep ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -19,6 +32,27 @@ help: ## Show this help
 setup: ## Resolve dependencies (incl. configured extras) and install Meltano plugins
 	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano install
+
+setup-gpu: ## Install a GPU execution provider. Usage: make setup-gpu GPU=cuda|directml (macOS needs neither)
+	@test -n "$(GPU)" || (echo "usage: make setup-gpu GPU=cuda|directml   (macOS: CoreML is already in the default wheel; just run make gpu-probe)" && exit 1)
+	$(UV) sync $(GPU_SYNC_EXTRAS)
+	$(UV) run meltano install
+	@echo
+	@echo "== does it actually work? =="
+	$(PY) -m pipeline.runtime --save
+
+gpu-probe: ## What execution provider will this machine use, and would fp16 help? Writes the device profile.
+	$(PY) -m pipeline.runtime --save
+
+bench-ep: ## Measured throughput per execution provider x asset. Decides GPU-or-not with numbers, not guesses.
+	$(PY) tools/bench_ep.py
+
+ep-equiv: ## Cross-hardware contract: same asset on two providers must agree (skips on a CPU-only box)
+	$(PY) tools/check_ep_equivalence.py
+
+warm-models: ## One-time online fetch of the configured embedder asset (and the reranker when RERANK=1)
+	$(PY) -c "from pipeline import get_settings; from pipeline.build_rag import get_embedder; s=get_settings(); e=get_embedder(s, allow_download=True); print(f'[warm] embedder {e.name}/{e.precision} on {e.provider} cached')"
+	@if [ "$$RERANK" = "1" ]; then $(MAKE) warm-rerank; fi
 
 reset: ## Rebuild every regenerable artefact after a checkout move/rename: venv, Meltano plugins, data plane. The venv and .meltano hardcode absolute paths that no project code controls, so a rename strands them; this recreates them. The DuckLake DATA_PATH is already relative and survives on its own.
 	rm -rf .venv .meltano
@@ -136,7 +170,15 @@ clean: ## Delete every regenerable artefact. data/raw and data/inbox are untouch
 # literal three-dot form.
 EVASION_PATTERN = $(shell printf 'TO%s|FI%s|%s for brevity|[.]{3}' DO XME omitted)
 
+ocr-compare: ## Do the paddle and onnx OCR backends read a page the same way? Usage: make ocr-compare FILE=scan.pdf
+	@test -n "$(FILE)" || (echo "usage: make ocr-compare FILE=<scan.pdf|page.png>" && exit 1)
+	$(PY) tools/ocr/compare_backends.py "$(FILE)"
+
 verify: ## Run the full verification gate
+	@echo "== execution provider and asset =="
+	$(PY) -m pipeline.runtime --save
+	@echo "== cross-hardware provider contract (skips on a CPU-only box) =="
+	$(PY) tools/check_ep_equivalence.py
 	@echo "== no evasion tokens =="
 	@! grep -rInE '$(EVASION_PATTERN)' pipeline transform agent .agents Makefile meltano.yml || (echo "FAIL: evasion token found" && exit 1)
 	@echo "OK"

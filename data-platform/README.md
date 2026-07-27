@@ -208,6 +208,46 @@ Both providers are fully implemented in `pipeline/build_rag.py`. Changing either
 the provider or the dimension changes `index_signature`, and the next query
 fails loudly until you rebuild rather than silently mixing two vector spaces.
 
+### Does a GPU help?
+
+Sometimes, and the deciding factor is the ASSET, not the card. `int8` — the
+default — is a CPU format: on a GPU execution provider it needs Tensor-Core int8
+plus a TensorRT calibration to beat the CPU, and without them it loses. Measured
+here on Apple CoreML with the int8 `bge-m3` graph: 148 CoreML partitions out of
+1775 nodes, **869 ms/chunk against 517 ms/chunk on a single CPU thread**. So with
+`int8` the pipeline stays on the CPU even where a GPU exists, deliberately.
+
+Setting `EMBEDDING_PRECISION=fp16` switches to the GPU-shaped asset, and
+`pipeline/runtime.py` then uses whatever this platform registers — CUDA on
+Linux/Windows, DirectML on any DX12 Windows GPU — falling back to the CPU rather
+than failing if the provider does not come up. Two measured caveats:
+
+- **fp16 on a CPU is a 16x tax on queries** (12.7 ms → 203.4 ms to encode one
+  short query; bulk encoding of long chunks is a wash). So the asset is a
+  fleet-wide decision: a CPU-only spoke inheriting a GPU hub's `fp16` still
+  works, just far slower on every query. The build warns when it sees this.
+- **CoreML is not selected automatically on macOS.** On this repo's models it
+  produced 148–149 graph partitions and then died — `SIGKILL` at 32 chunks with
+  int8, `SIGSEGV` with fp16 — and a native crash cannot be caught and fallen back
+  from. Force it with `ORT_PROVIDER=CoreMLExecutionProvider` if your model and
+  hardware differ.
+
+Ask your own machine instead of trusting the numbers above:
+
+```bash
+make gpu-probe    # what gets selected here, and what fp16 would change
+make bench-ep     # ms/passage per (provider, asset), with the winner named
+```
+
+Two things to know before switching: the precision is part of `index_signature`
+(it is a different vector space, so it is a **fleet-wide** decision, not a
+per-machine one), and the execution provider deliberately is **not** — an index
+built on a GPU box stays queryable on a CPU-only spoke.
+
+The larger build win is not the GPU at all. `make index` reuses the vector of any
+passage whose text has not changed (`data/processed/vector_cache.sqlite`), so
+landing one document no longer re-encodes the corpus.
+
 ## How the graph works
 
 `graph_query` walks `edges` with a recursive CTE. Edges come from Python imports

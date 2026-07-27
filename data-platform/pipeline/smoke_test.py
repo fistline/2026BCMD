@@ -1602,6 +1602,114 @@ def test_reranker() -> None:
     check("rerank is deterministic across runs", again == [row["chunk_id"] for row in reranked])
 
 
+def test_runtime_and_cache(paths) -> None:
+    """The accelerator layer's two invariants: it degrades, and it does not lie.
+
+    Neither needs a GPU to check, which is the point -- these are the properties a
+    CPU-only CI runner on any of the three platforms can hold the design to.
+    """
+    import sqlite3
+
+    from pipeline import runtime
+    from pipeline.build_rag import get_embedder, resolve_precision
+    from pipeline.vector_cache import SAMPLE_MIN_COSINE, verify_sample
+
+    print("runtime / vector cache")
+
+    # 1. A provider that is not registered must fail LOUDLY at selection, never
+    #    silently produce vectors from somewhere else.
+    import os as _os
+
+    previous = _os.environ.get("ORT_PROVIDER")
+    _os.environ["ORT_PROVIDER"] = "DefinitelyNotAnExecutionProvider"
+    runtime.detect.cache_clear()
+    try:
+        runtime.detect("int8")
+        check("an unregistered ORT_PROVIDER is rejected", False, "no error raised")
+    except RuntimeError as error:
+        check("an unregistered ORT_PROVIDER is rejected", "not registered" in str(error))
+    finally:
+        if previous is None:
+            _os.environ.pop("ORT_PROVIDER", None)
+        else:
+            _os.environ["ORT_PROVIDER"] = previous
+        runtime.detect.cache_clear()
+
+    # 2. The default asset must keep the pipeline on the CPU even where a GPU
+    #    exists: int8 on a GPU EP was MEASURED slower than one CPU thread, so
+    #    "a GPU appeared" must not silently change what the build produces.
+    profile = runtime.detect("int8")
+    check(
+        "the int8 asset stays on the CPU even when a GPU provider is registered",
+        profile.provider == runtime.CPU_EP,
+        profile.describe(),
+    )
+
+    # 3. A synced device profile from another machine must never be trusted.
+    import json as _json
+
+    stale = paths.processed / "device_profile.smoke.json"
+    runtime.save_profile(stale, profile)
+    payload = _json.loads(stale.read_text(encoding="utf-8"))
+    payload["fingerprint"] = "some other machine"
+    stale.write_text(_json.dumps(payload), encoding="utf-8")
+    check("a device profile from another machine is ignored", runtime.load_profile(stale) is None)
+    stale.unlink(missing_ok=True)
+
+    # 4. The vector cache must hand back what the model would have produced. A
+    #    poisoned cache does not raise -- it degrades retrieval quietly -- so the
+    #    guard is a re-encode of a sample, not a schema check.
+    if not paths.vector_cache.exists():
+        check("vector cache sample re-encodes to the same vectors", True, "(no cache yet)")
+        return
+    settings = get_settings()
+    if settings.embedding_provider == "hashing":
+        # The hashing provider is pure Python and re-encoding it proves nothing
+        # about the ONNX path, but it is also the default, so skip rather than
+        # give a green tick that means nothing.
+        check("vector cache sample re-encodes to the same vectors", True, "(hashing provider)")
+        return
+    connection = sqlite3.connect(str(paths.vector_cache))
+    try:
+        stored = connection.execute("SELECT count(*) FROM vectors").fetchone()[0]
+    finally:
+        connection.close()
+    if not stored:
+        check("vector cache sample re-encodes to the same vectors", True, "(cache empty)")
+        return
+    embedder = get_embedder(settings)
+    # embed_text, NOT content: those differ (heading prefix) and the cache is keyed
+    # on the string that is actually encoded. Sampling `content` finds nothing in
+    # the cache and turns this whole check into a vacuous pass -- which is exactly
+    # what it did on the first run.
+    from pipeline.build_rag import open_lake
+
+    lake = open_lake(paths)
+    try:
+        texts = [
+            row[0]
+            for row in lake.execute(
+                "SELECT embed_text FROM lake.gold.chunks ORDER BY chunk_id LIMIT 200"
+            ).fetchall()
+        ]
+    finally:
+        lake.close()
+    checked, worst = verify_sample(embedder, paths.vector_cache, embedder.dimensions, texts)
+    check(
+        f"vector cache sample re-encodes to the same passage ({checked} sampled, "
+        f"precision={resolve_precision(settings)}, floor {SAMPLE_MIN_COSINE})",
+        checked > 0 and worst >= SAMPLE_MIN_COSINE,
+        f"worst cosine {worst:.6f}"
+        + ("; nothing sampled -- the cache and the sample disagree about the key" if not checked else ""),
+    )
+
+
+def _connect_index(paths):
+    from pipeline.build_rag import connect_index
+
+    return connect_index(paths.index_sqlite, read_only=True)
+
+
 def main() -> int:
     paths = get_paths()
     settings = get_settings()
@@ -1635,6 +1743,8 @@ def main() -> int:
         test_reachability_diagnostics()
         print()
         test_reranker()
+        print()
+        test_runtime_and_cache(paths)
     except Exception:
         traceback.print_exc()
         return 1

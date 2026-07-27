@@ -1,0 +1,79 @@
+# Cross-platform gate for the execution-provider layer.
+#
+# There is no GPU on a hosted runner, and that is fine: everything this layer
+# promises OTHER than speed is checkable without one -- that it selects the right
+# provider per platform, that it refuses an unregistered one, that it falls back
+# to the CPU instead of failing a build, that the default asset keeps the
+# pipeline byte-identical to what it produces today, and that a device profile
+# measured elsewhere is never trusted. Those are exactly the properties that
+# break silently on a platform nobody develops on.
+#
+# Speed is measured per machine by `make gpu-probe` / `make bench-ep`, which is
+# where a GPU number belongs anyway.
+
+name: cross-platform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data-platform/pipeline/**'
+      - 'data-platform/tools/**'
+      - 'data-platform/pyproject.toml'
+      - '.github/workflows/cross-platform.yml'
+  pull_request:
+    paths:
+      - 'data-platform/pipeline/**'
+      - 'data-platform/tools/**'
+      - 'data-platform/pyproject.toml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: data-platform
+
+jobs:
+  runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install (CPU wheel only -- the GPU extras are mutually exclusive with it)
+        run: uv sync --extra onnx-embed
+
+      - name: Lint
+        run: uvx ruff@0.16.0 check pipeline tools
+
+      - name: Probe -- which provider does this platform select?
+        run: uv run python -m pipeline.runtime
+
+      - name: The layer's platform-independent invariants
+        run: uv run python tools/test_runtime_contract.py
+
+      - name: Provider equivalence (skips itself when only the CPU is registered)
+        run: uv run python tools/check_ep_equivalence.py
+
+  wheel-conflicts:
+    # The single most dangerous packaging mistake here is installing two
+    # onnxruntime distributions at once: they are the same module, so the winner
+    # is whichever unpacked last and the failure is silent. `[tool.uv] conflicts`
+    # is supposed to make that a resolution error -- this asserts that it does.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Two onnxruntime wheels must not resolve together
+        run: |
+          if uv sync --extra onnx-embed --extra gpu-cuda --dry-run; then
+            echo "FAIL: uv resolved two onnxruntime wheels into one environment"
+            exit 1
+          fi
+          echo "OK: the conflict is declared and enforced"

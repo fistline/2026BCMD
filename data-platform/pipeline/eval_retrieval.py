@@ -43,6 +43,7 @@ from pipeline.build_rag import (
     connect_index,
     get_embedder,
     hybrid_search,
+    resolve_precision,
     serialize_vector,
 )
 
@@ -55,7 +56,19 @@ BASELINE_RERANK_FILE = Path(__file__).with_name("eval_rerank_baseline.json")
 
 
 def _baseline_file(result: dict) -> Path:
-    return BASELINE_RERANK_FILE if result.get("settings", {}).get("rerank_enabled") else BASELINE_FILE
+    """The floor this run must clear: one file per (rerank arm, embedding asset).
+
+    The asset axis is the same argument as the rerank axis. int8 and fp16 are
+    different vector spaces, so their numbers are not comparable and must not
+    overwrite each other -- and a fleet evaluating fp16 needs its own recorded
+    floor before it can gate on it. int8 (the default) keeps the historical
+    filenames, so nothing that exists today is renamed or re-recorded.
+    """
+    base = BASELINE_RERANK_FILE if result.get("settings", {}).get("rerank_enabled") else BASELINE_FILE
+    precision = (result.get("settings", {}) or {}).get("embedding_precision", "int8")
+    if precision in ("", "int8"):
+        return base
+    return base.with_name(f"{base.stem}.{precision}{base.suffix}")
 DEPTH = 10
 # Below this share of judgments resolvable against the index, the corpus is not
 # the one these judgments describe and the numbers would be noise.
@@ -291,6 +304,9 @@ def evaluate(paths: Paths | None = None, settings: Settings | None = None) -> di
             "rrf_k": settings.rrf_k,
             "alias_expansion": settings.alias_expansion,
             "embedding_provider": settings.embedding_provider,
+            # Which asset produced these vectors. Selects the baseline file, and
+            # makes a recorded floor self-describing rather than implicitly int8.
+            "embedding_precision": resolve_precision(settings),
             "rerank_enabled": settings.rerank_enabled,
             "rerank_model": settings.rerank_model if settings.rerank_enabled else None,
             "rerank_weight": settings.rerank_weight if settings.rerank_enabled else None,
@@ -347,7 +363,11 @@ def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0
     catches that collapse without firing on a rounding wobble.
     """
     baseline_file = _baseline_file(result)
-    record_cmd = "make eval-rerank-baseline" if baseline_file is BASELINE_RERANK_FILE else "make eval-baseline"
+    record_cmd = (
+        "make eval-rerank-baseline"
+        if baseline_file.name.startswith(BASELINE_RERANK_FILE.stem)
+        else "make eval-baseline"
+    )
     if not baseline_file.exists():
         print(f"[eval] no baseline at {baseline_file}; record one with `{record_cmd}`.")
         return 0
