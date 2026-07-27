@@ -53,70 +53,85 @@ import os
 import platform
 import sys
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from functools import cache
 from pathlib import Path
 
 CPU_EP = "CPUExecutionProvider"
 
-# Ordered candidates per platform. Highest first; each is kept only if
-# onnxruntime actually registered it. TensorRT and OpenVINO are opt-in (they
-# need a per-model engine build / calibration step this pipeline does not do
-# yet), so they are listed but gated behind ORT_PROVIDER.
-_ORDER = {
-    "Linux": ("CUDAExecutionProvider", "ROCMExecutionProvider", "MIGraphXExecutionProvider"),
-    "Windows": ("CUDAExecutionProvider", "DmlExecutionProvider"),
-    "Darwin": ("CoreMLExecutionProvider",),
-}
-_OPT_IN_ONLY = frozenset(
-    {
-        "TensorrtExecutionProvider",
-        "OpenVINOExecutionProvider",
-        "WebGpuExecutionProvider",
-        # CoreML is opt-in on EVIDENCE, not on principle. Three independent
-        # measurements on this repo's models (2026-07-27, macOS 15 / M4 Pro,
-        # onnxruntime 1.27.0), all negative:
-        #   * bge-m3 int8  -- 148 partitions, 869 ms/chunk vs 517 on one CPU
-        #                     thread, 13.5 GB peak, SIGKILL at 32 chunks
-        #   * bge-m3 fp16  -- 149 partitions, SIGSEGV on real chunk lengths
-        #   * PP-OCRv5     -- cannot bound the dynamic input shape; one exception
-        #                     per op and 18x slower (2.1 s -> 38.2 s a page)
-        # A native crash cannot be caught in-process, so "always fall back to the
-        # CPU" cannot protect a build here -- the only protection is not choosing
-        # it. `ORT_PROVIDER=CoreMLExecutionProvider` still forces it for anyone
-        # measuring a different model on newer hardware.
-        "CoreMLExecutionProvider",
-    }
-)
+# --------------------------------------------------------------------------
+# Device classes -- the axis is the HARDWARE CLASS, not the operating system
+# --------------------------------------------------------------------------
+# An earlier version keyed the candidate order on `platform.system()` and a list
+# of EP names. That is the wrong axis twice over: it has to be edited for every
+# new OS/vendor pairing, and it cannot express "this machine has an NPU" at all.
+# onnxruntime itself now classifies hardware as CPU / GPU / NPU
+# (OrtHardwareDeviceType), and its own recommended order is NPU -> GPU -> CPU, so
+# that is the axis used here. The OS still decides WHICH providers exist; it just
+# no longer decides which are preferred.
+CPU, GPU, NPU = "cpu", "gpu", "npu"
 
-# EPs that want the fp16 asset. Everything else gets int8.
-#
-# This is a two-way split and the axis will eventually need four. Do NOT add an
-# NPU provider (QNN, VitisAI, OpenVINO-with-NPU) to this set: an NPU is an
-# integer engine and wants int8, so "accelerator therefore fp16" is wrong for it
-# -- it needs its own class, alongside a fourth for GENERATIVE stages, whose
-# asset rule reaches into KV-cache dtype and whose runtime is ONNX Runtime GenAI
-# rather than plain onnxruntime.
-#
-# The generative class is a reserved slot, not an oversight (evaluated
-# 2026-07-27, deliberately not adopted): nothing in this repo decodes
-# autoregressively -- the embedder is an encoder, the reranker a cross-encoder,
-# PP-OCRv5 a CNN+CRNN, and the one generative model (PaddleOCR-VL) has no ONNX
-# export. Adopting it now would also triple the wheel matrix, because each
-# onnxruntime-genai variant pins a DIFFERENT onnxruntime distribution and would
-# reopen the mutual-exclusion hole `[tool.uv] conflicts` exists to close.
-# Rationale and the trigger for filling it in: docs/plans/heterogeneous-device-roles.md
-_FP16_EPS = frozenset(
-    {
-        "CUDAExecutionProvider",
-        "TensorrtExecutionProvider",
-        "DmlExecutionProvider",
-        "ROCMExecutionProvider",
-        "MIGraphXExecutionProvider",
-        "CoreMLExecutionProvider",
-        "WebGpuExecutionProvider",
-    }
-)
+# Fallback classification, needed because ORT's device enumeration is incomplete:
+# MEASURED here (onnxruntime 1.27.0), `get_ep_devices()` returned only the CPU on
+# a machine where the CoreML EP was registered, and the same blind spot is
+# reported upstream for the Intel NPU behind the OpenVINO EP. So the EP list is
+# always merged in, and each device records where it was learned from.
+_EP_CLASS = {
+    CPU_EP: CPU,
+    "CUDAExecutionProvider": GPU,
+    "TensorrtExecutionProvider": GPU,
+    "DmlExecutionProvider": GPU,
+    "ROCMExecutionProvider": GPU,
+    "MIGraphXExecutionProvider": GPU,
+    "CoreMLExecutionProvider": GPU,
+    "WebGpuExecutionProvider": GPU,
+    "QNNExecutionProvider": NPU,
+    "VitisAIExecutionProvider": NPU,
+    # OpenVINO is whatever `device_type` says; without that wired, treat it as a
+    # GPU-class provider and keep it opt-in.
+    "OpenVINOExecutionProvider": GPU,
+}
+
+# THE ASSET FOLLOWS THE CLASS. This is the three-way split the two-way one could
+# not express: an NPU is an integer engine, so "accelerator therefore fp16" --
+# true for a GPU -- is wrong for it. A fourth class, GENERATIVE (autoregressive
+# decoding under ONNX Runtime GenAI, asset rule reaching into KV-cache dtype), is
+# a deliberately reserved slot: nothing in this repo decodes autoregressively,
+# and each onnxruntime-genai variant pins a DIFFERENT onnxruntime distribution,
+# which would reopen the wheel conflict `[tool.uv] conflicts` exists to close.
+# See docs/plans/heterogeneous-device-roles.md for the trigger to fill it in.
+_CLASS_ASSET = {CPU: "int8", GPU: "fp16", NPU: "int8"}
+
+# Preference order between classes, per onnxruntime's own recommendation.
+_CLASS_ORDER = (NPU, GPU, CPU)
+
+# Providers that exist but are never chosen AUTOMATICALLY, each with the reason,
+# because the reasons are not the same and the difference matters to an operator:
+# some were measured to be worse, others have simply never run on real hardware
+# here. Both are reachable with ORT_PROVIDER=<name>.
+_DEMOTED = {
+    # MEASURED, three independent negatives on this repo's models (2026-07-27,
+    # macOS 15 / M4 Pro, onnxruntime 1.27.0):
+    #   * bge-m3 int8  -- 148 partitions, 869 ms/chunk vs 517 on one CPU thread,
+    #                     13.5 GB peak, SIGKILL at 32 chunks
+    #   * bge-m3 fp16  -- 149 partitions, SIGSEGV on real chunk lengths
+    #   * PP-OCRv5     -- cannot bound the dynamic input shape; one exception per
+    #                     op and 18x slower (2.1 s -> 38.2 s a page)
+    # A native crash cannot be caught in-process, so "always fall back to the
+    # CPU" cannot protect a build here. Not choosing it is the only protection.
+    "CoreMLExecutionProvider": "measured slower and crash-prone on these models",
+    "TensorrtExecutionProvider": "needs a per-model engine build this pipeline does not do",
+    "OpenVINOExecutionProvider": "needs an explicit device_type; NPU routing not wired",
+    "WebGpuExecutionProvider": "upstream marks it experimental (wrong results / crashes)",
+    # UNVERIFIED, not measured-bad. The blocker is specific: NPU runtimes
+    # generally compile for STATIC shapes, and this embedder pads to the batch's
+    # longest sequence, so the graph it would have to accept is dynamic. Forcing
+    # a fixed 512 would both slow it down and change every vector. Try the short,
+    # fixed-shape stages (reranker, OCR) first, and report `make bench-ep`.
+    "QNNExecutionProvider": "unverified on hardware; dynamic sequence length may not compile",
+    "VitisAIExecutionProvider": "unverified on hardware",
+}
+_OPT_IN_ONLY = frozenset(_DEMOTED)
 
 # Distributions that all install the same `onnxruntime` module.
 _WHEELS = (
@@ -191,16 +206,109 @@ def available_providers() -> tuple:
         return ()
 
 
+@dataclass(frozen=True)
+class Device:
+    """One (execution provider, hardware) pair, classified vendor-neutrally."""
+
+    klass: str            # cpu | gpu | npu
+    ep: str               # execution provider name
+    vendor: str = ""
+    device_id: int = 0
+    source: str = "eps"   # "ort" (device API) | "eps" (provider list) | "both"
+
+    @property
+    def demoted(self) -> str:
+        """Why this device is not chosen automatically, or "" if it is eligible."""
+        return _DEMOTED.get(self.ep, "")
+
+
+def _devices_from_ort() -> list:
+    """Devices as onnxruntime itself classifies them. Empty when unsupported."""
+    try:
+        ort = _import_ort()
+        entries = ort.get_ep_devices()
+    except (RuntimeError, AttributeError):
+        return []
+    devices = []
+    for entry in entries:
+        hardware = getattr(entry, "device", None)
+        kind = getattr(getattr(hardware, "type", None), "name", "").lower()
+        if kind not in {CPU, GPU, NPU}:
+            continue
+        devices.append(
+            Device(
+                klass=kind,
+                ep=entry.ep_name,
+                vendor=str(getattr(hardware, "vendor", "") or entry.ep_vendor or ""),
+                device_id=int(getattr(hardware, "device_id", 0) or 0),
+                source="ort",
+            )
+        )
+    return devices
+
+
+@cache
+def enumerate_devices() -> tuple:
+    """Every usable device on this machine, classified as cpu / gpu / npu.
+
+    Two sources, merged, because neither is sufficient on its own: onnxruntime's
+    device API carries the real hardware class (and the vendor, and NPUs, which
+    the provider list cannot express), but it is incomplete -- measured here, it
+    reported only the CPU on a machine with the CoreML EP registered. The
+    provider list is complete but says nothing about hardware, so its entries are
+    classified from a static table. Each device records which source knew it, and
+    `make gpu-probe` prints that, because a disagreement between the two is
+    usually the diagnosis.
+    """
+    by_ep: dict = {}
+    for device in _devices_from_ort():
+        by_ep[device.ep] = device
+    for ep in available_providers():
+        klass = _EP_CLASS.get(ep)
+        if klass is None:
+            continue  # an EP this build knows nothing about: do not guess a class
+        existing = by_ep.get(ep)
+        if existing is None:
+            by_ep[ep] = Device(klass=klass, ep=ep, source="eps")
+        elif existing.klass == klass:
+            by_ep[ep] = replace(existing, source="both")
+    order = {klass: index for index, klass in enumerate(_CLASS_ORDER)}
+    return tuple(sorted(by_ep.values(), key=lambda d: (order.get(d.klass, 99), d.ep)))
+
+
+def devices_of_class(klass: str, eligible_only: bool = True) -> tuple:
+    """Devices of one class, best first. `eligible_only` drops the demoted ones."""
+    return tuple(
+        device
+        for device in enumerate_devices()
+        if device.klass == klass and not (eligible_only and device.demoted)
+    )
+
+
 def candidate_providers(system: str | None = None) -> tuple:
-    """GPU EPs worth trying on this platform, in priority order, that exist here."""
-    system = system or platform.system()
-    registered = set(available_providers())
-    return tuple(ep for ep in _ORDER.get(system, ()) if ep in registered)
+    """Accelerator EPs on this machine, best class first. CPU is never included.
+
+    `system` is accepted and ignored: the axis is the device class, not the OS.
+    It survives only so an older caller does not break.
+    """
+    return tuple(
+        device.ep
+        for device in enumerate_devices()
+        if device.klass != CPU
+    )
+
+
+def class_of(provider: str) -> str:
+    """Device class of an EP name, defaulting to CPU for anything unknown."""
+    for device in enumerate_devices():
+        if device.ep == provider:
+            return device.klass
+    return _EP_CLASS.get(provider, CPU)
 
 
 def precision_for(provider: str) -> str:
-    """The asset an EP wants. Rule 1: GPU means fp16, CPU means int8."""
-    return "fp16" if provider in _FP16_EPS else "int8"
+    """The asset a provider's device class wants: GPU fp16, CPU and NPU int8."""
+    return _CLASS_ASSET.get(class_of(provider), "int8")
 
 
 def gpu_provider() -> str | None:
@@ -342,14 +450,24 @@ def _ort_version() -> str:
 
 
 @cache
-def detect(precision_request: str = "auto") -> DeviceProfile:
-    """Choose the EP and the asset for this machine. Cached for the process.
+def detect(precision_request: str = "auto", stage: str = "") -> DeviceProfile:
+    """Choose the device and the asset for this machine. Cached for the process.
 
-    `precision_request` is the fleet-wide setting (int8 | fp16 | auto). It is a
-    FLEET decision, not a per-node one: the vectors in a shipped index and the
-    query encoder on every spoke have to come from the same asset, which is why
-    `index_signature` carries the precision and this function never overrides an
-    explicit request.
+    THE RULE IS ONE LINE: pick the best-ranked device class whose asset matches
+    the requested one. That replaces an earlier special case ("a GPU is available
+    but the asset is int8, so use the CPU instead") which encoded the same
+    conclusion for GPUs and got it exactly backwards for NPUs -- an NPU is an
+    integer engine and int8 is precisely what it wants. Written as a class/asset
+    match, both fall out of the same statement and a fourth class can be added
+    without another special case.
+
+    `precision_request` is the FLEET-wide setting (int8 | fp16 | auto), never a
+    per-node one: the vectors in a shipped index and the query encoder on every
+    spoke have to come from the same asset, which is why index_signature carries
+    the precision. `auto` resolves to whatever the best eligible class wants.
+
+    `stage` names the caller (embedder | reranker | ocr) so DEVICE_PLACEMENT can
+    pin one stage to a class without moving the others.
     """
     policy = _policy()
     forced = os.environ.get("ORT_PROVIDER", "").strip()
@@ -362,58 +480,197 @@ def detect(precision_request: str = "auto") -> DeviceProfile:
                 f"See `make gpu-probe`."
             )
         precision = precision_request if precision_request in {"int8", "fp16"} else precision_for(forced)
-        return DeviceProfile(
-            provider=forced,
-            provider_options=provider_options(forced),
-            precision=precision,
-            batch=_batch_for(forced),
-            reason="forced by ORT_PROVIDER",
-            wheel=installed_wheel(),
-            ort_version=_ort_version(),
-            available=available_providers(),
-        )
+        return _profile_for(forced, precision, "forced by ORT_PROVIDER")
 
     if policy == "cpu":
         return _cpu_profile("DEVICE=cpu", precision_request)
 
-    candidates = [ep for ep in candidate_providers() if ep not in _OPT_IN_ONLY]
-    if not candidates:
-        demoted = [ep for ep in candidate_providers() if ep in _OPT_IN_ONLY]
-        reason = (
-            f"the only GPU provider(s) here are opt-in ({', '.join(demoted)}); set "
-            f"ORT_PROVIDER to force one"
-            if demoted
-            else f"no GPU execution provider registered ({installed_wheel()})"
-        )
-        return _cpu_profile(reason, precision_request)
+    pinned = placement_for(stage)
+    if pinned == CPU:
+        return _cpu_profile(f"DEVICE_PLACEMENT pins {stage or 'this stage'} to the cpu", precision_request)
 
-    provider = candidates[0]
-    wanted = precision_request if precision_request in {"int8", "fp16"} else precision_for(provider)
-    if wanted != "fp16":
-        # Rule 1. Measured, not assumed: int8 on a GPU EP was 1.7x SLOWER than one
-        # CPU thread here. DEVICE=gpu can override, and then owns the result.
-        if policy != "gpu":
-            return _cpu_profile(
-                f"{provider} is available but the requested asset is int8, which is a CPU "
-                f"format (set EMBEDDING_PRECISION=fp16 to use the GPU)",
-                wanted,
+    for klass in _CLASS_ORDER:
+        if klass == CPU:
+            break
+        if pinned and klass != pinned:
+            continue
+        eligible = devices_of_class(klass)
+        if not eligible:
+            continue
+        wanted = precision_request if precision_request in {"int8", "fp16"} else _CLASS_ASSET[klass]
+        if wanted != _CLASS_ASSET[klass]:
+            # The device exists but wants a different asset than the fleet uses.
+            # Measured for the GPU/int8 pairing: 1.7x SLOWER than a single CPU
+            # thread. DEVICE=gpu overrides and then owns the result.
+            if policy != "gpu":
+                continue
+            print(
+                f"[runtime] DEVICE=gpu forces {eligible[0].ep} with the {wanted} asset, which "
+                f"a {klass} does not want ({_CLASS_ASSET[klass]}). This is usually slower than "
+                f"the CPU.",
+                file=sys.stderr,
             )
-        print(
-            f"[runtime] DEVICE=gpu with {wanted} on {provider}: int8 on a GPU EP is "
-            f"usually slower than the CPU. Prefer EMBEDDING_PRECISION=fp16.",
-            file=sys.stderr,
+        return _profile_for(
+            eligible[0].ep, wanted, f"best eligible {klass} device ({eligible[0].source})"
         )
 
+    return _cpu_profile(_no_accelerator_reason(precision_request, pinned), precision_request)
+
+
+def _no_accelerator_reason(precision_request: str, pinned: str) -> str:
+    """Say WHICH of the several ways there was to have no accelerator applied."""
+    if pinned:
+        return f"DEVICE_PLACEMENT asked for a {pinned} device and none is eligible here"
+    accelerators = [device for device in enumerate_devices() if device.klass != CPU]
+    if not accelerators:
+        return f"no accelerator registered ({installed_wheel()})"
+    demoted = [f"{device.ep} ({device.demoted})" for device in accelerators if device.demoted]
+    if len(demoted) == len(accelerators):
+        return f"every accelerator here is opt-in: {'; '.join(demoted)}. Force one with ORT_PROVIDER"
+    wants = {_CLASS_ASSET[device.klass] for device in accelerators if not device.demoted}
+    return (
+        f"the accelerator(s) here want the {'/'.join(sorted(wants))} asset and this fleet uses "
+        f"{precision_request}; set EMBEDDING_PRECISION to match to use them"
+    )
+
+
+def _profile_for(provider: str, precision: str, reason: str) -> DeviceProfile:
     return DeviceProfile(
         provider=provider,
         provider_options=provider_options(provider),
-        precision=wanted,
+        precision=precision if precision in {"int8", "fp16"} else _CLASS_ASSET[class_of(provider)],
         batch=_batch_for(provider),
-        reason=f"first registered GPU provider for {platform.system()}",
+        reason=reason,
         wheel=installed_wheel(),
         ort_version=_ort_version(),
         available=available_providers(),
     )
+
+
+def placement_for(stage: str) -> str:
+    """Device CLASS this stage is pinned to by DEVICE_PLACEMENT, or "".
+
+    `DEVICE_PLACEMENT="embedder=gpu,reranker=npu,ocr=cpu"` -- a class, never an EP
+    name, so one setting keeps working across machines with different vendors.
+    Pinning is a preference, not an assertion: a stage pinned to a class with no
+    eligible device falls back to the CPU with a stated reason, because a
+    placement typo must not stop a build (rule 2).
+    """
+    if not stage:
+        return ""
+    raw = os.environ.get("DEVICE_PLACEMENT", "").strip()
+    if not raw:
+        return ""
+    for item in raw.split(","):
+        name, _, klass = item.partition("=")
+        if name.strip().lower() != stage.strip().lower():
+            continue
+        klass = klass.strip().lower()
+        if klass not in {CPU, GPU, NPU}:
+            raise ValueError(
+                f"DEVICE_PLACEMENT: {stage} must be one of cpu/gpu/npu, got {klass!r}"
+            )
+        return klass
+    return ""
+
+
+# --------------------------------------------------------------------------
+# Residency -- what is loaded at the same time, and what that costs
+# --------------------------------------------------------------------------
+# "Load the model on every device at once" is the shape of heterogeneous
+# execution that actually pays (OpenVINO calls it MULTI / CUMULATIVE_THROUGHPUT),
+# and its cost is memory, not latency. Sessions here are cached for the life of
+# the process, so a run can end up holding the embedder AND the reranker AND an
+# OCR model, across more than one device -- measured, embedder + reranker alone
+# peaked at 4.47 GB.
+#
+# This TRACKS and WARNS; it deliberately does not evict. Eviction is only worth
+# its risk when there is real pressure to relieve, and at most two models are
+# resident today; a cache that silently drops a session mid-build would trade a
+# memory warning for a latency mystery. Revisit if a server mode makes three or
+# more concurrent.
+_RESIDENT: dict = {}
+
+
+def _physical_memory_mb() -> int:
+    """Total RAM, or 0 when it cannot be determined. Cross-platform, no deps."""
+    try:  # Linux, macOS
+        return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024 * 1024))
+    except (ValueError, OSError, AttributeError):
+        pass
+    try:  # Windows
+        import ctypes
+
+        class _Status(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        status = _Status()
+        status.dwLength = ctypes.sizeof(_Status)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))  # type: ignore[attr-defined]
+        return int(status.ullTotalPhys / (1024 * 1024))
+    except Exception:  # noqa: BLE001 - a missing figure must not break a build
+        return 0
+
+
+def resident_budget_mb() -> int:
+    """How much model weight may sit resident before this warns.
+
+    Default: 40% of physical RAM. Weights are only part of a session's footprint
+    (arenas, the tokenizer, the graph itself), so the headroom is deliberate --
+    measured, a 568 MB int8 model in a single query peaked at 2.50 GB RSS.
+    """
+    override = os.environ.get("RESIDENT_BUDGET_MB", "").strip()
+    if override:
+        return max(1, int(override))
+    total = _physical_memory_mb()
+    return int(total * 0.4) if total else 2048
+
+
+def note_resident(stage: str, asset_path, provider: str = "") -> None:
+    """Record that `stage` now holds a model, and warn if the total looks unsafe.
+
+    The asset file size is the proxy for the footprint: it is the one number
+    available before any inference runs, it is exact for the weights, and it is
+    the figure an operator can act on (choose a smaller asset, or stop loading
+    two models at once).
+    """
+    try:
+        size_mb = int(Path(asset_path).stat().st_size / (1024 * 1024))
+    except OSError:
+        return
+    _RESIDENT[stage] = size_mb
+    total = sum(_RESIDENT.values())
+    budget = resident_budget_mb()
+    if total > budget:
+        held = ", ".join(f"{name} {mb} MB" for name, mb in sorted(_RESIDENT.items()))
+        print(
+            f"[runtime] {total} MB of model weights resident ({held}) against a "
+            f"{budget} MB budget on {_physical_memory_mb() or '?'} MB of RAM. Actual RSS runs "
+            f"several times the weights. Load fewer stages at once, choose the int8 asset, or "
+            f"raise RESIDENT_BUDGET_MB if this machine can take it."
+            + (f" [{provider}]" if provider else ""),
+            file=sys.stderr,
+        )
+
+
+def resident_report() -> dict:
+    """What is loaded right now, for `make gpu-probe` and the smoke checks."""
+    return {
+        "stages": dict(sorted(_RESIDENT.items())),
+        "total_mb": sum(_RESIDENT.values()),
+        "budget_mb": resident_budget_mb(),
+        "physical_mb": _physical_memory_mb(),
+    }
 
 
 ENCODE_BATCH_DEFAULT = 16
@@ -545,6 +802,23 @@ def probe(onnx_path=None, save_to=None) -> dict:
         "wheel": installed_wheel(),
         "ort_version": _ort_version(),
         "available_providers": list(available_providers()),
+        # The device view is the one that matters: class, who reported it, and
+        # why it is or is not eligible. `source` disagreeing between the two
+        # enumerations is usually the diagnosis when an accelerator "vanishes".
+        "devices": [
+            {
+                "class": device.klass,
+                "ep": device.ep,
+                "vendor": device.vendor,
+                "source": device.source,
+                "eligible": not device.demoted,
+                "why_not": device.demoted,
+            }
+            for device in enumerate_devices()
+        ],
+        "asset_per_class": dict(_CLASS_ASSET),
+        "placement": os.environ.get("DEVICE_PLACEMENT", "") or "(none)",
+        "residency": resident_report(),
         "candidates": list(candidate_providers()),
         "problems": preflight(),
     }
@@ -558,7 +832,6 @@ def probe(onnx_path=None, save_to=None) -> dict:
     # answer "is fp16 worth it on THIS machine" without editing .env first.
     report["if_fp16"] = detect("fp16").describe()
 
-    report["opt_in_only"] = [ep for ep in report["candidates"] if ep in _OPT_IN_ONLY]
     if onnx_path and Path(onnx_path).exists():
         # Partition counts: how much of the graph the EP will actually run. A
         # heavily partitioned graph copies tensors back and forth at every

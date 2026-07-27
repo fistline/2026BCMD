@@ -434,13 +434,14 @@ class OnnxEmbedder:
         # accumulation order is not fixed, so pinning threads keeps the vectors
         # bit-identical across rebuilds on this machine -- what index_signature
         # assumes. A GPU EP gets its own determinism options there.
-        self.profile = runtime.detect(precision)
+        self.profile = runtime.detect(precision, stage="embedder")
         self._onnx_path = onnx_path
         self._cpu_session = None
         # auto (default) = device alone, with CPU/device overlap (Tier A).
         # hybrid = the CPU also encodes batches (Tier B). See _encode_hybrid.
         self._devices = os.environ.get("ENCODE_DEVICES", "auto").strip().lower()
         self._session = runtime.make_session(onnx_path, self.profile, threads=1)
+        runtime.note_resident("embedder", onnx_path, self.profile.provider)
         # What the session ACTUALLY got, which is not always what was asked for:
         # make_session degrades to the CPU rather than failing the build.
         self.provider = self._session.get_providers()[0]
@@ -731,7 +732,7 @@ def resolve_precision(settings: Settings) -> str:
     requested = (settings.embedding_precision or "int8").strip().lower()
     if requested != "auto":
         return requested
-    return runtime.precision_for(runtime.detect("fp16").provider)
+    return runtime.precision_for(runtime.detect("fp16", stage="embedder").provider)
 
 
 def cached_asset_path(settings: Settings | None = None) -> str | None:

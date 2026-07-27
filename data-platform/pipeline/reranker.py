@@ -102,8 +102,10 @@ class OnnxReranker:
         # stable run-to-run, the same reason the embedder pins them.
         # runtime.detect() keeps this on the CPU unless the fp16 asset is asked
         # for, so `RERANK=1` alone never silently moves onto a GPU.
-        self.profile = runtime.detect(precision)
-        self._session = runtime.make_session(_fetch(_ASSETS[precision]), self.profile, threads=threads)
+        self.profile = runtime.detect(precision, stage="reranker")
+        asset_path = _fetch(_ASSETS[precision])
+        self._session = runtime.make_session(asset_path, self.profile, threads=threads)
+        runtime.note_resident("reranker", asset_path, self.profile.provider)
         self.provider = self._session.get_providers()[0]
         self._input_names = {node.name for node in self._session.get_inputs()}
 
@@ -145,7 +147,7 @@ def resolve_precision(settings) -> str:
     requested = (settings.rerank_precision or "int8").strip().lower()
     if requested != "auto":
         return requested
-    return runtime.precision_for(runtime.detect("fp16").provider)
+    return runtime.precision_for(runtime.detect("fp16", stage="reranker").provider)
 
 
 def get_reranker(settings, allow_download: bool = False):

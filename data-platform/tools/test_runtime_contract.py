@@ -75,7 +75,7 @@ def test_selection() -> None:
     # Opting in must actually reach the GPU where there is one that is CHOSEN
     # automatically. A provider on the opt-in list is there because it was
     # measured to crash or to lose to the CPU, so it must NOT be picked here.
-    auto = [ep for ep in candidates if ep not in runtime._OPT_IN_ONLY]  # noqa: SLF001
+    auto = [ep for ep in candidates if ep not in runtime._DEMOTED]  # noqa: SLF001
     fp16 = runtime.detect("fp16")
     if auto:
         check(
@@ -91,7 +91,7 @@ def test_selection() -> None:
         )
     check(
         "an opt-in-only provider is never selected automatically",
-        fp16.provider not in runtime._OPT_IN_ONLY,  # noqa: SLF001
+        fp16.provider not in runtime._DEMOTED,  # noqa: SLF001
         fp16.describe(),
     )
 
@@ -115,6 +115,121 @@ def test_selection() -> None:
     # anyone tests by accident.
     options = runtime._session_options("DmlExecutionProvider", 1)  # noqa: SLF001
     check("DirectML sessions disable the memory pattern optimiser", options.enable_mem_pattern is False)
+
+
+def _with_devices(devices):
+    """Run selection against a SIMULATED device set, then restore the real one.
+
+    The whole point of the class abstraction is that the rules are testable
+    without the hardware -- an NPU is exactly the device nobody developing this
+    has, so a rule that only fires on one would otherwise ship unexercised.
+    """
+    real = runtime.enumerate_devices
+    runtime.enumerate_devices = lambda: tuple(devices)
+    runtime.detect.cache_clear()
+    return real
+
+
+def _restore(real) -> None:
+    runtime.enumerate_devices = real
+    runtime.detect.cache_clear()
+
+
+def test_class_rules() -> None:
+    print("device-class rules (simulated hardware)")
+    cpu = runtime.Device(klass=runtime.CPU, ep=runtime.CPU_EP, source="both")
+    npu = runtime.Device(klass=runtime.NPU, ep="QNNExecutionProvider", source="ort")
+    gpu = runtime.Device(klass=runtime.GPU, ep="CUDAExecutionProvider", source="ort")
+
+    check("an NPU wants int8, not fp16", runtime._CLASS_ASSET[runtime.NPU] == "int8")  # noqa: SLF001
+    check("a GPU wants fp16", runtime._CLASS_ASSET[runtime.GPU] == "fp16")  # noqa: SLF001
+
+    _clear(DEVICE=None, ORT_PROVIDER=None, DEVICE_PLACEMENT=None)
+
+    # THE regression this abstraction exists to prevent: the old rule was "asset
+    # is int8 -> do not use an accelerator", which is right for a GPU and exactly
+    # backwards for an NPU. Simulated, because no NPU is present here.
+    real = _with_devices([npu, cpu])
+    try:
+        # QNN is demoted (unverified hardware), so the default must NOT pick it...
+        check(
+            "an unverified NPU is not chosen automatically",
+            runtime.detect("int8").provider == runtime.CPU_EP,
+            runtime.detect("int8").describe(),
+        )
+        # ...but the ASSET rule must still be right for it, which is what would
+        # silently send an NPU the wrong weights once it is verified.
+        check(
+            "the asset chosen for an NPU provider is int8",
+            runtime.precision_for("QNNExecutionProvider") == "int8",
+        )
+    finally:
+        _restore(real)
+
+    # Same simulation with the demotion lifted: int8 must now REACH the NPU.
+    verified = dict(runtime._DEMOTED)  # noqa: SLF001
+    verified.pop("QNNExecutionProvider", None)
+    real_demoted, runtime._DEMOTED = runtime._DEMOTED, verified  # noqa: SLF001
+    real = _with_devices([npu, cpu])
+    try:
+        profile = runtime.detect("int8")
+        check(
+            "a verified NPU IS chosen for the int8 asset",
+            profile.provider == "QNNExecutionProvider",
+            profile.describe(),
+        )
+        fp16 = runtime.detect("fp16")
+        check(
+            "the same NPU is NOT chosen for fp16 (asset mismatch falls back to cpu)",
+            fp16.provider == runtime.CPU_EP,
+            fp16.describe(),
+        )
+    finally:
+        _restore(real)
+        runtime._DEMOTED = real_demoted  # noqa: SLF001
+
+    # And the GPU half of the same rule, also simulated so it runs everywhere.
+    real = _with_devices([gpu, cpu])
+    try:
+        check(
+            "a GPU is chosen for fp16",
+            runtime.detect("fp16").provider == "CUDAExecutionProvider",
+            runtime.detect("fp16").describe(),
+        )
+        check(
+            "a GPU is NOT chosen for int8 (measured slower than the CPU)",
+            runtime.detect("int8").provider == runtime.CPU_EP,
+            runtime.detect("int8").describe(),
+        )
+    finally:
+        _restore(real)
+
+    # Stage placement: one stage pinned, the others untouched.
+    real = _with_devices([gpu, cpu])
+    try:
+        _clear(DEVICE_PLACEMENT="embedder=cpu")
+        check(
+            "DEVICE_PLACEMENT pins the named stage",
+            runtime.detect("fp16", stage="embedder").provider == runtime.CPU_EP,
+        )
+        check(
+            "DEVICE_PLACEMENT leaves other stages alone",
+            runtime.detect("fp16", stage="reranker").provider == "CUDAExecutionProvider",
+        )
+        _clear(DEVICE_PLACEMENT="embedder=npu")
+        check(
+            "a stage pinned to a class with no device falls back to the cpu, not an error",
+            runtime.detect("fp16", stage="embedder").provider == runtime.CPU_EP,
+        )
+        _clear(DEVICE_PLACEMENT="embedder=quantum")
+        try:
+            runtime.detect("fp16", stage="embedder")
+            check("a bad DEVICE_PLACEMENT class is rejected", False, "no error raised")
+        except ValueError as error:
+            check("a bad DEVICE_PLACEMENT class is rejected", "cpu/gpu/npu" in str(error))
+    finally:
+        _clear(DEVICE_PLACEMENT=None)
+        _restore(real)
 
 
 def test_profile_cache() -> None:
@@ -213,6 +328,38 @@ def test_vector_cache() -> None:
         )
 
 
+def test_residency() -> None:
+    print("residency budget")
+    with tempfile.TemporaryDirectory() as directory:
+        weights = Path(directory) / "weights.onnx"
+        weights.write_bytes(b"\0" * (3 * 1024 * 1024))
+
+        os.environ["RESIDENT_BUDGET_MB"] = "1"
+        try:
+            runtime._RESIDENT.clear()  # noqa: SLF001
+            runtime.note_resident("stage-a", weights, "CPUExecutionProvider")
+            runtime.note_resident("stage-b", weights, "CPUExecutionProvider")
+            report = runtime.resident_report()
+            check(
+                "residency sums the stages that are loaded at once",
+                report["total_mb"] == 6 and set(report["stages"]) == {"stage-a", "stage-b"},
+                str(report),
+            )
+            check("the budget is honoured from the environment", report["budget_mb"] == 1)
+        finally:
+            os.environ.pop("RESIDENT_BUDGET_MB", None)
+            runtime._RESIDENT.clear()  # noqa: SLF001
+
+        check(
+            "the default budget is a share of real memory, not a constant",
+            runtime.resident_budget_mb() > 0,
+            str(runtime.resident_report()),
+        )
+        # A missing asset must not raise: this is bookkeeping, not a gate.
+        runtime.note_resident("gone", Path(directory) / "absent.onnx")
+        check("a missing asset is ignored rather than raising", "gone" not in runtime._RESIDENT)  # noqa: SLF001
+
+
 def test_settings_validation() -> None:
     print("settings")
     from pipeline import get_settings
@@ -233,9 +380,13 @@ def main() -> int:
     print(f"runtime contract: {platform.system()} {platform.machine()}, wheel {runtime.installed_wheel()}\n")
     test_selection()
     print()
+    test_class_rules()
+    print()
     test_profile_cache()
     print()
     test_vector_cache()
+    print()
+    test_residency()
     print()
     test_settings_validation()
     print()
