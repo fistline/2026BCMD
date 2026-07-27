@@ -51,10 +51,15 @@ dist/
 # state, not logic. The corpus proper lives in source/, which IS tracked.
 temp/
 
-# Local-only design / working notes and shelved drafts. Preserved on disk but
-# never shared — the tracked counterpart is docs/plans/ (shared decision
-# records). Mirrors the root docs/design/ rule, scoped to this subproject.
+# Local-only design / working notes, plans, and shelved drafts. Preserved on
+# disk but never shared: they are a working session's scratch reasoning, not
+# logic the pipeline runs on, and they go stale the moment the code moves.
+# What a decision must leave behind is committed where it is enforced — the
+# invariant in AGENTS.md, the measured floor in eval_baseline.json, the comment
+# beside the code — never a plan file a reader could mistake for current truth.
+# docs/design/ mirrors the root rule; docs/plans/ is scoped to this subproject.
 docs/design/
+docs/plans/
 
 # Agent memory is stored OUTSIDE this repo (in ~/.claude/projects/.../memory/)
 # so it can never be committed; this line is a belt-and-suspenders guard in case
