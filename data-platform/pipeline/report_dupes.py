@@ -52,6 +52,21 @@ TWIN_SHINGLE_W = 10
 TWIN_JACCARD_T = 0.85
 TWIN_LEN_RATIO = 0.15
 
+# Recorded separation, measured 2026-07-27 on the 10 curated twin sets and the
+# cross-format non-twin pairs that clear the length gate. `--controls` asserts
+# these, which is the drift guard: shingles come out of the EXTRACTORS, so a
+# pypdf or hwpkit upgrade can move the distribution T sits in, and T is a
+# committed literal that will not move with it.
+#
+# Pinning the measurement rather than the extractor VERSION is deliberate. A
+# version pin fires on every harmless patch bump and says nothing about whether
+# the numbers actually moved; the separation is what T depends on. Versions are
+# printed as provenance so a real drift can be attributed. Same discipline as
+# eval_baseline.json: re-record only alongside a measurement that justifies it.
+TWIN_POS_FLOOR = 0.910  # lowest Jaccard among true twins
+TWIN_NEG_CEILING = 0.610  # highest Jaccard among cross-format different documents
+TWIN_SEPARATION_TOLERANCE = 0.02
+
 
 def _norm_n2(text: str) -> str:
     """NFC, then strip whitespace the way the SQL detector does.
@@ -76,6 +91,34 @@ def _jaccard(a: set, b: set) -> float:
         return 0.0
     inter = len(a & b)
     return inter / (len(a) + len(b) - inter)
+
+
+def twin_model_body() -> str:
+    """The document_twins model SQL with its MODEL () header removed, or None.
+
+    Returned so a harness can execute the LIVE model instead of a copy of it --
+    a copy is exactly what stops catching regressions. The header ends at the
+    first line that is only `);`; the description string CONTAINS the two
+    characters `);`, so a plain substring split lands inside it.
+    """
+    model = get_paths().root / "transform" / "models" / "silver" / "document_twins.sql"
+    if not model.exists():
+        return None
+    parts = re.split(r"^\);\s*$", model.read_text(encoding="utf-8"), maxsplit=1, flags=re.M)
+    return parts[1] if len(parts) == 2 else None
+
+
+def _extractor_provenance() -> str:
+    """Versions the recorded separation was measured against, for attribution."""
+    from importlib.metadata import version
+
+    parts = []
+    for package in ("hwpkit", "pypdf", "duckdb"):
+        try:
+            parts.append(f"{package} {version(package)}")
+        except Exception:
+            parts.append(f"{package} unknown")
+    return ", ".join(parts)
 
 
 def _twin_gates(suffix_a: str, suffix_b: str, len_a: int, len_b: int):
@@ -262,6 +305,7 @@ def report_controls() -> int:
     # -- positive: curated twin sets must all be caught by the fuzzy layer -----
     pairs = _twin_pairs(root)
     caught = 0
+    positives: list = []
     print(f"[controls] positive: {len(pairs)} curated twin set(s)")
     for stem, original, derived in pairs:
         norm_a, sh_a = load(original)
@@ -270,6 +314,7 @@ def report_controls() -> int:
         score = _jaccard(sh_a, sh_b)
         detected = gate is None and score >= TWIN_JACCARD_T
         caught += detected
+        positives.append(score)
         print(f"  {'DETECT ' if detected else 'MISSED '} J={score:.3f} gate={gate or '-'}  {stem}")
         if not detected:
             failures.append(f"positive twin missed: {stem} (J={score:.3f}, gate={gate})")
@@ -340,6 +385,80 @@ def report_controls() -> int:
         print(f"[controls] 모법/시행령: J={score:.3f} gate={gate} (본문이 달라 T 아래이기도 함)")
         if gate is None and score >= TWIN_JACCARD_T:
             failures.append("모법/시행령 would merge")
+
+    # -- separation: the drift guard ------------------------------------------
+    # Everything above is a pass/fail against T. This asserts the DISTRIBUTION T
+    # sits in, which is what an extractor upgrade moves.
+    if positives and worst_pair != "-":
+        pos_floor = min(positives)
+        tolerance = TWIN_SEPARATION_TOLERANCE
+        print(
+            f"\n[controls] separation: 양성 하한 {pos_floor:.3f} (기록 {TWIN_POS_FLOOR:.3f}) · "
+            f"음성 상한 {worst:.3f} (기록 {TWIN_NEG_CEILING:.3f}) · "
+            f"마진 {pos_floor - worst:+.3f} · T={TWIN_JACCARD_T}"
+        )
+        print(f"[controls] provenance: {_extractor_provenance()}")
+        if pos_floor < TWIN_POS_FLOOR - tolerance:
+            failures.append(
+                f"twin floor drifted down: {pos_floor:.3f} < {TWIN_POS_FLOOR:.3f}-{tolerance}"
+            )
+        if worst > TWIN_NEG_CEILING + tolerance:
+            failures.append(
+                f"non-twin ceiling drifted up: {worst:.3f} > {TWIN_NEG_CEILING:.3f}+{tolerance}"
+            )
+        if not (worst < TWIN_JACCARD_T < pos_floor):
+            failures.append(
+                f"T={TWIN_JACCARD_T} no longer separates the measured populations "
+                f"({worst:.3f} .. {pos_floor:.3f})"
+            )
+
+    # -- inbox label set: the LIVE model SQL on real extracted text ------------
+    # Plan §5-1(b). Everything above scores in Python; this runs the MODEL, on
+    # real corpus text, through the path the feature exists for -- a twin dropped
+    # straight into the inbox under a mismatched name in a different collection,
+    # which `_superseded_renditions` (name- and directory-based) cannot catch.
+    # Lake-free on purpose: a synthetic bronze built from source/, so the gate
+    # runs before the build in `make verify` and on a clone with no index.
+    body = twin_model_body()
+    if body is None:
+        print("\n[controls] document_twins.sql absent; live-model inbox check skipped")
+    elif pairs:
+        import duckdb
+
+        con = duckdb.connect(":memory:")
+        con.execute("CREATE SCHEMA bronze")
+        con.execute(
+            "CREATE TABLE bronze.documents ("
+            "doc_id VARCHAR, rel_path VARCHAR, doc_type VARCHAR, content VARCHAR,"
+            "content_sha256 VARCHAR, ingested_at TIMESTAMP)"
+        )
+        expected = {}
+        for index, (stem, original, derived) in enumerate(pairs):
+            origin_id = f"orig-{index:02d}-{original.suffix[1:]}"
+            # Mismatched name AND a different collection, which is the whole
+            # point: nothing links this to its original except the content.
+            drop_id = f"inbox-{index:02d}-pdf"
+            expected[drop_id] = origin_id
+            for doc_id, rel_path, path in (
+                (origin_id, f"bills/{stem}{original.suffix}", original),
+                (drop_id, f"sto/무관한이름_{index:02d}.pdf", derived),
+            ):
+                con.execute(
+                    "INSERT INTO bronze.documents VALUES (?, ?, ?, ?, ?, TIMESTAMP '2026-01-01')",
+                    [doc_id, rel_path, path.suffix[1:].lower(),
+                     extract_text(path.name, path.read_bytes()), doc_id],
+                )
+        marked = {row[0]: row[1] for row in con.execute(body).fetchall()}
+        print(
+            f"\n[controls] live model on inbox drops: {len(marked)}/{len(expected)} marked "
+            "(이름 불일치 · collection 교차 · 실제 추출 텍스트)"
+        )
+        if marked != expected:
+            missed = sorted(set(expected) - set(marked))
+            wrong = sorted(k for k in marked if expected.get(k) != marked[k])
+            failures.append(
+                f"live model marking mismatch -- missed={missed[:3]} miswinner={wrong[:3]}"
+            )
 
     # -- first-class number ----------------------------------------------------
     residual = len(pairs) - caught

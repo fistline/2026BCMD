@@ -63,7 +63,7 @@ cand AS (
   --   length-ratio<0.15 -- on NORM length: a true rendition is ~0.99 length-identical
   --                        once whitespace is stripped; this drops a boilerplate-sharing
   --                        pair of different length before the (measured) 0.30 Jaccard
-  --                        margin even has to carry it. GREATEST(...) > 0 guards the
+  --                        margin even has to carry it. The GREATEST guards the
   --                        divide (a >=200-char doc can still norm to a short string).
   SELECT a.doc_id AS a_id, b.doc_id AS b_id, a.prio AS a_prio, b.prio AS b_prio
   FROM prepared a

@@ -11,7 +11,7 @@ PY := $(UV) run python
 # pointed at this variable. Keep in step with .env.
 SYNC_EXTRAS := --extra onnx-embed --extra kiwi --extra web
 
-.PHONY: help setup reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline
+.PHONY: help setup reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -145,6 +145,12 @@ verify: ## Run the full verification gate
 	@echo "== toolchain =="
 	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano --version && $(UV) run sqlmesh --version
+	@echo "== fuzzy twin-detector controls =="
+	# Before the build, not after: it reads source/ and the model file only (no
+	# lake), so a detector that started merging non-twins fails in seconds
+	# instead of after a full rebuild. After the toolchain sync, because it
+	# extracts PDFs and so needs the synced deps.
+	$(PY) -m pipeline.report_dupes --controls
 	@echo "== build =="
 	$(MAKE) build
 	@test -f data/serving/index.sqlite || (echo "FAIL: no index.sqlite" && exit 1)
