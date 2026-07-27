@@ -165,6 +165,6 @@ verify: ## Run the full verification gate
 	@echo "== agent guides =="
 	@test -f AGENTS.md && test -f CLAUDE.md && echo "OK"
 	@echo "== skill frontmatter (Agent Skills standard) =="
-	@for f in .agents/skills/*/SKILL.md; do head -8 "$$f" | grep -q '^name:' && head -8 "$$f" | grep -q '^description:' || { echo "FAIL: $$f frontmatter"; exit 1; }; done; echo OK
+	$(PY) tools/check_skills.py .agents/skills
 	@echo "== Claude Code sees the same skills =="
 	@for d in .agents/skills/*/; do n=$$(basename "$$d"); cmp -s "$$d/SKILL.md" ".claude/skills/$$n/SKILL.md" || { echo "FAIL: .claude/skills/$$n differs from the source. Run: make sync-skills"; exit 1; }; done; echo OK

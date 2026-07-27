@@ -88,6 +88,13 @@ FTS(키워드)·Graph(관계) **3계로 나눠 `index.sqlite`를 색인**한다.
 - **Python 3.12 권장(≥3.10) + [uv](https://docs.astral.sh/uv/)** — data-platform
   파이프라인용. 버전 플로어의 정본은 `data-platform/README.md`의 *Version floors*.
 - **Node.js 22.10+** — gen-apps 산출물(Scaffold-ETH 2 dApp)을 실제로 띄울 때만.
+  저장소에 `.nvmrc`가 있어 `nvm use`면 맞는 버전으로 붙는다. **최신 Node를 쓰면 오히려
+  막힐 수 있다** — 네이티브 모듈(`better-sqlite3`)에 그 버전용 prebuilt가 아직 없으면
+  소스 빌드로 떨어져 실패한다.
+- **[Foundry](https://getfoundry.sh)** (`forge`·`anvil`·`cast`) — gen-apps에서만.
+  **`forge`가 PATH에 없으면 스캐폴딩 자체가 중단된다**(`create-eth`가 검증한다).
+  설치돼 있어도 PATH에 없으면 같으니 `forge --version`으로 먼저 확인한다
+  (`~/.foundry/bin`이 흔한 위치).
 
 ### 0. 에이전트 열기 (스킬을 쓰는 법)
 
@@ -194,9 +201,13 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   포인터다(Claude Code만 `CLAUDE.md`를 읽으므로). 규약은 `AGENTS.md`에서만 고친다.
 - **스킬은 `.agents/skills/`에서만 편집**하고 `.claude/skills/`는 미러다.
   Windows에서 심링크가 깨지면 `data-platform`의 `make sync-skills`로 복사한다.
+- **커밋 전에 `make check`.** 저장소 루트에서 몇 초면 끝난다 — 스킬 프론트매터를 **YAML
+  파서로** 확인하고(`name`↔디렉터리 일치 포함), `dist/`가 스킬 정본과 어긋나지 않았는지 본다.
+  data-platform까지 포함한 전체 게이트는 `make verify`(빌드가 돌아 느리다).
 - **sto-filing 패키징** — `sto-filing/` 또는 `prompt-templates/`를 고쳤으면
-  `python3 build_prompts.py`로 `dist/` 프롬프트 3종을 재생성한다. 잊으면 배포본이 옛 버전을
-  조용히 서빙한다. `dist/`는 손으로 고치지 않는다. `gen-docs/st_prospectus/PACKAGING.md` 참조.
+  `make prompts`(= `python3 build_prompts.py`)로 `dist/` 프롬프트 3종을 재생성한다.
+  잊으면 배포본이 옛 버전을 조용히 서빙하는데, 이제 `make check`가 그걸 잡는다.
+  `dist/`는 손으로 고치지 않는다. `gen-docs/st_prospectus/PACKAGING.md` 참조.
 - **data plane은 절대 커밋하지 않는다** — `data-platform/data/`는 전부 git-ignore
   대상이다. 코퍼스 원본은 `data-platform/source/`에 두며(이곳은 git-ignore 대상이
   아니라 추적 대상이다), 근거는 `data-platform/README.md`의 control/data plane 절.
