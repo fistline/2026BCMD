@@ -38,9 +38,21 @@ def filing_files(names: list[str]) -> list[str]:
             and not re.search(r"판정서|입력요청서|심사", n)]
 
 
+# 코퍼스 `sto` 컬렉션의 실물 6건. V-7 대조 기록을 확인할 때 이 이름들을 찾는다.
+CORPUS_FILINGS = ["스탁키퍼", "투게더아트", "서울옥션블루", "열매컴퍼니", "소유_대전하나", "뮤직카우"]
+
+
+def pick(files: dict, *pats: str) -> str:
+    """파일명이 패턴에 맞는 첫 파일의 내용. 없으면 빈 문자열."""
+    for name, content in files.items():
+        if any(re.search(p, name) for p in pats):
+            return content
+    return ""
+
+
 def judge(a: str, ctx: dict):
     """assertion 하나를 판정한다. (passed, evidence) 또는 판정 불가면 None."""
-    text, names = ctx["text"], ctx["names"]
+    text, names, files = ctx["text"], ctx["names"], ctx.get("files", {})
     has, any_of, banned_hits = ctx["has"], ctx["any_of"], ctx["banned_hits"]
 
     # ---- 공통 ----
@@ -128,6 +140,34 @@ def judge(a: str, ctx: dict):
         # 묶음 보고의 표지는 '묶음' 이라는 단위. 개별 나열이면 이 단어가 나올 이유가 없다.
         ok = bool(re.search(r"미확보\s*사실\s*\d+\s*묶음|\d+\s*묶음", text))
         return ok, "미확보 사실을 묶음 단위로 보고 " + ("확인" if ok else "미확인")
+
+    # ---- 심사검토서의 산출·보고 (파일별 접근이 필요한 것들) ----
+    if "약관이 아직 작성되지 않았다는" in a:
+        review = pick(files, r"심사검토서")
+        if not review:
+            return None  # 심사검토서가 없으면 이 항목은 사람이 본다
+        # 줄 전체가 아니라 **판정 셀**만 읽는다. 실물 심사검토서는 비고란에
+        # "스킬 규정에 따라 미충족으로 판정하지 않는다"라고 쓰는데, 줄을 통째로 훑으면
+        # 그 부정형을 미충족 판정으로 세게 된다 — 실제로 그렇게 오탐이 났다.
+        verdicts = []
+        for line in review.splitlines():
+            if "X-10" not in line or "|" not in line:
+                continue
+            for cell in line.split("|"):
+                c = cell.replace("*", "").strip()
+                if c in ("충족", "부분충족", "미충족", "해당없음"):
+                    verdicts.append(c)
+        if not verdicts:
+            return None  # 표 형식이 아니면 판정하지 않는다
+        return "미충족" not in verdicts, f"X-10 판정 셀: {verdicts}"
+
+    if "분량" in a and ("근거로 사용하지 않는다" in a or "미충족 근거" in a):
+        review = pick(files, r"심사검토서")
+        # 미충족·부분충족 판정을 내린 줄에 분량·비율·개수 논거가 섞였는지만 본다.
+        # 문서가 '분량은 기준이 아니다'라고 쓰는 것은 위반이 아니므로 판정줄로 한정한다.
+        bad = [l for l in review.splitlines()
+               if re.search(r"미충족|부분충족", l) and re.search(r"분량|전체의 \d+\s*%|개수 (미달|부족)", l)]
+        return not bad, ("판정줄에 분량·개수 논거 없음" if not bad else f"검출 {len(bad)}건: {bad[0][:70]}")
 
     if "집계표" in a and "미충족 항목의 ID" in a:
         # 집계표에 A-1·W-3 같은 항목 ID 가 실제로 나열돼야 한다. 개수만 있으면 어느 항목을

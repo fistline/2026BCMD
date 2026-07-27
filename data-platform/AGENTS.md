@@ -167,7 +167,9 @@ through the runner. Add a skill by writing one rules module and one `RULES` entr
 
 Two things it will not do, both learned by getting them wrong. It **never invents a
 verdict** — an assertion no rule matches comes out `pending`, and a human fills it in
-`<workspace>/manual_grades.json`, which is applied only where the machine abstained.
+`<iteration>/manual_grades.json`, which is applied only where the machine abstained and
+only when the recorded `_digest` still matches the outputs that were read (re-running an
+eval otherwise re-attaches yesterday's verdicts to files nobody looked at).
 And banned-phrase checks read the surrounding 60 characters for a negation marker,
 because a filing is *required* to say "원금·수익 보장과 무관", so bare keyword
 matching flags the compliant document.

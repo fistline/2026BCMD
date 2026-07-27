@@ -5,7 +5,7 @@
 대상이 달라 같은 파일에 두지 않았지만, 규율은 같다 — 근거 없이 통과를 주지 않는다.
 
 **기계로 확인되는 것만 여기서 판정한다.** 판단이 필요한 항목은 verdict=None 으로 남기고
-사람이 산출물을 읽고 `<workspace>/manual_grades.json` 에 근거와 함께 채운다.
+사람이 산출물을 읽고 `<iteration>/manual_grades.json` 에 근거와 함께 채운다.
 그 파일은 verdict=None 자리에만 적용된다 — 기계 판정을 손으로 뒤집을 수 있으면 채점이
 산출물이 아니라 기대에 맞춰지기 때문이다.
 
@@ -51,17 +51,23 @@ RULES = {
 NEGATION = re.compile(r"않|무관|없|아니|금지|재분류|위험|말라|불가|배제|되지|해서는|오인|주의")
 
 
-def load_outputs(run: Path) -> tuple[str, list[str]]:
-    """실행 디렉터리의 산출물 전문과 파일명 목록."""
-    names, blobs = [], []
+def load_outputs(run: Path) -> tuple[str, list[str], dict[str, str]]:
+    """실행 디렉터리의 산출물 — 전문(이어붙임), 파일명 목록, 파일별 내용.
+
+    파일별 내용이 따로 필요한 이유 — "response.md 첫머리에 무엇이 오는가", "심사검토서의
+    X-10 판정이 무엇인가" 같은 것은 전부 이어붙인 문자열로는 판정할 수 없다.
+    """
+    names, blobs, files = [], [], {}
     for f in sorted((run / "outputs").glob("*")):
         if f.is_file():
             names.append(f.name)
             try:
-                blobs.append(f.read_text(encoding="utf-8", errors="replace"))
+                t = f.read_text(encoding="utf-8", errors="replace")
             except OSError:
-                pass
-    return "\n".join(blobs), names
+                continue
+            blobs.append(t)
+            files[f.name] = t
+    return "\n".join(blobs), names, files
 
 
 def has(text: str, *pats: str) -> bool:
@@ -120,16 +126,20 @@ def apply_manual(manual: dict, key: str, run: Path, results: list) -> list[str]:
               f"수동 채점 {len(rules)}건을 적용하지 않고 보류로 남긴다 — 새 산출물로 다시 판정하라.")
         return []
 
-    used = set()
+    used, superseded = set(), set()
     for r in results:
-        if r["passed"] is not None:
-            continue
         for prefix, (verdict, evidence) in rules.items():
-            if r["text"].startswith(prefix):
+            if not r["text"].startswith(prefix):
+                continue
+            if r["passed"] is not None:
+                # 나중에 기계 규칙이 생긴 항목이다. 사람 판정을 버리는 게 맞고,
+                # 미매칭과 구분해 조용히 넘긴다 — 경고로 띄우면 진짜 미매칭이 묻힌다.
+                superseded.add(prefix)
+            else:
                 r["passed"], r["evidence"] = verdict, f"[직접 열람] {evidence}"
                 used.add(prefix)
-                break
-    return sorted(set(rules) - used)
+            break
+    return sorted(set(rules) - used - superseded)
 
 
 def discover_runs(eval_dir: Path) -> list[tuple[Path, str]]:
@@ -150,9 +160,10 @@ def discover_runs(eval_dir: Path) -> list[tuple[Path, str]]:
 
 
 def grade_run(rules, manual: dict, eval_dir: Path, run: Path, label: str | None = None) -> dict:
-    text, names = load_outputs(run)
+    text, names, files = load_outputs(run)
     meta = json.loads((eval_dir / "eval_metadata.json").read_text(encoding="utf-8"))
-    ctx = {"text": text, "names": names, "has": has, "any_of": any_of, "banned_hits": banned_hits}
+    ctx = {"text": text, "names": names, "files": files,
+           "has": has, "any_of": any_of, "banned_hits": banned_hits}
 
     results = []
     for a in meta["assertions"]:
