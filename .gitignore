@@ -23,8 +23,21 @@ gen-apps/**/artifacts/
 gen-apps/**/broadcast/
 gen-apps/**/*.log
 
-# Generated prompts under gen-docs/ — regenerated from source by build_prompts.py
+# GENERATION OUTPUTS ARE NOT DISTRIBUTED. Only the skills, prompts, and tools that
+# PRODUCE them are tracked (gen-docs/st_prospectus/{sto-filing,prompt-templates,
+# build_prompts.py,PACKAGING.md}, gen-apps/{st-service-dapp,filing-to-dapp,
+# ST_SERVICE_DAPP_PROMPT.md}). Everything a run emits — an issuer's 증권신고서 draft
+# or a generated dApp service, plus the eval workspaces — stays local.
+#   - per-issuer output folders (energyasset-gas-station-1, <issuer>-<asset>-N/)
+#   - eval/run workspaces (*-workspace/)
+#   - assembled prompts under dist/ (regenerated from source by build_prompts.py)
+# These are matched by explicit patterns rather than a blanket gen-*/*/ so a NEW
+# skill folder is never accidentally hidden. Add a new output folder's pattern here.
 gen-docs/**/dist/
+gen-docs/st_prospectus/*-workspace/
+gen-docs/st_prospectus/energyasset-gas-station-1/
+gen-apps/*-workspace/
+gen-apps/energyasset-gas-station-1/
 
 # Auto-installed browser binaries (Playwright / Scrapling, used by fetch_web.py)
 .cache/ms-playwright/
