@@ -24,10 +24,19 @@ Three engines, all Apache-2.0, all fully local:
             CPU deliberately: CoreML cannot bound PP-OCRv5's dynamic input shape,
             and enabling it was MEASURED 18x SLOWER for identical output (2.1 s ->
             38.2 s per page, plus one exception per op). See _onnx_engine_flags.
-            Pre-/post-processing differs between the two implementations, so the
-            per-line `score` (and therefore the 0.92 hotspot threshold) can move:
-            compare on a known page (`make ocr-compare FILE=...`) before switching
-            a review workflow over.
+            SAME MODELS IS NOT SAME OUTPUT, and this was measured rather than
+            assumed (2026-07-28, `make ocr-compare` on 2 pages of a real 법률안):
+            character similarity 0.9265 raw and 0.9291 ignoring whitespace -- so
+            the difference is NOT spacing -- with 40 lines shared, 5 found only by
+            paddle and 1 only by onnx. Among the paddle-only lines was
+            `양부남의원(10인)`, a 발의자 line: exactly the class of field
+            (조문번호/의안번호/금액/당사자명) this file tells you to check. The
+            score distributions do transfer (median 0.984 vs 0.982; hotspots 2/45
+            vs 3/41), so the 0.92 threshold survives the swap even though the text
+            does not.
+            That is why paddle stays the DEFAULT and this is opt-in: pick it for
+            the hardware, and run `make ocr-compare FILE=...` on your own document
+            class first.
 
   --vl      PaddleOCR-VL (0.9B). A generative VLM with stronger table / stamp /
             layout handling, for dense 감정평가서 / 신탁계약서 pages where flat
