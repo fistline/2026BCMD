@@ -77,6 +77,27 @@ This prompt is designed to be pasted into tools like Cursor / Antigravity / Clau
 
 **게이트 0**: `DECISION.md` 에 여정→화면 매핑표, 온체인/SQLite 분담표, 확정된 컨트랙트 표면(함수·이벤트 목록), 표준 판정 근거를 기록한다. 이 문서 없이 PHASE 1로 넘어가지 않는다.
 
+### PHASE 0.5 — 스캐폴딩 (빈 폴더에서 시작하지 않는다)
+
+이 프롬프트는 `packages/foundry/`·`packages/nextjs/` 경로와 `useScaffoldReadContract` 같은
+SE-2 훅, `deployedContracts.ts` 자동 연결을 **전제한다.** 그 뼈대는 직접 만드는 것이 아니라
+Scaffold-ETH 2에서 받는 것이다. 손으로 흉내 내면 훅과 주소 자동연결이 동작하지 않는다.
+
+```bash
+npx create-eth@latest <slug> -e foundry     # 대화형이면 Foundry(Hardhat 아님) 선택
+cd <slug> && yarn install
+```
+
+받은 직후 다음을 확인하고, 어긋나면 **여기서 멈추고 사용자에게 알린다** — 뒤 단계는 전부
+이 구조 위에서 돌아간다.
+
+- `packages/foundry/foundry.toml`, `packages/nextjs/` 존재
+- `yarn foundry:test` 가 템플릿 기본 테스트로 통과
+- `packages/nextjs/contracts/deployedContracts.ts` 가 (비어 있더라도) 존재
+
+**게이트 0.5**: 템플릿이 그대로 기동된다. 여기서부터 템플릿 예제(`YourContract` 등)를
+지우고 PHASE 0에서 확정한 표면으로 대체한다.
+
 ### PHASE 1 — 컨트랙트
 
 PHASE 0에서 확정한 표면만 구현한다. 모듈은 §6.1, 표준 스펙은 §7 원문 참조.
@@ -504,13 +525,29 @@ Solidity `^0.8.24` / Foundry / OpenZeppelin(`AccessControl`, `ReentrancyGuard` �
 SE-2 기본 스택을 벗어나지 않는다.
 
 - Next.js (App Router) + TypeScript
-- wagmi / viem / RainbowKit
+- wagmi / viem / RainbowKit (지갑 목록이 번들을 깨면 §10.6 — 로컬 데모는 `injected()` 로 충분)
 - Tailwind CSS + daisyUI
 - SE-2 훅: `useScaffoldReadContract`, `useScaffoldWriteContract`, `useScaffoldEventHistory`
 - SE-2 컴포넌트: `Address`, `Balance`, `AddressInput`, `EtherInput`
 - 서버: Next.js Route Handlers (`runtime = "nodejs"`) + better-sqlite3
 - **브라우저 스토리지(localStorage/sessionStorage)를 사용하지 않는다.** 상태는 React state / 서버 / 온체인으로 유지한다.
 - 컨트랙트 주소는 `deployedContracts.ts`로 자동 연결. **하드코딩 금지.**
+
+### 10.6 알려진 실행 함정 (실측)
+
+아래는 이 프롬프트로 실제 dApp을 만들다 **기동을 막았던** 것들이다. 추측이 아니라 겪은 것이므로
+같은 자리에서 다시 멈추지 않도록 미리 처리한다. 다만 환경이 바뀌면 사실도 바뀐다 —
+**증상이 안 나타나면 우회를 넣지 않는다.**
+
+| 증상 | 원인 | 처리 |
+|---|---|---|
+| `yarn install` 이 `better-sqlite3` node-gyp 에서 실패 | 템플릿이 끌어오는 구버전에 현재 Node 용 prebuilt 가 없어 소스 빌드로 떨어진다 | `better-sqlite3` 를 **prebuilt 가 있는 최신 메이저**로 올린다. 설치 후 `node -e "require('better-sqlite3')"` 로 확인 |
+| 프론트 번들이 미배포 패키지(`@x402/*` 등) 를 못 찾아 빌드 실패 | RainbowKit 의 지갑 목록이 딸려오는 SDK 를 타고 들어간다 | 로컬 데모는 지갑 목록이 필요 없다 — `@wagmi/core` 의 `injected()` 커넥터만 쓰고, 해결 불가한 선택적 의존은 `webpack.IgnorePlugin` 으로 제외한다 |
+| `yarn dev` 가 수 분씩 걸린다 | anvil 에 `--block-time` 을 주면 배포 트랜잭션마다 블록을 기다린다 | 로컬 체인은 **즉시 채굴**로 띄운다(`--block-time` 없이). 로컬은 재구성이 없으므로 인덱서 확정 지연도 0 으로 둔다 |
+| 체인을 다시 띄웠는데 인덱서가 멈춘다 | 새 체인의 블록 높이가 저장된 `last_block` 보다 낮다 | 인덱서 기동 시 **헤드 높이와 배포 주소 지문**을 비교해, 되감겼거나 재배포됐으면 색인을 비우고 배포 블록부터 다시 읽는다 |
+
+버전을 이 문서에 못 박지 않는 이유 — 숫자를 적으면 그 숫자가 낡는다. **확인 방법**을 적었으니
+설치 후 실제로 확인하고, 막히면 그 사실과 조치를 `ASSUMPTIONS.md` 에 남긴다.
 
 ---
 
@@ -543,8 +580,9 @@ SE-2 기본 스택을 벗어나지 않는다.
 
 클론 직후부터 `yarn install` → `yarn dev` → 브라우저 접속까지의 **실제 명령과 예상 콘솔 출력**.
 이어서 §1 여정을 그대로 밟는 시연 시나리오(어느 계정으로 무엇을 클릭하면 무엇이 보이는지).
-트러블슈팅: Node 버전, foundryup 미설치, better-sqlite3 네이티브 빌드 실패, 포트 충돌(8545/3000),
-MetaMask 로컬 네트워크 추가, 인덱서 미동기화, 고아 anvil 프로세스 정리.
+트러블슈팅: Node 버전, foundryup 미설치, 포트 충돌(8545/3000), MetaMask 로컬 네트워크 추가,
+고아 anvil 프로세스 정리. **§10.6에서 실제로 겪은 함정은 그 조치까지 함께 적는다** —
+빌드하며 우회한 것을 README에 적지 않으면 다음 사람이 같은 자리에서 막힌다.
 
 ### J) Acceptance Report
 

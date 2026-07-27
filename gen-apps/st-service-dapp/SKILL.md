@@ -87,17 +87,29 @@ PHASE E로 간다. 사용자가 특정 항목을 고치라고 하면 해당 항�
 > 프로젝트 파일을 레포 루트나 `gen-apps/` 바로 아래(템플릿·스킬과 같은 층)에 흩뿌리지 않는다.
 > 모든 산출물은 반드시 `gen-apps/<service-slug>/` 폴더 안에 둔다.
 
-**E-0. 폴더 먼저.** Q1에서 kebab-case ASCII 슬러그를 만들고(부동산 임대수익 조각투자 →
-`real-estate-rental-shares`) `gen-apps/<slug>/`를 생성한다. 이 폴더가 **SE-2 프로젝트 루트**다.
+**E-0. 폴더 먼저 — 단, 빈 폴더가 아니라 SE-2 템플릿으로 만든다.** Q1에서 kebab-case ASCII
+슬러그를 만들고(부동산 임대수익 조각투자 → `real-estate-rental-shares`)
+`gen-apps/` 안에서 **Scaffold-ETH 2 템플릿을 받아** `gen-apps/<slug>/`를 만든다.
+이 폴더가 **SE-2 프로젝트 루트**다.
+
+```bash
+cd gen-apps && npx create-eth@latest <slug> -e foundry   # 대화형이면 Foundry 선택
+```
+
+빈 폴더를 만들고 손으로 채우면 `useScaffoldReadContract` 같은 훅과 `deployedContracts.ts`
+주소 자동연결이 동작하지 않는다 — 프롬프트 전체가 그 구조를 전제하므로 여기서 어긋나면
+뒤가 전부 무너진다. 상세와 확인 항목은 프롬프트 §PHASE 0.5.
 
 - **예약어** `st-service-dapp`·`filing-to-dapp`은 슬러그로 쓸 수 없다. 충돌하면 접미사를 붙이고 통지.
-- 같은 서비스의 재생성이면 폴더를 **재사용**(멱등). 다른 서비스인데 충돌하면 `-2`를 붙이고 통지.
+- 같은 서비스의 재생성이면 폴더를 **재사용**(멱등). 이미 SE-2 구조가 있으면 템플릿을 다시
+  받지 않는다 — `create-eth`는 기존 폴더를 덮지 않으므로, `packages/foundry`가 있으면 건너뛴다.
+  다른 서비스인데 충돌하면 `-2`를 붙이고 통지.
 - **원본 템플릿은 수정하지 않는다.** 채운 사본을 `<slug>/PROMPT_FILLED.md`로 저장한다.
 - 이후 모든 산출물(`DECISION.md`·`ASSUMPTIONS.md`·`README.md`·`packages/…`)은 이 폴더 안에 만든다.
   `yarn dev`도 여기서 실행된다.
 
 **E-1. 프롬프트 실행.** `PROMPT_FILLED.md`를 **그대로, 순서대로** 따른다.
-PHASE 0 설계 → 1 컨트랙트 → 2 배포·시드 → 3 데이터 계층 → 4 프론트 → 5 인수 검증이며
+PHASE 0 설계 → 0.5 스캐폴딩 → 1 컨트랙트 → 2 배포·시드 → 3 데이터 계층 → 4 프론트 → 5 인수 검증이며
 **각 게이트를 통과한 뒤에만** 다음으로 넘어간다. §1이 완결됐으므로 **후속 질문을 하지 않는다**(§4.5).
 경로는 `gen-apps/<slug>/` 기준 상대경로다.
 
