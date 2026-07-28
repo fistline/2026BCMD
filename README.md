@@ -34,8 +34,9 @@ dApp을 만든다.
 | **`gen-docs/`** | 유형 판정 → 작성 → 자기심사를 거쳐 조각투자·STO 증권신고서 초안을 자동 작성. `data-platform` 코퍼스를 근거로 인용·자기검열 | `gen-docs/st_prospectus/<slug>/` | Agent Skill (`sto-filing`) |
 | **`gen-apps/`** | 작성한 증권신고서와 `data-platform` 코퍼스를 근거로 토큰증권(RWA) 서비스 dApp 초안을 자동 생성 | `gen-apps/<slug>/` | Agent Skill (`st-service-dapp`, `filing-to-dapp`) |
 
-`gen-docs`·`gen-apps`는 **코퍼스(색인된 문서 모음) 없이도 완주**된다. `data-platform` 코퍼스는 법령 조문을
-직접 인용해 근거를 강화하는 **선택 요소**이자, 그 자체로 법안을 검색·추론하는 도구다.
+위 표의 "코퍼스를 근거로"는 **색인이 빌드돼 있을 때** 적용된다. `gen-docs`·`gen-apps`는
+**코퍼스 없이도 완주**되며, 그때는 스킬이 자체 기준으로 작성·자기심사한다. 코퍼스는 근거를
+조문 단위로 굳히는 **선택 요소**이자, 그 자체로 법령을 검색·추론하는 도구다.
 
 ```
 26bmdc/
@@ -48,7 +49,7 @@ dApp을 만든다.
 ├── data-platform/         # ── 코퍼스(문서 색인) 파이프라인
 │   ├── README.md          #    셋업·아키텍처·근거 (이 영역의 정본)
 │   ├── Makefile           #    make build / query / ask / impact / graph 등
-│   ├── source/            #    실제 코퍼스 (법안 원문 hwp/pdf) — git 추적 대상
+│   ├── source/            #    실제 코퍼스 (법안·법령·감독규정·증권신고서) — git 추적 대상
 │   └── pipeline/ transform/ agent/ 등
 ├── gen-docs/
 │   └── st_prospectus/
@@ -161,8 +162,8 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 | RWA/증권형 dApp 직접 | gen-apps | `st-service-dapp` 스킬 |
 
 **엔드투엔드 예시:** 코퍼스로 규제 경로 확인(`make ask`) → 증권신고서 작성
-(`sto-filing`) → 같은 슬러그로 dApp 생성(`filing-to-dapp`). 주요 서비스가 하나의 사업을
-지식·문서·서비스 세 계층에서 표현한다.
+(`sto-filing`) → 같은 슬러그로 dApp 생성(`filing-to-dapp`). 하나의 사업이 지식·문서·앱
+세 계층으로 이어지고, 셋을 묶는 것은 슬러그 하나다.
 
 **루트 스킬** (`.agents/skills/`): `sto-filing`, `st-service-dapp`, `filing-to-dapp`,
 그리고 루트에서 코퍼스를 조회하는 얇은 래퍼 `corpus-lookup`.
@@ -221,8 +222,8 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 > **저장소 경계·상태:** 루트 `26bmdc/` 전체가 **하나의 git 저장소**로
 > `data-platform`·`gen-docs`·`gen-apps`를 함께 추적한다(원격
 > `github.com/fistline/2026BCMD`, branch `main`). `data-platform/source/`의 코퍼스
-> 원본(법안 hwp/pdf)은 추적·커밋되어 clone에 함께 실린다. `data/`·`.venv`·`.meltano`는
-> 재생성물이라 gitignore 대상이다.
+> 원본(법안 hwp/pdf, 법령·감독규정·증권신고서 txt)은 추적·커밋되어 clone에 함께 실린다.
+> `data/`·`.venv`·`.meltano`는 재생성물이라 gitignore 대상이다.
 
 ---
 
@@ -236,7 +237,11 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 
 ## 라이선스·유의
 
-이 프로젝트는 **MIT 라이선스**다 — `LICENSE` 참조. `data-platform/source/`의 법안
-원문은 공개된 국회 의안 자료다. 생성되는 증권신고서·dApp은 **참고용 초안**이며
+이 프로젝트는 **MIT 라이선스**다 — `LICENSE` 참조. MIT가 덮는 것은 **이 저장소의 코드와
+문서**이고, `data-platform/source/`의 코퍼스는 각 발행 기관에 저작권이 있는 **공개 자료를
+원문 그대로 담은 것**이다: 국회 의안(법안 hwp/pdf) · 국가법령정보센터(법령·행정규칙) ·
+금융투자협회(모범규준·표준약관) · DART 전자공시(증권신고서·투자설명서). sha256과 출처
+URL은 `source/CORPUS_MANIFEST.tsv`에 있다 — 다만 현재 `norms`·`sto` 48건만 기재돼 있고
+법안 22건은 아직 빠져 있다. 생성되는 증권신고서·dApp은 **참고용 초안**이며
 법률자문·투자권유가 아니다 — 실제 제출·발행 전 법률의견서 확보와 금융감독원
 사전협의를 권고한다.
