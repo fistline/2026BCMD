@@ -40,13 +40,18 @@ def judge(a: str, ctx: dict):
     m = re.search(r"판정 결과가 (S[1-6])\(([^)]+)\)이다", a)
     if m:
         grade, spec = m.group(1), m.group(2)
-        # 해당 등급이 '결론'으로 쓰였는지 본다 — 다른 등급이 더 자주 나오면 결론이 아니다.
-        counts = {g: len(re.findall(rf"\b{g}\b", text)) for g in [f"S{i}" for i in range(1, 7)]}
-        top = max(counts, key=counts.get) if any(counts.values()) else None
+        # **빈도로 세지 않는다.** 좋은 답은 "조건이 바뀌면 S2/S5" 처럼 대안을 한 번씩 짚는데,
+        # 그러면 정답 등급과 동률이 되어 max() 가 아무거나 고른다 — 실제로 S6 답을 S2 로
+        # 오판했다. 판정문에서 등급을 뽑는다. 실물은 전부 "판정: **S6**" 꼴로 머리에 쓴다.
+        v = re.search(r"(?:판정|표준|결론)[^\n]{0,30}?\*{0,2}(S[1-6])\b", text)
         core = re.search(r"ERC-?\d+", spec)
         core_ok = bool(core and re.search(core.group(0).replace("-", "-?"), text))
-        ok = top == grade and core_ok
-        return ok, f"등급 빈도 {counts} · 최다 {top} · 핵심표준({core.group(0) if core else '?'}) {'○' if core_ok else '×'}"
+        if v:
+            return v.group(1) == grade and core_ok, \
+                f"판정문 등급 {v.group(1)} (기대 {grade}) · 핵심표준({core.group(0) if core else '?'}) {'○' if core_ok else '×'}"
+        if not re.search(r"\bS[1-6]\b", text):
+            return False, "S1~S6 등급 표기가 아예 없다 (스킬 규약을 쓰지 않은 답)"
+        return None  # 등급은 있는데 판정문이 아니다 — 사람이 본다
 
     if "ERC-7943을 적용하지 않는다고 명시한다" in a:
         ok = bool(re.search(r"ERC-?7943[^\n]{0,60}(않|불필요|제외|미적용|넣지)", text)
