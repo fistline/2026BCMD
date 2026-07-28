@@ -5,9 +5,11 @@ alias table, the rejection of morphological tokenization — came from eval sets
 built outside the repo and thrown away. That made each one unreproducible and
 the next change unmeasurable. This is the smallest thing that fixes that.
 
-It is a REGRESSION FLOOR, not a benchmark. Fifteen judgments over one Korean
+It is a REGRESSION FLOOR, not a benchmark. A dozen-odd judgments over one Korean
 bill corpus say nothing in absolute terms; what they do is tell you whether the
-change you just made helped or quietly broke a category.
+change you just made helped or quietly broke a category. (Not a fixed count on
+purpose: the set is edited, and a number written here goes stale silently --
+`graded` in the recorded baseline is the one that is true by construction.)
 
 Three arms are reported separately, because the fused number hides the trade:
 a change can lift the keyword arm and lose more in fusion. Morphological

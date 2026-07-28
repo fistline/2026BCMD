@@ -206,10 +206,13 @@ mean: reverting the arm weighting leaves the overall MRR bit-identical at 0.699
 while `particle_glue` drops 0.833 to 0.611. A mean-only reading would call that
 no change.
 
-Judgments in `pipeline/eval_queries.json` are anchored by HEADING REGEX, never by
-chunk_id. Chunk ids are positional, so a sectioning change re-points every one of
-them while they all still resolve — an earlier judgment set survived exactly that
-with `#0110` silently moving from a capital-adequacy article to 제97조(준수사항).
+Judgments in `pipeline/eval_queries.json` are anchored by a HEADING SUBSTRING,
+never by chunk_id. Chunk ids are positional, so a sectioning change re-points every
+one of them while they all still resolve — an earlier judgment set survived exactly
+that with `#0110` silently moving from a capital-adequacy article to 제97조(준수사항).
+The anchor is a LITERAL: `_matching_chunk_ids` re.escape()s it, so a `제\d+조` or a
+`제7조\(신고\)` written as a pattern resolves to NOTHING, the query drops out of
+`graded`, and only the "unresolved judgments" line says so.
 
 `make verify` fails when an ARM metric drops more than 0.02, OR a per-KIND metric
 more than 0.08, below `pipeline/eval_baseline.json` — so a category collapse the
