@@ -31,7 +31,7 @@ package reaches the pipeline only once the plugins are reinstalled.
 | `make gpu-probe` | Which execution provider this machine selects, and whether `fp16` would change it |
 | `make bench-ep` | Measured ms/passage per (provider, asset). Decide GPU-or-not with numbers |
 | `make bench-concurrent` | Do two stages running at once help, or starve each other? Measures the interference |
-| `make setup-gpu GPU=cuda\|directml\|qnn` | Install an accelerator wheel (mutually exclusive; macOS needs none) |
+| `make setup-gpu STACK=cuda\|directml\|qnn` | Install an accelerator wheel; records `.gpu-stack` so every target syncs it |
 | `make ep-equiv` | Cross-hardware contract: same asset on two providers must agree. Skips on a CPU-only box |
 | `make verify` | Full verification gate |
 | `make clean` | Delete regenerable state only |

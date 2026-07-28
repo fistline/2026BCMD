@@ -58,7 +58,10 @@ jobs:
       - name: Hardware seam -- only runtime.py may name an execution provider
         # Imports nothing and needs no venv, which is why it can run before any
         # other step and on any platform.
-        run: python tools/check_seam.py
+        run: uv run --no-project python tools/check_seam.py
+
+      - name: Retired measurements have not come back
+        run: uv run --no-project python tools/check_retired_numbers.py
 
       - name: The layer's platform-independent invariants
         run: uv run python tools/test_runtime_contract.py

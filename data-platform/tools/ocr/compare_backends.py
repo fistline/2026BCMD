@@ -93,11 +93,12 @@ def main(argv=None) -> int:
                 f"scores {label:<7}          : median {statistics.median(scores):.3f}, "
                 f"{below}/{len(scores)} below the 0.92 hotspot threshold"
             )
+    show_diff = text_ratio < 0.98 or ratio < 0.98
     if text_ratio < 0.98:
         print(
             f"\nRECOGNITION differs ({text_ratio:.4f} ignoring whitespace): the backends read "
-            "different CHARACTERS, not just different spacing. Check the diff against the source "
-            "page before landing either one."
+            "different CHARACTERS, not just different spacing. The diff is below -- read it "
+            "against the source page before landing either one."
         )
     elif ratio < 0.98:
         print(
@@ -105,6 +106,10 @@ def main(argv=None) -> int:
             f"({ratio:.4f} raw): spacing and line breaks move. Harmless for the indexed text, "
             "but a review UI that cites line numbers will point at different lines."
         )
+    if show_diff:
+        # Printed for BOTH branches. It used to print only for the layout one --
+        # so the recognition case, the one that actually fired, said "check the
+        # diff" and then showed none.
         for line in list(difflib.unified_diff(paddle_lines, onnx_lines, "paddle", "onnx", lineterm=""))[:60]:
             print(line)
     if only_paddle or only_onnx:

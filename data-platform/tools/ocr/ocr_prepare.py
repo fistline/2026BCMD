@@ -432,7 +432,7 @@ def main(argv=None) -> int:
         choices=("paddle", "onnx"),
         default="paddle",
         help="Inference stack for PP-OCRv5. paddle (default, CPU almost everywhere) or "
-             "onnx (RapidOCR on ONNX Runtime: CUDA / DirectML / CoreML via pipeline/runtime.py).",
+             "onnx (RapidOCR on ONNX Runtime: CUDA / DirectML via pipeline/runtime.py; CoreML deliberately NOT used -- see _onnx_engine_flags).",
     )
     args = parser.parse_args(argv)
     ocr_pdf(args.inputs, Path(args.out), use_vl=args.vl, dpi=args.dpi, backend=args.backend)

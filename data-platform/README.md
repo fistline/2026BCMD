@@ -235,9 +235,13 @@ than failing if the provider does not come up. Two measured caveats:
 Ask your own machine instead of trusting the numbers above:
 
 ```bash
-make gpu-probe    # what gets selected here, and what fp16 would change
-make bench-ep     # ms/passage per (provider, asset), with the winner named
+make setup-gpu STACK=cuda   # or directml / qnn. macOS needs none: CoreML is in the default wheel
+make gpu-probe              # what gets selected here, and what fp16 would change
+make bench-ep               # ms/passage per (provider, asset), with the winner named
 ```
+
+Every measured figure in this section lives in `MEASUREMENTS.md` with the command
+that reproduces it; cite the id rather than restating a number.
 
 Two things to know before switching: the precision is part of `index_signature`
 (it is a different vector space, so it is a **fleet-wide** decision, not a

@@ -454,14 +454,17 @@ class OnnxEmbedder:
         if precision == "fp16" and self.provider == runtime.CPU_EP:
             # The misconfiguration that costs the most and shows the least: the
             # GPU asset running on the CPU. MEASURED on this box: query encoding
-            # goes 12.7 ms (int8) -> 203.4 ms (fp16), 16x, for identical results.
+            # goes 12.7 ms (int8) -> 203.4 ms (fp16), 16x [M:fp16-query], for the same
+            # passages -- NOT for the same vectors: the two assets are different
+            # vector spaces, which is why the precision is in index_signature.
             # It happens whenever a fleet adopts fp16 for its GPU hub and a
             # CPU-only spoke inherits the setting -- the spoke still works, just
             # 16x slower on every query, with nothing in the output to say why.
             print(
                 "[embed] WARNING: EMBEDDING_PRECISION=fp16 but this machine is running on "
-                "the CPU. fp16 is the GPU asset; on a CPU it is ~16x slower than int8 for "
-                "the same vectors. Use int8 here, or check `make gpu-probe`.",
+                "the CPU. fp16 is the GPU asset; on a CPU it is ~16x slower than int8 on a "
+                "short query. Switching back to int8 changes the vector space, so it is a "
+                "FLEET decision and needs a rebuild -- check `make gpu-probe`.",
                 file=sys.stderr,
             )
         self._batch = max(1, int(self.profile.batch))

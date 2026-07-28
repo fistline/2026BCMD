@@ -207,13 +207,16 @@ ocr-compare: ## Do the paddle and onnx OCR backends read a page the same way? Us
 	$(PY) tools/ocr/compare_backends.py "$(FILE)"
 
 verify: ## Run the full verification gate
+	@echo "== cheap invariants (no venv, no network, no hardware) =="
+	# The same checks the root gate and CI run. They lived only in root `make
+	# check`, so the gate AGENTS.md calls the full one did not run them.
+	@python3 tools/check_seam.py
+	@python3 tools/check_retired_numbers.py
 	@echo "== accelerator layer contract (no GPU, no model, no index needed) =="
 	# The only thing that ran this before was the CI workflow, so `make verify` went
 	# green through the EP report, the doctype gate, a full build and three eval
 	# floors while the twelve invariants it all rests on were never checked locally.
 	$(PY) tools/test_runtime_contract.py
-	@echo "== execution provider and asset =="
-	$(PY) -m pipeline.runtime --save
 	@echo "== no evasion tokens =="
 	@! grep -rInE '$(EVASION_PATTERN)' pipeline transform agent .agents Makefile meltano.yml || (echo "FAIL: evasion token found" && exit 1)
 	@echo "OK"
@@ -222,6 +225,11 @@ verify: ## Run the full verification gate
 	@echo "== toolchain =="
 	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano --version && $(UV) run sqlmesh --version
+	@echo "== execution provider and asset =="
+	# AFTER the toolchain sync, not before: `--strict` fails on an install fault,
+	# and "onnxruntime registered nothing" is also what a not-yet-synced tree looks
+	# like. Running it first would make a fresh clone un-verifiable.
+	$(PY) -m pipeline.runtime --save --strict
 	@echo "== fuzzy twin-detector controls =="
 	# Before the build, not after: it reads source/ and the model file only (no
 	# lake), so a detector that started merging non-twins fails in seconds

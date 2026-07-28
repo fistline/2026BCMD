@@ -62,6 +62,10 @@ def test_selection() -> None:
 
     _clear(DEVICE=None, ORT_PROVIDER=None, EMBEDDING_PRECISION=None)
 
+    # NOTE: EMBEDDING_PRECISION is popped above, so what follows tests that
+    # detect("int8") selects the CPU regardless of the AMBIENT precision -- not
+    # that int8 is the shipped default. That claim is tested from a clean
+    # environment in test_settings_validation.
     # THE default-preservation invariant: int8 is a CPU format. A machine growing
     # a GPU must not silently change the vectors the build produces.
     profile = runtime.detect("int8")
@@ -445,7 +449,22 @@ def test_settings_validation() -> None:
     finally:
         os.environ.pop("EMBEDDING_PRECISION", None)
 
-    check("the default asset is int8", get_settings().embedding_precision == "int8")
+    # Read the shipped default from a CLEAN environment. Asserting it after
+    # popping EMBEDDING_PRECISION proved only that pop() works; and .env on a
+    # developer box legitimately sets it, so the check has to say WHOSE default
+    # it is testing.
+    saved = os.environ.pop("EMBEDDING_PRECISION", None)
+    try:
+        check("the shipped default asset is int8", get_settings().embedding_precision == "int8")
+    finally:
+        if saved is not None:
+            os.environ["EMBEDDING_PRECISION"] = saved
+    check(
+        "an operator's EMBEDDING_PRECISION is honoured, not ignored",
+        (lambda: (os.environ.__setitem__("EMBEDDING_PRECISION", "fp16"),
+                  get_settings().embedding_precision == "fp16",
+                  os.environ.pop("EMBEDDING_PRECISION", None))[1])(),
+    )
 
 
 def main() -> int:

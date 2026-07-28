@@ -2,8 +2,9 @@
 
 `build_index` drops `chunks_vec` and rebuilds it from scratch every run, so
 landing ONE new document re-encodes the whole corpus. Measured on this corpus
-(12,643 vectors, bge-m3 int8, 8 workers): ~37 minutes, of which everything but
-the new document is recomputation of bytes that did not change. That is the
+(12,643 vectors, bge-m3 int8, 8 workers): 1433.9 s cold against 51.5 s once
+cached [M:cold-rebuild], of which everything but the new document is
+recomputation of bytes that did not change. That is the
 largest single cost in the pipeline and it is not a model problem -- no
 accelerator makes recomputing an unchanged vector worthwhile.
 
@@ -18,8 +19,9 @@ Three decisions worth stating, because each has a wrong-looking cheaper option:
   * The validity key is the VECTOR signature (provider | model | dim | precision),
     not `index_signature`. The index signature also covers the FTS tokenizer,
     the n-gram widths, the doctype profiles and Kiwi -- none of which move a
-    vector. Invalidating 12k vectors because the FTS tokenizer changed is a
-    37-minute mistake, so the two signatures are deliberately separate.
+    vector. Invalidating 12k vectors because the FTS tokenizer changed costs a
+    full cold rebuild [M:cold-rebuild], so the two signatures are deliberately
+    separate.
   * The cache is its own file under `data/processed/`, not a table inside
     `index.sqlite`. The serving index is what `make sync` ships to spokes and a
     spoke has no use for a build cache; keeping it out also keeps the shipped
@@ -240,8 +242,9 @@ def encode_with_cache(embedder, texts: Sequence[str], cache_path, dimensions: in
 
         if pending:
             # Checkpoint every CHECKPOINT passages rather than once at the end. A
-            # cold encode of this corpus runs for ~37 minutes; committing only at
-            # the end means a Ctrl-C at minute 36 saves nothing, and the next
+            # cold encode of this corpus runs for 1433.9 s [M:cold-rebuild];
+            # committing only at the end means a Ctrl-C at minute 23 saves
+            # nothing, and the next
             # attempt starts from zero. It also caps peak memory: the full result
             # list for 12k x 1024 floats is hundreds of MB of Python floats.
             written: list = []

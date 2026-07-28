@@ -42,7 +42,9 @@ to a tolerance (cosine >= 0.9999 and identical top-10), which
 Knobs (all optional, all default to today's behaviour):
     DEVICE=auto|cpu|gpu     policy. `auto` uses a GPU only when rule 1 allows.
     ORT_PROVIDER=<EPName>   force one EP. Fails loudly if it is not registered.
-    ORT_THREADS=<n>         intra-op threads for the CPU EP.
+    (Threads are NOT a knob here: sessions are pinned to intra_op=1 for
+     bit-stability. RERANK_THREADS is the one exception, because a reranker
+     score is not persisted. ENCODE_WORKERS sets the parallel Run() count.)
     EMBEDDING_PRECISION     int8|fp16|auto (see pipeline/build_rag.py).
 """
 
@@ -288,12 +290,8 @@ def devices_of_class(klass: str, eligible_only: bool = True) -> tuple:
     )
 
 
-def candidate_providers(system: str | None = None) -> tuple:
-    """Accelerator EPs on this machine, best class first. CPU is never included.
-
-    `system` is accepted and ignored: the axis is the device class, not the OS.
-    It survives only so an older caller does not break.
-    """
+def candidate_providers() -> tuple:
+    """Accelerator EPs on this machine, best class first. CPU is never included."""
     return tuple(
         device.ep
         for device in enumerate_devices()
@@ -802,8 +800,17 @@ def save_profile(path, profile: DeviceProfile, measurements: dict | None = None)
 # --------------------------------------------------------------------------
 # Preflight / probe
 # --------------------------------------------------------------------------
-def preflight() -> list:
-    """Problems worth telling the operator about. Empty means nothing to say."""
+def faults() -> list:
+    """Install FAULTS -- conditions under which nothing here can be trusted.
+
+    Separate from `notes()` because only these may fail a gate, and the
+    distinction is not cosmetic. "No providers registered" reads like a broken
+    install and is ALSO what an absent onnxruntime looks like: `available_
+    providers()` swallows the import error and returns (). A fresh clone, and the
+    shipped `EMBEDDING_PROVIDER=hashing` default, both legitimately have no
+    onnxruntime -- so that condition is a fault only when the module is actually
+    present.
+    """
     problems: list = []
     wheel = installed_wheel()
     if wheel.count("onnxruntime") > 1 and "," in wheel:
@@ -811,9 +818,25 @@ def preflight() -> list:
             f"MORE THAN ONE onnxruntime wheel is installed ({wheel}). They all provide the "
             f"same module and must never be mixed: uninstall all but one, then re-sync."
         )
+    if have_onnx() and not available_providers():
+        problems.append(
+            "onnxruntime is installed but registered no execution providers at all "
+            "(broken install)."
+        )
+    return problems
+
+
+def notes() -> list:
+    """Things worth saying that must NOT fail a gate.
+
+    A GPU wheel whose runtime did not come up is a degraded machine, not a broken
+    one: the CPU path still works, and rule 2 says an accelerator problem never
+    fails a build.
+    """
+    problems: list = []
+    wheel = installed_wheel()
     registered = available_providers()
     if not registered:
-        problems.append("onnxruntime registered no execution providers at all (broken install).")
         return problems
     if "onnxruntime-gpu" in wheel and "CUDAExecutionProvider" not in registered:
         problems.append(
@@ -826,6 +849,11 @@ def preflight() -> list:
             "onnxruntime-directml is installed but DmlExecutionProvider did not register."
         )
     return problems
+
+
+def preflight() -> list:
+    """Everything worth telling the operator. Unchanged for every existing caller."""
+    return faults() + notes()
 
 
 @contextmanager
@@ -942,13 +970,25 @@ def probe_provider(onnx_path, provider: str, timeout: float | None = None) -> di
 
 
 def _terminate(child) -> None:
-    """SIGTERM the group, then SIGKILL it, each with a bounded wait."""
+    """SIGTERM the process GROUP, then SIGKILL it, each with a bounded wait.
+
+    The group is the point: `start_new_session` put the child in its own, so a
+    provider that forked helpers leaves them behind if only the direct child is
+    signalled -- which is what this did before. `start_new_session` also detaches
+    the child from the terminal's Ctrl-C, deliberately: the parent decides when
+    the probe dies, so an interrupt cannot leave a half-initialised GPU context
+    holding the device.
+    """
+    import signal
     import subprocess
 
-    for stopper in (child.terminate, child.kill):
+    for number, fallback in ((signal.SIGTERM, child.terminate), (signal.SIGKILL, child.kill)):
         try:
-            stopper()
-        except OSError:
+            if os.name != "nt":
+                os.killpg(os.getpgid(child.pid), number)
+            else:
+                fallback()  # no process groups to signal on Windows
+        except (OSError, ProcessLookupError):
             return
         try:
             child.wait(timeout=5)
@@ -1040,6 +1080,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Report the ONNX execution provider this machine will use.")
     parser.add_argument("--model", help="Optional .onnx path to report per-EP graph support for.")
     parser.add_argument("--save", action="store_true", help="Write the chosen profile to the data plane.")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit non-zero on an install FAULT (two wheels, or a present onnxruntime that "
+             "registered nothing). Degraded-but-working states stay exit 0.",
+    )
     parser.add_argument("--probe-one", help="Internal: build a session on this provider and write --out.")
     parser.add_argument("--out", help="Internal: where --probe-one writes its result.")
     args = parser.parse_args(argv)
@@ -1069,6 +1115,9 @@ def main(argv=None) -> int:
     print(json.dumps(report, indent=2, ensure_ascii=False))
     for problem in report["problems"]:
         print(f"[runtime] WARNING: {problem}", file=sys.stderr)
+    if args.strict and faults():
+        print("[runtime] FAIL: the onnxruntime install is faulty (see above).", file=sys.stderr)
+        return 1
     return 0
 
 
