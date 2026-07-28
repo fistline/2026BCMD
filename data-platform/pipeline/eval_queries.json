@@ -1,6 +1,6 @@
 {
   "_about": [
-    "Retrieval judgments. Relevance is anchored by a HEADING REGEX, never by chunk_id:",
+    "Retrieval judgments. Relevance is anchored by a HEADING SUBSTRING, never by chunk_id:",
     "chunk ids are positional ({doc_id}#{index:04d}), so any change to sectioning",
     "silently re-points them. That is not hypothetical -- an earlier judgment set",
     "keyed on chunk_id survived a zone-splitting change with every id still resolving,",
@@ -17,7 +17,26 @@
     "  synonym_gap       the query uses a different surface for the same referent",
     "  particle_glue     the query noun carries 조사, the document's does not",
     "  cross_bill        several bills legislate it; finding the family is the point",
-    "  negative          genuinely absent; anything confident here is a false positive"
+    "  negative          genuinely absent; anything confident here is a false positive",
+    "",
+    "An anchor is a LITERAL substring, not a pattern: _matching_chunk_ids re.escape()s",
+    "it before searching. Writing 제\\d+조 or 제7조\\(신고\\) here silently resolves to",
+    "NOTHING, the query drops out of `graded`, and the run reports it under",
+    "'unresolved judgments' -- easy to miss beside a table that still prints.",
+    "",
+    "An anchor is only as good as the corpus it was written against. These judgments",
+    "were authored when the index held 8 fixtures; the real bill corpus is 13,047",
+    "chunks, and a regex that named one article there can name a tenth of the index",
+    "here. Before trusting a number, check how many chunks its anchor resolves to --",
+    "q08's 인가|등록|신고 resolved to 1411 of them, so its MRR 1.0 was arithmetic, not",
+    "retrieval. smoke_test.py already guards this seam with a fixture_only branch;",
+    "this file has no such branch, so the check is yours.",
+    "",
+    "A TOKENIZER property is not a judgment. q09 (query 증권, anchor 벌칙) was retired",
+    "2026-07-28: it probed that the bigram expansion matches a 2-char term, which",
+    "smoke_test.py asserts directly and correctly, while as a judgment it asked which",
+    "of 101 벌칙 articles answers a term appearing in 4368 chunks. Put a property in",
+    "smoke; put a retrieval preference here."
   ],
   "queries": [
     {
@@ -66,22 +85,15 @@
       "id": "q07",
       "query": "가상자산사업자의 신고 요건",
       "kind": "particle_glue",
-      "relevant": ["가상자산사업자의 신고", "디지털자산업의 인가"],
-      "why": "사업자의 carries 조사. The fixture holds 제7조(신고한 업무의 요건) and 제12조(신고를 게을리한 자) as deliberate distractors."
+      "relevant": ["제7조(신고)", "디지털자산주문전송업의 신고", "제3조(가상자산사업자의 신고)"],
+      "why": "사업자의 carries 조사; the articles title the noun bare. RE-ANCHORED 2026-07-28: the old anchor 가상자산사업자의 신고 was written against the FIXTURE corpus, where it hit 제3조 alone. Against the real corpus it resolved to 특금법 제4조(적용례) and 제5조(경과조치) -- procedural riders -- while the substantive 특금법 제7조(신고) fell outside it, because that article is titled just 신고. The second anchor 디지털자산업의 인가 counted 인가 articles as answers to a 신고 question, and marked 제32조(디지털자산주문전송업의 신고) a distractor even though its ②항 enumerates 신고 요건 verbatim. Measured: the retriever was ranking correct articles 1-2 and the judgment was calling them wrong. Now 5 chunks (0.04%), matched as literal substrings."
     },
     {
       "id": "q08",
       "query": "디지털자산사업자는 어떤 신고를 하여야 하는가",
       "kind": "particle_glue",
-      "relevant": ["인가", "등록", "신고"],
-      "why": "사업자는 glued; the answer articles use the bare noun."
-    },
-    {
-      "id": "q09",
-      "query": "증권",
-      "kind": "particle_glue",
-      "relevant": ["벌칙"],
-      "why": "Two characters. The trigram tokenizer cannot match these at all, which is why bigrams were chosen."
+      "relevant": ["발행의 신고", "디지털자산주문전송업의 신고", "제7조(신고)"],
+      "why": "사업자는 glued; the answer articles use the bare noun. RE-ANCHORED 2026-07-28: the old anchor was three BARE NOUNS (인가|등록|신고) matching any heading that contains one, which on the real corpus is 1411 chunks -- 10.8% of the index. A judgment that broad CANNOT FAIL, so its MRR 1.0 measured nothing; it was fixture-era precision applied to a corpus 400x larger. Now the articles that actually impose a 신고 duty on an operator: 발행의 신고, 디지털자산주문전송업의 신고, and 특금법 제7조(신고). 7 chunks (0.05%)."
     },
     {
       "id": "q10",
