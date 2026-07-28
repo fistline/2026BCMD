@@ -14,7 +14,7 @@ SKILL_CHECK := data-platform/tools/check_skills.py
 # 코드가 오늘 실패한다. 올릴 때는 올리고 나서 한 번 돌려보고 커밋한다.
 RUFF := uvx ruff@0.16.0
 
-.PHONY: help check lint fmt verify prompts
+.PHONY: help check lint fmt hooks verify prompts
 
 help: ## 이 목록
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -33,6 +33,10 @@ lint: ## ruff (설정·제외 대상은 ruff.toml)
 
 fmt: ## ruff 자동수정 (import 정렬·현대화 등). 의미를 바꾸는 것은 손대지 않는다
 	@$(RUFF) check --fix .
+
+hooks: ## 커밋 전 `make check` 를 강제 (clone 마다 한 번). 해제: git config --unset core.hooksPath
+	@git config core.hooksPath .githooks
+	@echo "core.hooksPath = .githooks — 커밋 시 make check 가 돈다 (건너뛰기: git commit --no-verify)"
 
 verify: check ## check + data-platform 전체 게이트 (빌드 포함, 느림)
 	@echo
