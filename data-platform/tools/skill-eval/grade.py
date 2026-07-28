@@ -36,6 +36,7 @@ import hashlib
 import importlib
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 # 규칙 모듈 등록부. 스킬이 늘면 여기 한 줄 추가하고 rules_<name>.py 를 옆에 둔다.
@@ -59,15 +60,19 @@ def load_outputs(run: Path) -> tuple[str, list[str], dict[str, str]]:
     X-10 판정이 무엇인가" 같은 것은 전부 이어붙인 문자열로는 판정할 수 없다.
     """
     names, blobs, files = [], [], {}
-    for f in sorted((run / "outputs").glob("*")):
+    for f in sorted((run / "outputs").glob("*"), key=lambda x: unicodedata.normalize("NFC", x.name)):
         if f.is_file():
-            names.append(f.name)
+            # 이름도 NFC 로 정규화한다. 규칙이 파일명을 정규식으로 보는데(`심사검토서`,
+            # `_시뮬`), macOS 원본은 NFC 여도 tar 를 지나면 NFD 로 분해돼 같은 정규식이
+            # 안 맞는다 — 복원본에서 채점이 어긋나는 것으로 드러났다.
+            name = unicodedata.normalize("NFC", f.name)
+            names.append(name)
             try:
                 t = f.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             blobs.append(t)
-            files[f.name] = t
+            files[name] = t
     return "\n".join(blobs), names, files
 
 
@@ -93,12 +98,20 @@ def banned_hits(text: str, patterns: list[str], negation: re.Pattern = NEGATION)
 
 
 def outputs_digest(run: Path) -> str:
-    """산출물 전체의 지문. 파일명과 내용이 하나라도 다르면 값이 달라진다."""
+    """산출물 전체의 지문. 파일명과 내용이 하나라도 다르면 값이 달라진다.
+
+    **파일명은 NFC 로 정규화하고 정규화한 값으로 정렬한다.** macOS 는 한글 파일명을
+    NFD(자모 분해)로 들고 있는데 tar 를 지나면 NFC 로 바뀐다 — 눈에는 같은 이름이고 내용도
+    바이트까지 같은데 지문만 달라진다. 실제로 아카이브를 복원해 채점을 재현해 보다 잡았다.
+    정규화하지 않으면 백업에서 되살린 산출물에는 사람 판정이 영영 적용되지 않는다.
+    """
     h = hashlib.sha256()
-    for f in sorted((run / "outputs").glob("*")):
-        if f.is_file():
-            h.update(f.name.encode("utf-8"))
-            h.update(hashlib.sha256(f.read_bytes()).digest())
+    entries = sorted(((unicodedata.normalize("NFC", f.name), f)
+                      for f in (run / "outputs").glob("*") if f.is_file()),
+                     key=lambda e: e[0])
+    for name, f in entries:
+        h.update(name.encode("utf-8"))
+        h.update(hashlib.sha256(f.read_bytes()).digest())
     return h.hexdigest()[:16]
 
 
