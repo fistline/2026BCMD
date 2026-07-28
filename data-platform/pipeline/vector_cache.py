@@ -144,17 +144,27 @@ class VectorCache:
         self.readonly = readonly
         self.signature_matches = True
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # `sqlite3.connect` succeeds on a file that is not a database -- the header
+        # is not read until the first statement. So the connection has to be
+        # CLOSED before the failure propagates, or the process keeps the file open.
+        # On POSIX that is invisible (an open file can still be unlinked); on
+        # Windows the file cannot be deleted at all, which is how CI found it:
+        # `PermissionError: [WinError 32] ... being used by another process`.
         self._connection = sqlite3.connect(str(self.path))
-        self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-        )
-        self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS vectors ("
-            "embed_key TEXT PRIMARY KEY, embedding BLOB NOT NULL)"
-        )
-        stored = self._connection.execute(
-            "SELECT value FROM meta WHERE key = 'vector_signature'"
-        ).fetchone()
+        try:
+            self._connection.execute(
+                "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            )
+            self._connection.execute(
+                "CREATE TABLE IF NOT EXISTS vectors ("
+                "embed_key TEXT PRIMARY KEY, embedding BLOB NOT NULL)"
+            )
+            stored = self._connection.execute(
+                "SELECT value FROM meta WHERE key = 'vector_signature'"
+            ).fetchone()
+        except sqlite3.Error:
+            self._connection.close()
+            raise
         if stored is None or stored[0] != signature:
             self.signature_matches = False
             self.stored_signature = stored[0] if stored else ""
