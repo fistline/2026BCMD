@@ -1670,7 +1670,8 @@ def test_runtime_and_cache(paths) -> None:
     import json as _json
 
     stale = paths.processed / "device_profile.smoke.json"
-    runtime.save_profile(stale, profile)
+    with runtime.profile_writes_allowed():
+        runtime.save_profile(stale, profile)
     payload = _json.loads(stale.read_text(encoding="utf-8"))
     payload["fingerprint"] = "some other machine"
     stale.write_text(_json.dumps(payload), encoding="utf-8")

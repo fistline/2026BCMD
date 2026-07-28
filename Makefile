@@ -28,6 +28,8 @@ check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매�
 	@$(PY) data-platform/tools/check_knobs.py
 	@echo "== 모든 타깃이 같은 환경을 sync 하는가 (확장식 비교) =="
 	@cd data-platform && $(PY) tools/check_sync_lists.py
+	@echo "== lock: 벡터·자산 로딩에 영향 주는 패키지가 움직였는가 =="
+	@$(PY) data-platform/tools/check_lock_pin.py
 	@echo "== skill frontmatter (루트 + data-platform) =="
 	@$(PY) $(SKILL_CHECK) .agents/skills data-platform/.agents/skills
 	@echo "== sto-filing dist/ 가 스킬 정본과 일치하는가 =="

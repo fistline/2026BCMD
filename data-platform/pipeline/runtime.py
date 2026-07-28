@@ -754,6 +754,36 @@ def machine_fingerprint() -> str:
     )
 
 
+_PROFILE_WRITES = False
+
+
+@contextmanager
+def profile_writes_allowed():
+    """Inside this block, `save_profile` may write. Outside it, it will not.
+
+    Invariant 10 says nothing on the read path may download, probe or compile,
+    and a read path that WRITES the machine's device profile is the same class of
+    problem: a `make query` would change what the next `make build` produces.
+    That was reachable -- Tier B resolves its split in `OnnxEmbedder.__init__`,
+    and the read path constructs an embedder on every query.
+
+    A context manager rather than a process-global flag two entry points remember
+    to set: the permission is scoped to the code that owns it, and it is restored
+    even when the build raises.
+    """
+    global _PROFILE_WRITES
+    previous = _PROFILE_WRITES
+    _PROFILE_WRITES = True
+    try:
+        yield
+    finally:
+        _PROFILE_WRITES = previous
+
+
+def profile_writes_are_allowed() -> bool:
+    return _PROFILE_WRITES
+
+
 def load_profile(path) -> dict | None:
     path = Path(path)
     if not path.exists():
@@ -784,6 +814,15 @@ def save_profile(path, profile: DeviceProfile, measurements: dict | None = None)
     previous profile intact rather than a truncated one that load_profile then
     discards (taking the recorded split with it).
     """
+    if not _PROFILE_WRITES:
+        # Refused, never raised: a profile-write problem must not fail a build
+        # (rule 2), and the caller that hit this is usually a query.
+        print(
+            "[runtime] not writing the device profile: this is not a build entry point. "
+            "A read path that rewrites the profile would change what the next build produces.",
+            file=sys.stderr,
+        )
+        return
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = load_profile(path) or {}
@@ -1111,7 +1150,8 @@ def main(argv=None) -> int:
         except Exception:  # noqa: BLE001 - probing must work before any model exists
             model = None
 
-    report = probe(model, save_to=paths.processed / "device_profile.json" if args.save else None)
+    with profile_writes_allowed():
+        report = probe(model, save_to=paths.processed / "device_profile.json" if args.save else None)
     print(json.dumps(report, indent=2, ensure_ascii=False))
     for problem in report["problems"]:
         print(f"[runtime] WARNING: {problem}", file=sys.stderr)

@@ -66,6 +66,9 @@ jobs:
       - name: Knobs and their documentation agree
         run: uv run --no-project python tools/check_knobs.py
 
+      - name: Load-bearing packages have not moved in the lock
+        run: uv run --no-project python tools/check_lock_pin.py
+
       - name: The layer's platform-independent invariants
         run: uv run python tools/test_runtime_contract.py
 

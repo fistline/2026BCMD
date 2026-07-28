@@ -241,7 +241,8 @@ def test_profile_cache() -> None:
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "device_profile.json"
         profile = runtime.detect("int8")
-        runtime.save_profile(path, profile, {"encode_split": [3, 1]})
+        with runtime.profile_writes_allowed():
+            runtime.save_profile(path, profile, {"encode_split": [3, 1]})
         loaded = runtime.load_profile(path)
         check("a profile written here is read back here", loaded is not None)
         check(
@@ -261,6 +262,19 @@ def test_profile_cache() -> None:
         path.write_text("{not json", encoding="utf-8")
         check("a corrupt profile is ignored rather than raising", runtime.load_profile(path) is None)
 
+    # Invariant 10: a read path may not rewrite the machine's device profile. It
+    # would let `make query` change what the next `make build` produces -- and
+    # that was reachable, because Tier B resolves its split in the embedder's
+    # constructor and the read path constructs an embedder on every query.
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "device_profile.json"
+        profile = runtime.detect("int8")
+        runtime.save_profile(path, profile)
+        check("a profile write outside a build entry point is refused", not path.exists())
+        with runtime.profile_writes_allowed():
+            runtime.save_profile(path, profile)
+        check("a build entry point may write the profile", path.exists())
+
     # A measurement-less save must PRESERVE what is on disk. It used to write
     # `measurements or {}`, so every `pipeline.runtime --save` -- which both
     # `make gpu-probe` and `make verify` run -- erased the Tier B split that
@@ -269,15 +283,17 @@ def test_profile_cache() -> None:
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "device_profile.json"
         profile = runtime.detect("int8")
-        runtime.save_profile(path, profile, {"encode_split": [7, 2]})
-        runtime.save_profile(path, profile)  # the --save call, carrying no measurements
+        with runtime.profile_writes_allowed():
+            runtime.save_profile(path, profile, {"encode_split": [7, 2]})
+            runtime.save_profile(path, profile)  # the --save call, carrying no measurements
         after = runtime.load_profile(path) or {}
         check(
             "a measurement-less save preserves the recorded split",
             after.get("measurements", {}).get("encode_split") == [7, 2],
             str(after.get("measurements")),
         )
-        runtime.save_profile(path, profile, {})  # explicit clear
+        with runtime.profile_writes_allowed():
+            runtime.save_profile(path, profile, {})  # explicit clear
         cleared = runtime.load_profile(path) or {}
         check("an explicit empty measurements clears them", cleared.get("measurements") == {})
 

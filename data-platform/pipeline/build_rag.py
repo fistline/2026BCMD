@@ -436,6 +436,9 @@ class OnnxEmbedder:
         self.profile = runtime.detect(precision, stage="embedder")
         self._onnx_path = onnx_path
         self._cpu_session = None
+        # allow_download is True only on the build path; the split may be MEASURED
+        # there and nowhere else.
+        self._for_build = allow_download
         # auto (default) = device alone, with CPU/device overlap (Tier A).
         # hybrid = the CPU also encodes batches (Tier B). See _encode_hybrid.
         self._devices = os.environ.get("ENCODE_DEVICES", "auto").strip().lower()
@@ -645,7 +648,8 @@ class OnnxEmbedder:
             + ("  (device is >3x the cpu; hybrid buys little here)" if device_rate > 3 * cpu_rate else ""),
             file=sys.stderr,
         )
-        runtime.save_profile(profile_path, self.profile, {"encode_split": [device_share, cpu_share]})
+        with runtime.profile_writes_allowed():
+            runtime.save_profile(profile_path, self.profile, {"encode_split": [device_share, cpu_share]})
         return device_share, cpu_share
 
     def _resolve_hybrid_split(self) -> None:
@@ -661,6 +665,17 @@ class OnnxEmbedder:
         first.
         """
         if self._devices != "hybrid" or self.provider == runtime.CPU_EP:
+            return
+        if not self._for_build:
+            # The read path takes the RECORDED split or none. Measuring it here
+            # would time two live sessions on every query, and then write the
+            # profile from a read-only command.
+            recorded = (runtime.load_profile(get_paths().processed / "device_profile.json") or {})
+            split = (recorded.get("measurements") or {}).get("encode_split")
+            if split:
+                self._split = (int(split[0]), int(split[1]))
+                if int(split[1]) > 0:
+                    self.vector_space_suffix = f"{self.provider}+split{int(split[0])}:{int(split[1])}"
             return
         sample = ["가상자산 이용자 보호에 관한 법률 제1조(목적)"] * self._batch
         device_share, cpu_share = self._hybrid_split(sample)

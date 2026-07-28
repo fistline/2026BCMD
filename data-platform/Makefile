@@ -214,6 +214,7 @@ verify: ## Run the full verification gate
 	@python3 tools/check_retired_numbers.py
 	@python3 tools/check_knobs.py
 	@python3 tools/check_sync_lists.py
+	@python3 tools/check_lock_pin.py
 	@echo "== accelerator layer contract (no GPU, no model, no index needed) =="
 	# The only thing that ran this before was the CI workflow, so `make verify` went
 	# green through the EP report, the doctype gate, a full build and three eval
