@@ -51,6 +51,7 @@
   },
   "chunk_count": 13047,
   "graded": 14,
+  "judgment_sha": "41337043a6c9",
   "per_query": [
     {
       "id": "q01",
@@ -146,6 +147,6 @@
     "rrf_k": 60,
     "vector_weight": 1.0
   },
-  "source_sha": "a400dfdd83d106c859bdb970f6159ed71a9340c7",
+  "source_sha": "8c0f201f41d0d444d4456719b99b0d0a55ae7ed0",
   "unresolved": []
 }

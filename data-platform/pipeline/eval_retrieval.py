@@ -160,6 +160,36 @@ def _mean(values: list) -> float:
     return round(sum(values) / len(values), 4) if values else 0.0
 
 
+def _judgment_sha(queries: list) -> str:
+    """Fingerprint of what the judgments ASK, so a floor knows it is comparable.
+
+    The `graded` count above answers "how many"; this answers "which". They are
+    not redundant: `graded` counts judgments that RESOLVED, so it moves when the
+    index changes under a fixed judgment file, and stays put when a judgment is
+    re-anchored. Re-anchoring is the case that actually happened -- q08's anchor
+    went from 1411 chunks (10.8% of the index, a judgment that could not fail) to
+    7, with the query count unchanged, and nothing would have noticed.
+
+    Covers only the fields that decide a score. Editing a `why` note, or
+    reordering anchors that resolve to the same set, must not fire the gate --
+    the numbers would be identical, and a gate that cries on prose gets ignored.
+    12 hex chars: this detects an edit, it does not defend against a forged one.
+    """
+    import hashlib
+
+    payload = [
+        {
+            "id": query.get("id"),
+            "query": query.get("query"),
+            "kind": query.get("kind"),
+            "relevant": sorted(query.get("relevant") or []),
+        }
+        for query in sorted(queries, key=lambda query: query.get("id") or "")
+    ]
+    blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
+
+
 def _source_sha() -> str:
     """The commit this eval ran against, so a recorded number is bound to a SHA.
 
@@ -294,6 +324,7 @@ def evaluate(paths: Paths | None = None, settings: Settings | None = None) -> di
             for kind, bucket in by_kind.items()
         },
         "graded": len(graded),
+        "judgment_sha": _judgment_sha(queries),
         "chunk_count": chunk_count,
         "source_sha": _source_sha(),
         "per_query": per_query,
@@ -427,6 +458,30 @@ def compare(
             f"\n[eval] SKIP: the judgment set changed since the baseline "
             f"({base_graded} -> {current_graded} queries). Every metric is a mean over those "
             f"queries, so the floor is not comparable. Re-record with `{record_cmd}`.",
+        )
+        return 1 if strict else 0
+
+    # ...and the count is only half of "did the judgments change". A judgment can be
+    # RE-ANCHORED without the count moving, which is the case that got through: q08's
+    # anchor was three bare nouns resolving to 1411 chunks -- 10.8% of the index, so
+    # its MRR 1.0 was arithmetic, not retrieval -- and narrowing it to 7 left `graded`
+    # untouched. The floor would have been compared across two different questions.
+    base_judgments = baseline.get("judgment_sha")
+    current_judgments = result.get("judgment_sha")
+    if base_judgments is None:
+        # Say so. A check that silently does nothing on every pre-existing baseline
+        # is worse than no check, because the report still looks like it passed.
+        print(
+            f"\n[eval] NOTE: this baseline predates the judgment fingerprint, so an edit "
+            f"to the judgments themselves is NOT being checked. Re-record with "
+            f"`{record_cmd}` to arm it.",
+        )
+    elif current_judgments is not None and base_judgments != current_judgments:
+        print(
+            f"\n[eval] SKIP: the judgments were EDITED since the baseline "
+            f"({base_judgments} -> {current_judgments}); the query count is unchanged, so "
+            f"only their content moved. The floor answers a different question than this "
+            f"run does. Re-record with `{record_cmd}`.",
         )
         return 1 if strict else 0
 
