@@ -66,3 +66,4 @@ docs/plans/
 # a memory dir is ever created inside the tree.
 .claude/memory/
 memory/
+.gpu-stack

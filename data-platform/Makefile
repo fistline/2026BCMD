@@ -9,20 +9,29 @@ PY := $(UV) run python
 # hypothetical -- reset gained these extras first, setup caught up a commit
 # later (69af01e), and verify's bare sync kept stripping them until it was
 # pointed at this variable. Keep in step with .env.
-SYNC_EXTRAS := --extra onnx-embed --extra kiwi --extra web
+CPU_EXTRAS := --extra onnx-embed --extra kiwi --extra web
 
-# GPU execution provider for this machine, chosen ONCE here (see `make setup-gpu`).
-# The onnxruntime wheels are mutually exclusive -- gpu-cuda / gpu-directml REPLACE
-# onnx-embed rather than adding to it, which is why this is a substitution and not
-# another `--extra`. macOS needs nothing: CoreML ships in the default wheel.
-#   make setup-gpu GPU=cuda        Linux/Windows + NVIDIA
-#   make setup-gpu GPU=directml    Windows, any DX12 GPU (NVIDIA/AMD/Intel)
-#   make setup-gpu GPU=qnn         Windows on ARM (Snapdragon X NPU) -- UNVERIFIED, see runtime.py
-GPU ?=
-ifeq ($(GPU),)
-GPU_SYNC_EXTRAS := $(SYNC_EXTRAS)
+# The GPU axis then re-introduced that exact trap, because the accelerator
+# extras REPLACE onnx-embed (they are the same onnxruntime module, declared in
+# `[tool.uv] conflicts`) while only `setup-gpu` knew about them. `reset` and
+# `verify` kept expanding the CPU list, so every gate uninstalled the wheel
+# `setup-gpu` had installed -- and then re-encoded all 12,643 vectors inside the
+# gate, because the vector cache is keyed on the provider.
+#
+# So the list is a function of THE MACHINE, not of the target: `make setup-gpu`
+# records the choice in `.gpu-stack` (git-ignored) only AFTER proving the wheel
+# actually landed, and every target expands the same SYNC_EXTRAS.
+#   make setup-gpu STACK=cuda        Linux/Windows + NVIDIA
+#   make setup-gpu STACK=directml    Windows, any DX12 GPU (NVIDIA/AMD/Intel)
+#   make setup-gpu STACK=qnn         Windows on ARM (Snapdragon X NPU) -- UNVERIFIED
+# The first `make verify` after a successful setup-gpu re-encodes the corpus once
+# (~24 min) as the cache flips from CPU-signed to GPU-signed. That is scheduled
+# here rather than discovered inside a gate.
+GPU ?= $(shell cat .gpu-stack 2>/dev/null)
+ifeq ($(strip $(GPU)),)
+SYNC_EXTRAS := $(CPU_EXTRAS)
 else
-GPU_SYNC_EXTRAS := --extra gpu-$(GPU) --extra kiwi --extra web
+SYNC_EXTRAS := --extra gpu-$(strip $(GPU)) --extra kiwi --extra web
 endif
 
 .PHONY: help setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
@@ -34,9 +43,28 @@ setup: ## Resolve dependencies (incl. configured extras) and install Meltano plu
 	$(UV) sync $(SYNC_EXTRAS)
 	$(UV) run meltano install
 
-setup-gpu: ## Install an accelerator wheel. Usage: make setup-gpu GPU=cuda|directml|qnn (macOS needs none)
-	@test -n "$(GPU)" || (echo "usage: make setup-gpu GPU=cuda|directml|qnn   (macOS: CoreML ships in the default wheel; just run make gpu-probe)" && exit 1)
-	$(UV) sync $(GPU_SYNC_EXTRAS)
+setup-gpu: ## Install an accelerator wheel. Usage: make setup-gpu STACK=cuda|directml|qnn (macOS needs none)
+	# STACK, not GPU: GPU is now seeded from .gpu-stack, so reusing it as the
+	# argument would make the request indistinguishable from the recorded state.
+	@test -n "$(STACK)" || (echo "usage: make setup-gpu STACK=cuda|directml|qnn   (macOS: CoreML ships in the default wheel; just run make gpu-probe)" && exit 1)
+	@case "$(STACK)" in cuda|directml|qnn) ;; *) echo "STACK must be cuda, directml or qnn; got '$(STACK)'" && exit 1 ;; esac
+	# The wheels are marker-gated, so an impossible pairing does NOT fail to
+	# resolve -- it resolves to nothing and leaves the venv with no onnxruntime at
+	# all while exiting 0. Measured on this Mac: a dry-run sync of the gpu-cuda
+	# extra exits 0 and reports "Would uninstall onnxruntime". So the sync is
+	# only kept if a wheel PROVABLY landed; otherwise the CPU stack is restored
+	# and .gpu-stack is not written.
+	$(UV) sync --extra gpu-$(STACK) --extra kiwi --extra web
+	@if $(PY) -c "from pipeline import runtime; import sys; sys.exit(0 if 'onnxruntime-$(STACK)' in runtime.installed_wheel() or ('$(STACK)' == 'cuda' and 'onnxruntime-gpu' in runtime.installed_wheel()) else 1)" 2>/dev/null; then \
+	  echo "$(STACK)" > .gpu-stack; \
+	  echo "[setup-gpu] recorded .gpu-stack=$(STACK); every target now syncs this stack."; \
+	  echo "[setup-gpu] NOTE: the next \`make verify\` re-encodes the corpus once (~24 min) as the vector cache flips from CPU-signed to GPU-signed."; \
+	else \
+	  echo "[setup-gpu] FAIL: no onnxruntime-$(STACK) wheel landed on this platform ($$($(PY) -c 'from pipeline import runtime; print(runtime.installed_wheel())'))."; \
+	  echo "[setup-gpu] restoring the CPU stack; .gpu-stack was NOT written."; \
+	  $(UV) sync $(CPU_EXTRAS); \
+	  exit 1; \
+	fi
 	$(UV) run meltano install
 	@echo
 	@echo "== does it actually work? =="
@@ -55,7 +83,7 @@ bench-concurrent: ## Do two stages running at once help, or starve each other? M
 	RERANK=1 $(PY) tools/bench_concurrency.py
 
 warm-models: ## One-time online fetch of the configured embedder asset (and the reranker when RERANK=1)
-	$(PY) -c "from pipeline import get_settings; from pipeline.build_rag import get_embedder; s=get_settings(); e=get_embedder(s, allow_download=True); print(f'[warm] embedder {e.name}/{e.precision} on {e.provider} cached')"
+	$(PY) -c "from pipeline import get_settings; from pipeline.build_rag import describe_embedder, get_embedder; s=get_settings(); print('[warm] ' + describe_embedder(get_embedder(s, allow_download=True)))"
 	@if [ "$$RERANK" = "1" ]; then $(MAKE) warm-rerank; fi
 
 reset: ## Rebuild every regenerable artefact after a checkout move/rename: venv, Meltano plugins, data plane. The venv and .meltano hardcode absolute paths that no project code controls, so a rename strands them; this recreates them. The DuckLake DATA_PATH is already relative and survives on its own.

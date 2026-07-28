@@ -352,7 +352,12 @@ def render(result: dict) -> None:
             )
 
 
-def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0.08) -> int:
+def compare(
+    result: dict,
+    tolerance: float = 0.02,
+    per_kind_tolerance: float = 0.08,
+    strict: bool = False,
+) -> int:
     """Fail when a recorded ARM metric drops by more than `tolerance`, or a per-KIND
     metric by more than `per_kind_tolerance`.
 
@@ -369,8 +374,15 @@ def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0
         else "make eval-baseline"
     )
     if not baseline_file.exists():
-        print(f"[eval] no baseline at {baseline_file}; record one with `{record_cmd}`.")
-        return 0
+        # SKIP, and under --assert-baseline that is a FAILURE, not a pass. A
+        # baseline is only ever created deliberately (--record-baseline), so a
+        # missing one means the gate is measuring nothing. This is not
+        # hypothetical: the per-asset split means adopting fp16 selects
+        # `eval_baseline.fp16.json`, which does not exist -- turning the blocking
+        # retrieval floor into a no-op at exactly the moment the vector space
+        # changes and the floor is most needed.
+        print(f"[eval] SKIP: no baseline at {baseline_file}; record one with `{record_cmd}`.")
+        return 1 if strict else 0
 
     baseline = json.loads(baseline_file.read_text(encoding="utf-8"))
 
@@ -388,7 +400,7 @@ def compare(result: dict, tolerance: float = 0.02, per_kind_tolerance: float = 0
             "chunks); the regression floor is not comparable and is skipped. Re-record "
             "with `make eval-baseline` if this corpus is the new normal.",
         )
-        return 0
+        return 1 if strict else 0
 
     regressions = []
     for arm, metrics in baseline.get("arms", {}).items():
@@ -469,7 +481,9 @@ def main(argv=None) -> int:
         return 0
 
     if args.assert_baseline:
-        return compare(result)
+        # strict: a gate that cannot tell 'no regression' from 'nothing measured'
+        # is not a gate.
+        return compare(result, strict=True)
     return 0
 
 

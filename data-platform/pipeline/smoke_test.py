@@ -102,6 +102,23 @@ ASCII_PINNED_TOP5 = [
 FIXTURE_ONLY_CHUNK_COUNT = 28
 
 
+SKIPS: list = []
+
+
+def skip(description: str, reason: str) -> None:
+    """A precondition was absent. NOT a pass -- and it must say why.
+
+    Three checks used to bail by passing a literal True to `check` with a
+    parenthetical reason,
+    which prints the same green tick as a real pass. "The property holds" and
+    "the property was not examined" then look identical in the output and in the
+    exit code, which is the single pattern the audit found most often. A reason
+    is mandatory because the skip line is the only evidence anyone gets.
+    """
+    SKIPS.append(f"{description}: {reason}")
+    print(f"  SKIP {description} -- {reason}")
+
+
 def check(description: str, condition: bool, detail=" ") -> None:
     if condition:
         print(f"  ok   {description}")
@@ -1612,7 +1629,11 @@ def test_runtime_and_cache(paths) -> None:
 
     from pipeline import runtime
     from pipeline.build_rag import get_embedder, resolve_precision
-    from pipeline.vector_cache import SAMPLE_MIN_COSINE, verify_sample
+    from pipeline.vector_cache import (
+        SAMPLE_MIN_COSINE,
+        SignatureMismatch,
+        verify_sample,
+    )
 
     print("runtime / vector cache")
 
@@ -1660,14 +1681,17 @@ def test_runtime_and_cache(paths) -> None:
     #    poisoned cache does not raise -- it degrades retrieval quietly -- so the
     #    guard is a re-encode of a sample, not a schema check.
     if not paths.vector_cache.exists():
-        check("vector cache sample re-encodes to the same vectors", True, "(no cache yet)")
+        skip("vector cache sample re-encodes to the same passage", "no cache on this machine yet")
         return
     settings = get_settings()
     if settings.embedding_provider == "hashing":
         # The hashing provider is pure Python and re-encoding it proves nothing
         # about the ONNX path, but it is also the default, so skip rather than
         # give a green tick that means nothing.
-        check("vector cache sample re-encodes to the same vectors", True, "(hashing provider)")
+        skip(
+            "vector cache sample re-encodes to the same passage",
+            "EMBEDDING_PROVIDER=hashing is pure Python; re-encoding it proves nothing about the ONNX path",
+        )
         return
     connection = sqlite3.connect(str(paths.vector_cache))
     try:
@@ -1675,7 +1699,7 @@ def test_runtime_and_cache(paths) -> None:
     finally:
         connection.close()
     if not stored:
-        check("vector cache sample re-encodes to the same vectors", True, "(cache empty)")
+        skip("vector cache sample re-encodes to the same passage", "the cache holds no vectors")
         return
     embedder = get_embedder(settings)
     # embed_text, NOT content: those differ (heading prefix) and the cache is keyed
@@ -1694,7 +1718,12 @@ def test_runtime_and_cache(paths) -> None:
         ]
     finally:
         lake.close()
-    checked, worst = verify_sample(embedder, paths.vector_cache, embedder.dimensions, texts)
+    try:
+        checked, worst = verify_sample(embedder, paths.vector_cache, embedder.dimensions, texts)
+    except SignatureMismatch as error:
+        # Reported, not swallowed, and the cache survives to be inspected.
+        check("the vector cache belongs to this embedder", False, str(error))
+        return
     check(
         f"vector cache sample re-encodes to the same passage ({checked} sampled, "
         f"precision={resolve_precision(settings)}, floor {SAMPLE_MIN_COSINE})",
@@ -1750,6 +1779,11 @@ def main() -> int:
         return 1
 
     print()
+    if SKIPS:
+        print(f"skipped ({len(SKIPS)}):")
+        for skipped in SKIPS:
+            print(f"  - {skipped}")
+        print()
     if FAILURES:
         print(f"FAILED ({len(FAILURES)}):")
         for failure in FAILURES:

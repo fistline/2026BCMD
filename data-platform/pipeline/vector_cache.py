@@ -111,10 +111,20 @@ def _unpack(blob: bytes, dimensions: int) -> list:
 class VectorCache:
     """SQLite-backed `embed_key -> vector`, valid for exactly one vector signature."""
 
-    def __init__(self, path: Path, signature: str, dimensions: int):
+    def __init__(self, path: Path, signature: str, dimensions: int, readonly: bool = False):
+        """`readonly=True` INSPECTS the cache; it never drops rows.
+
+        The default is destructive on purpose -- a build that finds a foreign
+        signature must not mix vector spaces. But that made the verifier a
+        demolition charge: `verify_sample` opened a cache to READ it, and on the
+        very mismatch it exists to detect it deleted every row (~24 minutes of
+        encoding) and then reported "nothing sampled", naming the wrong cause.
+        """
         self.path = Path(path)
         self.signature = signature
         self.dimensions = dimensions
+        self.readonly = readonly
+        self.signature_matches = True
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(str(self.path))
         self._connection.execute(
@@ -128,6 +138,11 @@ class VectorCache:
             "SELECT value FROM meta WHERE key = 'vector_signature'"
         ).fetchone()
         if stored is None or stored[0] != signature:
+            self.signature_matches = False
+            self.stored_signature = stored[0] if stored else ""
+            if readonly:
+                # Report the mismatch; destroy nothing.
+                return
             # A different embedder/model/dimension/precision: every stored vector
             # is from another vector space. Drop them rather than mix spaces.
             self._connection.execute("DELETE FROM vectors")
@@ -141,6 +156,8 @@ class VectorCache:
     def get_many(self, keys: Sequence[str]) -> dict:
         """Cached vectors for `keys`, keyed by embed_key. Missing keys are absent."""
         found: dict = {}
+        if self.readonly and not self.signature_matches:
+            return found
         keys = list(keys)
         # Chunked IN() so a 12k-key lookup stays under SQLite's variable limit.
         for start in range(0, len(keys), 500):
@@ -266,6 +283,10 @@ def encode_with_cache(embedder, texts: Sequence[str], cache_path, dimensions: in
 SAMPLE_MIN_COSINE = 0.97
 
 
+class SignatureMismatch(RuntimeError):
+    """The cache belongs to a different vector space than the embedder asking."""
+
+
 def verify_sample(embedder, cache_path, dimensions: int, texts: Sequence[str], sample: int = 8):
     """Re-encode a sample of cached passages and compare. Returns (checked, worst).
 
@@ -278,7 +299,15 @@ def verify_sample(embedder, cache_path, dimensions: int, texts: Sequence[str], s
     if not texts:
         return 0, 1.0
     signature = vector_signature(embedder, dimensions)
-    cache = VectorCache(cache_path, signature, dimensions)
+    cache = VectorCache(cache_path, signature, dimensions, readonly=True)
+    if not cache.signature_matches:
+        # Not "nothing sampled": the cache holds a DIFFERENT vector space, which
+        # is a finding, not an absence. Say which, and leave the rows alone.
+        stored = getattr(cache, "stored_signature", "")
+        cache.close()
+        raise SignatureMismatch(
+            f"the cache holds {stored or '(no signature)'} but this embedder is {signature}"
+        )
     try:
         # Deterministic sample: sorted keys, evenly spaced. No RNG, so a failure
         # is reproducible from the same corpus.
@@ -307,6 +336,7 @@ def verify_sample(embedder, cache_path, dimensions: int, texts: Sequence[str], s
 
 __all__ = [
     "CACHE_LAYOUT",
+    "SignatureMismatch",
     "VectorCache",
     "cache_enabled",
     "embed_key",

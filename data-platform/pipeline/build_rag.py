@@ -753,6 +753,28 @@ def _load_embedder(provider: str, model: str, dim: int, allow_download: bool, pr
     )
 
 
+def describe_embedder(embedder) -> str:
+    """One line naming an embedder, TOTAL over every provider.
+
+    `make warm-models` used to format `e.precision` and `e.provider` in a shell
+    one-liner. Those exist only on OnnxEmbedder, and the SHIPPED default is
+    `EMBEDDING_PROVIDER=hashing` -- so the first command in the documented setup
+    ended in `AttributeError: 'HashingEmbedder' object has no attribute
+    'precision'`. Optional attributes are optional here.
+    """
+    parts = [embedder.name]
+    precision = getattr(embedder, "precision", "")
+    if precision:
+        parts.append(f"/{precision}")
+    model = getattr(embedder, "model_name", "")
+    if model:
+        parts.append(f" {model}")
+    provider = getattr(embedder, "provider", "")
+    if provider:
+        parts.append(f" on {provider}")
+    return f"embedder {''.join(parts)} ({embedder.dimensions}-dim) ready"
+
+
 def resolve_precision(settings: Settings) -> str:
     """The asset this fleet uses. `auto` means "fp16 if this box has a GPU for it".
 
