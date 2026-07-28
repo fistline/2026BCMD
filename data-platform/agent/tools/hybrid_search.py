@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
+import sys
 
 from pipeline import get_paths, get_settings
 from pipeline.build_rag import hybrid_search, read_index_meta
@@ -128,9 +130,46 @@ def list_collections() -> dict:
     return {"collections": [dict(row) for row in rows]}
 
 
+
+def _batch_queries(path: str) -> list:
+    """One query per line; blanks and `#` comments dropped.
+
+    ENCODING IS EXPLICIT. On 3.12 a bare `open()` still resolves to
+    `locale.getpreferredencoding()`, and on a Korean-locale Windows box most
+    UTF-8 Hangul byte pairs are also valid cp949 sequences -- so a UTF-8 query
+    file would decode to mojibake WITHOUT raising, the FTS bigrams would match
+    nothing, every alias would miss, and the run would return confident junk at
+    exit 0. `splitlines()` also drops the CRLF a Notepad-saved file carries,
+    which would otherwise ride into the echoed `query` field.
+    """
+    lines = pathlib.Path(path).read_text(encoding="utf-8").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+
+
+def _emit(payload) -> None:
+    """One JSON object per line, byte-identical to `jq -c` of the single-query form.
+
+    Separators are explicit because `json.dumps(indent=None)` defaults to
+    `(', ', ': ')`, which is NOT what `jq -c` emits. Flush is explicit because
+    CPython block-buffers stdout to a pipe: a run killed part-way would otherwise
+    lose every answer still sitting in the 8 KB buffer, which is exactly the case
+    partial output exists for.
+    """
+    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), flush=True)
+
+
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("query", nargs="?", help="Question or exact identifier to search for.")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("query", nargs="?", help="Question or exact identifier to search for.")
+    source.add_argument(
+        "--queries-from",
+        metavar="FILE",
+        help="Run every non-blank, non-# line of FILE as a query, in ONE process, emitting one "
+             "JSON object per line. The saving is a fixed per-process cost (see M:batch-amortisation "
+             "in MEASUREMENTS.md): the first query in a process pays for the model and the tokenizer, "
+             "every one after it does not.",
+    )
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument("--candidates", type=int, default=40)
     parser.add_argument("--full-content", action="store_true")
@@ -142,8 +181,28 @@ def main(argv: list | None = None) -> int:
     if args.list_collections:
         print(json.dumps(list_collections(), indent=2, ensure_ascii=False))
         return 0
+    if args.queries_from:
+        queries = _batch_queries(args.queries_from)
+        if not queries:
+            parser.error(f"{args.queries_from} holds no queries")
+        print(f"[batch] {len(queries)} queries", file=sys.stderr)
+        emitted = 0
+        for query in queries:
+            _emit(hybrid_search_tool(
+                query,
+                limit=args.limit,
+                candidates=args.candidates,
+                full_content=args.full_content,
+                collection=args.collection,
+                include_fixtures=args.include_fixtures,
+            ))
+            emitted += 1
+        # Truncation has to be visible: the Makefile sets bash with no pipefail,
+        # so a pipe into jq exits 0 even when this process was killed part-way.
+        print(f"[batch] emitted {emitted}/{len(queries)}", file=sys.stderr)
+        return 0
     if not args.query:
-        parser.error("a query is required unless --list-collections is given")
+        parser.error("a query is required unless --list-collections or --queries-from is given")
 
     payload = hybrid_search_tool(
         args.query,

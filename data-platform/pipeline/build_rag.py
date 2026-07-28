@@ -873,12 +873,38 @@ def serialize_vector(vector: Sequence[float]) -> bytes:
 # --------------------------------------------------------------------------
 # SQLite plumbing
 # --------------------------------------------------------------------------
+class _IndexConnection(sqlite3.Connection):
+    """A connection that remembers WHICH FILE it opened.
+
+    A plain `sqlite3.Connection` accepts neither attribute assignment nor a weak
+    reference, so the identity has to ride on a subclass passed as `factory=`.
+    """
+
+    origin = None
+
+
 def connect_index(index_path, read_only: bool = False) -> sqlite3.Connection:
-    """Open the serving index with sqlite-vec loaded."""
+    """Open the serving index with sqlite-vec loaded, remembering the inode.
+
+    The inode is what makes `assert_index_present` possible. A held connection
+    survives its file being UNLINKED and keeps answering from the deleted copy
+    forever -- and `assert_index_current` cannot notice, because the signature it
+    reads comes from that same dead file and therefore still agrees with the
+    encoder. Reproduced on a copy of the real index: after a second process
+    replaced the file, the held connection kept returning 13,047 chunks and the
+    old signature while the file on disk had one row and a different signature.
+    """
     if read_only:
-        connection = sqlite3.connect(f"file:{index_path}?mode=ro", uri=True)
+        connection = sqlite3.connect(
+            f"file:{index_path}?mode=ro", uri=True, factory=_IndexConnection
+        )
     else:
-        connection = sqlite3.connect(str(index_path))
+        connection = sqlite3.connect(str(index_path), factory=_IndexConnection)
+    try:
+        stat = os.stat(index_path)
+        connection.origin = (str(index_path), stat.st_dev, stat.st_ino)
+    except OSError:
+        connection.origin = None
     connection.row_factory = sqlite3.Row
     connection.enable_load_extension(True)
     sqlite_vec.load(connection)
@@ -1172,6 +1198,44 @@ def index_signature(embedder, dimensions: int) -> str:
     return "|".join(parts)
 
 
+def assert_index_present(connection: sqlite3.Connection) -> None:
+    """Refuse to answer from an index file that has been REPLACED underneath us.
+
+    `assert_index_current` compares the signature the connection can read against
+    the encoder -- but a connection whose file was unlinked reads that signature
+    from the deleted inode, so it agrees with itself forever. Only the file
+    identity can tell the difference.
+
+    (st_dev, st_ino) ONLY. NOT st_size: measured, an in-place DROP/CREATE/INSERT
+    rewrite of a copy of the real index from 13,047 rows to one left st_size at
+    exactly 143659008, because SQLite reuses freed pages. And an in-place rewrite
+    is not a fault -- a held read-only connection follows it correctly, which is
+    why the inode, not the content, is the thing to check.
+
+    Silent when the connection did not record an origin: a caller that opened a
+    connection some other way has nothing to compare and must not be broken.
+    """
+    origin = getattr(connection, "origin", None)
+    if origin is None:
+        return
+    path, device, inode = origin
+    try:
+        stat = os.stat(path)
+    except FileNotFoundError:
+        raise ValueError(
+            f"the index at {path} has been DELETED while this connection held it open. "
+            f"Every answer since would come from a copy that no longer exists. Re-run."
+        ) from None
+    except OSError:
+        return
+    if (stat.st_dev, stat.st_ino) != (device, inode):
+        raise ValueError(
+            f"the index at {path} was REPLACED while this connection held it open "
+            f"(inode {inode} -> {stat.st_ino}). Every answer since would come from the "
+            f"old copy. Re-run."
+        )
+
+
 def assert_index_current(connection: sqlite3.Connection, embedder, dimensions: int) -> None:
     """Refuse to query an index built by different retrieval logic."""
     row = connection.execute(
@@ -1381,6 +1445,7 @@ def _search_once(
     """One retrieval: the weighted RRF of the vector and keyword arms."""
     embedder = get_embedder(settings)
     query_vector = embedder.encode([query])[0]
+    assert_index_present(connection)
     assert_index_current(connection, embedder, len(query_vector))
 
     fts_query = build_fts_query(query)

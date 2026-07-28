@@ -54,6 +54,7 @@ from pipeline.build_rag import (
     _features,
     _fixture_doc_ids,
     _search_once,
+    assert_index_present,
     connect_index,
     hybrid_search,
 )
@@ -624,6 +625,11 @@ def graph_rag_search(
             collection=collection,
             include_fixtures=include_fixtures,
         )
+        # The seed search checked this per alias variant; the traversal below reads
+        # the SAME connection again (_require_graph, _document_ids, _edges_touching,
+        # _select_chunks), so it is re-checked once here rather than trusting that
+        # nothing replaced the file in between.
+        assert_index_present(connection)
         seed_docs = list(dict.fromkeys(hit["doc_id"] for hit in results[:seed_limit]))
         results = results[:limit]
 

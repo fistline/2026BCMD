@@ -1619,6 +1619,81 @@ def test_reranker() -> None:
     check("rerank is deterministic across runs", again == [row["chunk_id"] for row in reranked])
 
 
+def test_batch_and_ghost_index(paths) -> None:
+    """The batch entry point's contract, and the guard against a deleted index."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+
+    from pipeline.build_rag import assert_index_present, connect_index
+
+    print("batch queries / ghost index")
+
+    # A held connection survives its file being unlinked and keeps answering from
+    # the deleted copy -- and assert_index_current cannot see it, because the
+    # signature it reads comes from that same dead inode.
+    with tempfile.TemporaryDirectory() as directory:
+        copy = Path(directory) / "index.sqlite"
+        shutil.copy(paths.index_sqlite, copy)
+        connection = connect_index(copy, read_only=True)
+        try:
+            before = connection.execute("SELECT count(*) FROM chunks").fetchone()[0]
+            assert_index_present(connection)
+            check("the guard passes while the index is where it was opened", True)
+            os.remove(copy)
+            import sqlite3 as _sqlite3
+
+            replacement = _sqlite3.connect(copy)
+            replacement.execute("CREATE TABLE chunks (x)")
+            replacement.commit()
+            replacement.close()
+            still = connection.execute("SELECT count(*) FROM chunks").fetchone()[0]
+            check(
+                "a held connection really does keep serving the deleted copy",
+                still == before,
+                f"{before} -> {still}",
+            )
+            try:
+                assert_index_present(connection)
+                check("the guard refuses a replaced index", False, "no error raised")
+            except ValueError as error:
+                check("the guard refuses a replaced index", "REPLACED" in str(error) or "DELETED" in str(error))
+        finally:
+            connection.close()
+
+    # The batch entry point must emit exactly one line per query, and each line
+    # must be what `jq -c` of the single-query form produces.
+    with tempfile.TemporaryDirectory() as directory:
+        query_file = Path(directory) / "q.txt"
+        query_file.write_text("# a comment\n전매제한\n\n예치금\n", encoding="utf-8")
+        completed = subprocess.run(  # noqa: S603
+            [sys.executable, "-m", "agent.tools.hybrid_search", "--queries-from", str(query_file)],
+            capture_output=True, text=True, check=False, cwd=paths.root,
+        )
+        lines = [line for line in completed.stdout.splitlines() if line.strip()]
+        check("comments and blank lines are not queries", len(lines) == 2, f"{len(lines)} line(s)")
+        check("the batch run exits 0", completed.returncode == 0, completed.stderr[-200:])
+        one = subprocess.run(  # noqa: S603
+            [sys.executable, "-m", "agent.tools.hybrid_search", "전매제한"],
+            capture_output=True, text=True, check=False, cwd=paths.root,
+        )
+        import json as _json
+
+        check(
+            "a batch line carries the same payload as the one-shot form",
+            lines and _json.loads(lines[0]) == _json.loads(one.stdout),
+        )
+        empty = Path(directory) / "empty.txt"
+        empty.write_text("# nothing but a comment\n", encoding="utf-8")
+        refused = subprocess.run(  # noqa: S603
+            [sys.executable, "-m", "agent.tools.hybrid_search", "--queries-from", str(empty)],
+            capture_output=True, text=True, check=False, cwd=paths.root,
+        )
+        check("a query file with no queries is an error", refused.returncode != 0)
+
+
 def test_runtime_and_cache(paths) -> None:
     """The accelerator layer's two invariants: it degrades, and it does not lie.
 
@@ -1775,6 +1850,8 @@ def main() -> int:
         test_reranker()
         print()
         test_runtime_and_cache(paths)
+        print()
+        test_batch_and_ghost_index(paths)
     except Exception:
         traceback.print_exc()
         return 1

@@ -69,6 +69,20 @@ collection.
 - **Two or three narrow queries beat one broad one.** Fusion ranks per query, so
   a specific query is what lifts a specific article above generic prose. Ask each
   facet separately rather than in one long sentence.
+  Facets you are CONFIDENT of can go in one file and run in one process:
+  `make query` and `make ask` both take `--queries-from FILE` (one query per
+  line, `#` comments allowed) and emit one JSON object per line. The saving is a
+  fixed per-process cost — the first query pays for the model and the tokenizer,
+  every one after it does not — so three facets cost about half of three separate
+  runs [M:batch-amortisation].
+  **It does not help when you are guessing at vocabulary.** The rule two bullets
+  down — try the word the statute itself uses — is a SERIAL loop: you have to see
+  the empty result before you know to try it. Measured: `발행사 자기자본 요건`
+  returns three rows of unrelated boilerplate while `발행인 자기자본 요건` returns
+  the actual article, and the same holds for 보증금 versus 예치금. A file of three
+  facets all premised on the wrong word is three coordinated misses in one round
+  trip. Batch what you are sure of; refine serially the moment a term comes back
+  empty.
 - **Korean is bridged three ways; know which one you are leaning on.** The
   keyword arm matches 가상자산 inside 가상자산이용자보호법 (character bigrams,
   plus Kiwi-extracted nouns when the index was built with `KIWI_MORPH=1`); the
