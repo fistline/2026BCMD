@@ -426,6 +426,26 @@ class OnnxEmbedder:
         onnx_path = _fetch(self._ASSETS[precision])
         self._tokenizer = Tokenizer.from_file(_fetch("tokenizer.json"))
         self._tokenizer.enable_truncation(max_length=self._MAX_TOKENS)
+        # Pad to the batch's longest. This graph is DYNAMICALLY QUANTISED -- the
+        # int8 scale is computed over the whole input tensor -- so a passage's
+        # vector depends on the VALUES of whatever shares its batch. Measured
+        # three ways: two batches of the same size with different neighbours give
+        # cosine 0.9904; a batch of two copies of the SAME text is byte-identical
+        # to a batch of one; a batch of one is byte-identical across every call.
+        #
+        # Batch 1 is therefore the only history-INDEPENDENT configuration, and it
+        # was tried: it is 1.9x faster to build and measurably WORSE at retrieval
+        # (vector MRR@10 0.476 -> 0.417, R@10 0.923 -> 0.769, fused R@5 0.846 ->
+        # 0.769) [M:batch1-quality]. A larger batch calibrates the quantisation
+        # scale over more activations, so the "canonical" per-passage vector is
+        # the lower-quality one. The eval floor rejected the change, which is what
+        # it is for.
+        #
+        # So the batch stays, and with it the consequence: an incrementally-grown
+        # index and a cold-built one hold different vectors for the same corpus.
+        # That is handled where it does damage -- a recorded eval baseline must
+        # come from a canonical (cold) build. See build_index and AGENTS.md
+        # invariant 9.
         self._tokenizer.enable_padding()
 
         # Where it runs is runtime.py's decision, not this class's. On the CPU it
@@ -1041,6 +1061,17 @@ def build_index(paths: Paths | None = None, settings: Settings | None = None) ->
                     ("chunk_count", str(len(rows))),
                     ("node_role", settings.node_role),
                     ("index_signature", index_signature(embedder, dimensions)),
+                    # CANONICAL means every vector was encoded in this build, so
+                    # the index is a function of the corpus alone. An incremental
+                    # build reuses cached vectors, and because the graph is
+                    # dynamically quantised those were encoded beside different
+                    # neighbours -- so the same corpus reached by two different
+                    # build histories holds different vectors. Recorded because
+                    # `make eval-baseline` must refuse to record a floor from a
+                    # non-canonical index: the floor would then measure a build
+                    # history rather than a retriever.
+                    ("build_kind", "canonical" if not cache_stats["hits"] else "incremental"),
+                    ("vectors_reused", str(cache_stats["hits"])),
                 ],
             )
     finally:
@@ -1131,10 +1162,10 @@ def index_signature(embedder, dimensions: int) -> str:
     if precision and precision != "int8":
         parts = parts + (precision,)
     # And the encode batch, for the same reason as the precision: it is not a
-    # speed knob. The tokenizer pads to the longest sequence in the batch, so
-    # changing the batch changes the vectors (measured: cosine 0.9918 for one
-    # passage alone vs batched beside a long one). Appended only when it differs
-    # from the default, so no existing index is invalidated by this slot existing.
+    # speed knob. The graph is dynamically quantised, so the batch's COMPOSITION
+    # moves the vectors (measured: cosine 0.9904 between two same-size batches
+    # with different neighbours). Appended only when it differs from the default,
+    # so no existing index is invalidated by this slot existing.
     batch = getattr(embedder, "_batch", runtime.ENCODE_BATCH_DEFAULT)
     if batch != runtime.ENCODE_BATCH_DEFAULT:
         parts = parts + (f"batch{batch}",)

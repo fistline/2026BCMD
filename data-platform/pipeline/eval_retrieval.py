@@ -352,6 +352,29 @@ def render(result: dict) -> None:
             )
 
 
+def build_kind(paths: Paths | None = None) -> str:
+    """How the index under evaluation was built: canonical | incremental | unknown.
+
+    A canonical index encoded every vector in one build. An incremental one reused
+    cached vectors that were encoded beside different neighbours, and this graph is
+    dynamically quantised, so those vectors differ -- measured, cosine 0.9904, which
+    is enough to move R@10 by 0.15. A floor recorded from an incremental index
+    therefore records a build history, and the next canonical build "regresses"
+    against it for no reason anyone can see.
+    """
+    paths = paths or get_paths()
+    if not paths.index_sqlite.exists():
+        return "unknown"
+    connection = connect_index(paths.index_sqlite, read_only=True)
+    try:
+        row = connection.execute(
+            "SELECT value FROM index_meta WHERE key = 'build_kind'"
+        ).fetchone()
+    finally:
+        connection.close()
+    return row[0] if row else "unknown"
+
+
 def compare(
     result: dict,
     tolerance: float = 0.02,
@@ -472,6 +495,18 @@ def main(argv=None) -> int:
         render(result)
 
     if args.record_baseline:
+        kind = build_kind()
+        if kind == "incremental":
+            print(
+                "[eval] REFUSING to record a baseline from an incrementally-built index.\n"
+                "       Cached vectors were encoded beside different neighbours, and this graph\n"
+                "       is dynamically quantised, so they differ from what a cold build produces\n"
+                "       (measured: cosine 0.9904, enough to move R@10 by 0.15). A floor recorded\n"
+                "       here would measure a build history.\n"
+                "       Run `make index-canonical` first, then record.",
+                file=sys.stderr,
+            )
+            return 1
         baseline_file = _baseline_file(result)
         baseline_file.write_text(
             json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",

@@ -143,6 +143,7 @@
   ],
   "settings": {
     "alias_expansion": true,
+    "embedding_precision": "int8",
     "embedding_provider": "onnx_int8",
     "keyword_weight": 1.0,
     "rerank_enabled": false,
@@ -151,6 +152,6 @@
     "rrf_k": 60,
     "vector_weight": 1.0
   },
-  "source_sha": "360aaac7894a8b0e0726682603b26ee9eb4a3b78",
+  "source_sha": "00ab3acf777e88f94f18809c55196e49329c3a9f",
   "unresolved": []
 }

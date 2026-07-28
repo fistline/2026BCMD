@@ -25,6 +25,9 @@ it does not belong here; say "estimated" wherever it is used.
 | `M:concurrency` | embedder 1.23×, reranker 2.17×, combined 1.18× (160 passages / 20 pairs, both on CPU/int8) | same, 2026-07-28 | `RERANK=1 uv run python tools/bench_concurrency.py --passages 160 --pairs 20` |
 | `M:tokenise-share` | tokenisation is 0.02 % of an encode (7.2 ms vs 33 356 ms over 64 passages) | same, 2026-07-28 | time `_tokenize` against `_run` over four batches of 16 |
 | `M:ocr-backends` | paddle vs onnxruntime: 0.9265 raw / 0.9291 whitespace-ignored; 40 lines shared, 5 paddle-only (one a 발의자 line), 1 onnx-only | same, 2026-07-28 | `make ocr-compare FILE=<a scanned 법률안> ` (2 pages) |
+| `M:quantisation-batch` | the int8 graph is dynamically quantised: same passage, two same-size batches with different neighbours → cosine 0.9904; a batch of two copies of the same text is byte-identical to a batch of one; a batch of one is byte-identical across every call | M4 Pro, 2026-07-28 | encode one passage alone, in a batch of 16, and in a batch of 16 with different peers |
+| `M:batch1-quality` | batch 1 (history-independent) vs batch 16: build 757.2 s vs 1433.9 s, but vector MRR@10 0.476 → 0.417, R@10 0.923 → 0.769, fused R@5 0.846 → 0.769 | M4 Pro, 2026-07-28 | pin `_batch = 1`, `make index-canonical`, `make eval` |
+| `M:padding-modes` | 64 real chunks, single-threaded: batch16 dynamic pad 181.1 ms/passage, batch1 self pad 238.0, batch16 fixed-512 pad 162.2 | M4 Pro, 2026-07-28 | time `encode` under each tokenizer padding configuration |
 | `M:ocr-coreml` | PP-OCRv5 with CoreML enabled: 38.2 s/page and one exception per op, against 2.1 s/page on the CPU — 18× | same, 2026-07-28 | run `ocr_onnx` on one page with and without the CoreML flag |
 
 ## Retired

@@ -109,7 +109,20 @@ mistakes; everything else is recoverable.
    the tokenizer pads to the batch's longest sequence, so batch composition moves
    the vectors (measured: cosine 0.9918, three orders of magnitude more than any
    provider difference). It is not a throughput knob and the GPU does not get a
-   bigger one. The VECTOR CACHE goes the other way and records the execution
+   bigger one -- and the batch is not a knob for a deeper reason than padding:
+   the int8 graph is DYNAMICALLY QUANTISED, so the scale is computed over the
+   whole batch and a passage's vector depends on its neighbours' VALUES
+   (measured: cosine 0.9904 between two same-size batches with different
+   neighbours; a batch of one is byte-identical across every call). The
+   consequence is that an incrementally-built index and a cold-built one hold
+   DIFFERENT vectors for the same corpus, and index_signature cannot see it.
+   Batch 1 removes that and was measured WORSE at retrieval (vector MRR@10
+   0.476 -> 0.417), because a larger batch calibrates the quantisation scale
+   better -- so the hazard is accepted where it is harmless (querying) and
+   blocked where it is not: `make eval-baseline` REFUSES to record a floor from
+   an incrementally-built index, and `make index-canonical` produces one that is
+   safe to record from. `index_meta.build_kind` says which kind an index is.
+   The VECTOR CACHE goes the other way and records the execution
    provider (`vector_cache.vector_signature`), because it is node-local under
    `data/processed/` and never synced: it commits every 256 passages, so without
    that slot one cache can hold vectors from two providers, and the 0.999991

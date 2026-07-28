@@ -34,7 +34,7 @@ else
 SYNC_EXTRAS := --extra gpu-$(strip $(GPU)) --extra kiwi --extra web
 endif
 
-.PHONY: help setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
+.PHONY: help index-canonical setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -103,6 +103,14 @@ transform: ## SQLMesh bronze -> silver -> gold, with blocking audits
 	$(PY) pipeline/run.py --only transform
 
 index: ## Build data/serving/index.sqlite (vectors + FTS5 + graph)
+	$(PY) pipeline/run.py --only index
+
+index-canonical: ## Rebuild the index with EVERY vector re-encoded. Required before recording an eval baseline.
+	# The graph is dynamically quantised, so a cached vector was encoded beside
+	# different neighbours than a cold build would give it (cosine 0.9904, enough
+	# to move R@10 by 0.15). An incrementally-built index is fine to QUERY and
+	# wrong to record a floor from.
+	rm -f data/processed/vector_cache.sqlite
 	$(PY) pipeline/run.py --only index
 
 eval: ## Retrieval regression floor: P@1 / R@5 / MRR@10 per arm and per query kind

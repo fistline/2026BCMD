@@ -29,10 +29,16 @@ Three decisions worth stating, because each has a wrong-looking cheaper option:
     `data/processed`; `make clean-index` deliberately does not, so wiping the
     index to rebuild it stays cheap.
 
-Bit-stability is preserved exactly. The cache stores the same float32 blob the
-index stores (`serialize_vector`), so a reused vector re-packs to the identical
-bytes a freshly encoded one would; the float64 the encoder produced is not
-carried, but nothing downstream of `build_index` sees it.
+Bit-stability is preserved exactly, and that took a second fix. The cache stores
+the same float32 blob the index stores (`serialize_vector`), so a reused vector
+re-packs to the identical bytes a freshly encoded one would. But that alone was
+not enough: `pending` holds only the MISSING passages, so a passage's batch
+NEIGHBOURS depended on which others happened to be absent -- and under dynamic
+padding the neighbours change the vector (measured: cosine 0.992142 for the same
+passage alone versus beside its corpus neighbours). The index was therefore a
+function of build history, invisibly. The encoder now pads to a FIXED length
+(build_rag), which makes a vector a function of its passage alone, and the
+padding mode is recorded in both signatures.
 
 A cache failure is never a build failure: a corrupt or unreadable cache file is
 reported and bypassed.
@@ -91,6 +97,8 @@ def vector_signature(embedder, dimensions: int) -> str:
     # so their signature is unchanged by the existence of this field.
     precision = getattr(embedder, "precision", "") or ""
     parts = [CACHE_LAYOUT, embedder.name, model, str(dimensions), precision]
+    # The padding mode decides the vectors, so a cache filled under dynamic
+    # padding must not be served to a fixed-padding encoder.
     suffix = getattr(embedder, "vector_space_suffix", "") or ""
     if suffix:
         parts.append(suffix)
