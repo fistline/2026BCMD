@@ -1,4 +1,4 @@
-# 26bmdc — 한국 STO 규제 지식에서 온체인 서비스까지
+# 26bmdc — 토큰증권 담당자를 위한 업무환경
 
 2026년 토큰증권 제도 시행으로 조각투자·STO 발행 경로가 열린 지금, 이 저장소는
 **그 규제를 다루는 개발자·기획자**가 법령 근거 조회 → 증권신고서 초안 작성 →
@@ -13,9 +13,9 @@
 > 정확한 단어를 찾는 *키워드* 검색을 합친 방식) · **의존 그래프**(법안이 어떤 법률에
 > 위임·참조하는지 나타낸 문서 사이의 관계망) · **슬러그**(파일·폴더 이름에 쓰는 짧은 영문 식별자).
 
-![26bmdc 전체 개요 — 지식에서 온체인 서비스까지](docs/overview.svg)
+![26bmdc 전체 개요 — 토큰증권 담당자를 위한 업무환경](docs/overview.svg)
 
-세 영역은 **독립적으로도** 쓰이고, 하나로 이으면 "규제 지식 → 공시 문서 →
+주요 서비스는 **독립적으로도** 쓰이고, 하나로 이으면 "규제 지식 → 공시 문서 →
 배포 가능한 서비스"가 한 흐름이 된다.
 
 **이 저장소는 AI 에이전트로 구동된다.** `data-platform`은 `make` CLI를 제공하지만,
@@ -26,7 +26,7 @@ dApp을 만든다.
 
 ---
 
-## 세 영역 지도
+## 주요 서비스 지도
 
 | 영역 | 무엇을 하나 | 산출물 | 구동 방식 |
 |---|---|---|---|
@@ -161,7 +161,7 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 | RWA/증권형 dApp 직접 | gen-apps | `st-service-dapp` 스킬 |
 
 **엔드투엔드 예시:** 코퍼스로 규제 경로 확인(`make ask`) → 증권신고서 작성
-(`sto-filing`) → 같은 슬러그로 dApp 생성(`filing-to-dapp`). 세 영역이 하나의 사업을
+(`sto-filing`) → 같은 슬러그로 dApp 생성(`filing-to-dapp`). 주요 서비스가 하나의 사업을
 지식·문서·서비스 세 계층에서 표현한다.
 
 **루트 스킬** (`.agents/skills/`): `sto-filing`, `st-service-dapp`, `filing-to-dapp`,
@@ -176,7 +176,7 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 
 ## 영역 간 규약
 
-세 영역을 하나로 묶는 것은 세 개의 얇은 규약뿐이다. 정본은 루트 `AGENTS.md`이며, 여기서는
+주요 서비스를 하나로 묶는 것은 세 개의 얇은 규약뿐이다. 정본은 루트 `AGENTS.md`이며, 여기서는
 요약만 둔다.
 
 - **공유 슬러그** — 하나의 사업은 증권신고서와 dApp에서 **같은 kebab-case ASCII
@@ -232,7 +232,7 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   *Verification*·*Version floors* 절과 `data-platform/AGENTS.md`.
 - 각 영역 절차의 정본: `gen-docs/st_prospectus/sto-filing/SKILL.md`,
   `gen-apps/st-service-dapp/SKILL.md`, `gen-apps/filing-to-dapp/SKILL.md`.
-- 전체 구조를 그림으로: **`ARCHITECTURE.md`** (세 영역·스킬·파이프라인 다이어그램).
+- 전체 구조를 그림으로: **`ARCHITECTURE.md`** (주요 서비스·스킬·파이프라인 다이어그램).
 
 ## 라이선스·유의
 

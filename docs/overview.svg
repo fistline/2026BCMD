@@ -28,7 +28,7 @@
   <rect x="2" y="2" width="1276" height="676" rx="16" fill="#ffffff" stroke="#e5e8ec"/>
 
   <!-- header -->
-  <text class="title" x="40" y="44">26bmdc — 규제 지식에서 온체인 서비스까지</text>
+  <text class="title" x="40" y="44">26bmdc — 토큰증권 담당자를 위한 업무환경</text>
   <text class="sub" x="40" y="66">법령 코퍼스 → 증권신고서 → 서비스 dApp · 프롬프트·스킬·데이터플랫폼이 맞물리는 방식</text>
   <line class="solid" x1="978" y1="40" x2="1010" y2="40"/>
   <text class="lbl" x="1016" y="43">핵심 경로</text>
