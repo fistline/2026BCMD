@@ -30,9 +30,9 @@ dApp을 만든다.
 
 | 영역 | 무엇을 하나 | 산출물 | 구동 방식 |
 |---|---|---|---|
-| **`data-platform/`** | 한국 법안·법률 원문을 색인해 하이브리드 검색(벡터+키워드)과 의존 그래프로 조회 | `data/serving/index.sqlite` | `make` CLI |
-| **`gen-docs/`** | 조각투자·STO 증권신고서를 유형 판정 → 작성 → 자기심사 | `gen-docs/st_prospectus/<slug>/` | Agent Skill (`sto-filing`) |
-| **`gen-apps/`** | Security Token(RWA) 서비스 dApp을 생성. 신고서에서 이어받거나 직접 | `gen-apps/<slug>/` | Agent Skill (`st-service-dapp`, `filing-to-dapp`) |
+| **`data-platform/`** | 한국 법안·법률 원문과 금융위원회 가이드라인·감독규정, 증권신고서 등을 색인해 하이브리드 검색(벡터+키워드)과 의존 그래프로 조회 | `data/serving/index.sqlite` | `make` CLI |
+| **`gen-docs/`** | 유형 판정 → 작성 → 자기심사를 거쳐 조각투자·STO 증권신고서 초안을 자동 작성. `data-platform` 코퍼스를 근거로 인용·자기검열 | `gen-docs/st_prospectus/<slug>/` | Agent Skill (`sto-filing`) |
+| **`gen-apps/`** | 작성한 증권신고서와 `data-platform` 코퍼스를 근거로 토큰증권(RWA) 서비스 dApp 초안을 자동 생성 | `gen-apps/<slug>/` | Agent Skill (`st-service-dapp`, `filing-to-dapp`) |
 
 `gen-docs`·`gen-apps`는 **코퍼스(색인된 문서 모음) 없이도 완주**된다. `data-platform` 코퍼스는 법령 조문을
 직접 인용해 근거를 강화하는 **선택 요소**이자, 그 자체로 법안을 검색·추론하는 도구다.
