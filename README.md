@@ -201,6 +201,9 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   포인터다(Claude Code만 `CLAUDE.md`를 읽으므로). 규약은 `AGENTS.md`에서만 고친다.
 - **스킬은 `.agents/skills/`에서만 편집**하고 `.claude/skills/`는 미러다.
   Windows에서 심링크가 깨지면 `data-platform`의 `make sync-skills`로 복사한다.
+- **clone 후 한 번 `make hooks`.** 커밋할 때 `make check`가 자동으로 돌게 한다
+  (`core.hooksPath`는 git이 clone에 딸려 보내지 않아 각자 한 번은 실행해야 한다).
+  급하면 `git commit --no-verify`로 건너뛴다.
 - **커밋 전에 `make check`.** 저장소 루트에서 몇 초면 끝난다 — `ruff` 린트, 스킬
   프론트매터를 **YAML 파서로** 확인(`name`↔디렉터리 일치 포함), `dist/`가 스킬 정본과
   어긋나지 않았는지 확인. 자동수정은 `make fmt`(import 정렬·표기 현대화만 건드린다).

@@ -35,6 +35,8 @@ data-platform 자체 스킬(corpus-search·corpus-graph 등)은 `data-platform/.
 - **sto-filing 패키징** — 정본 1벌(`sto-filing/` + `prompt-templates/`)에서 단독 실행
   프롬프트 3종(`dist/`)을 생성한다. **소스 수정 후 반드시 `make prompts`**(= `python3 build_prompts.py`)로
   재생성하고, `dist/`는 손으로 고치지 않는다. 절차는 `gen-docs/st_prospectus/PACKAGING.md`.
+- **clone 후 한 번 `make hooks`** — 커밋 시 `make check`를 자동으로 돌린다. git이
+  `core.hooksPath`를 clone에 딸려 보내지 않으므로 각 사본에서 한 번은 실행해야 한다.
 - **커밋 전에 `make check`** (루트, 수 초). `ruff` 린트 + 스킬 프론트매터를 **YAML 파서로**
   검증하고(`name`↔디렉터리 일치 포함) `dist/` 최신성을 본다. 자동수정은 `make fmt`. 이 둘은 어느 영역에도 속하지 않아
   지금까지 게이트가 없던 자리다. 전체 게이트는 `make verify`(data-platform 빌드 포함).
