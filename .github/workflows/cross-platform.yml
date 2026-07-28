@@ -20,6 +20,23 @@ on:
       - 'data-platform/pipeline/**'
       - 'data-platform/tools/**'
       - 'data-platform/pyproject.toml'
+      # The checkers READ these, so a change to one must run them. uv.lock is the
+      # sharpest case: every pinned package is declared with a loose range, so
+      # `uv lock --upgrade` moves versions without touching pyproject -- exactly
+      # the diff check_lock_pin exists to catch.
+      - 'data-platform/uv.lock'
+      - 'data-platform/Makefile'
+      - 'data-platform/.env.example'
+      - 'data-platform/*.md'
+      - '.github/workflows/cross-platform.yml'
+      # The checkers READ these, so a change to one must run them. uv.lock is the
+      # sharpest case: every pinned package is declared with a loose range, so
+      # `uv lock --upgrade` moves versions without touching pyproject -- exactly
+      # the diff check_lock_pin exists to catch.
+      - 'data-platform/uv.lock'
+      - 'data-platform/Makefile'
+      - 'data-platform/.env.example'
+      - 'data-platform/*.md'
       - '.github/workflows/cross-platform.yml'
   pull_request:
     paths:
@@ -68,6 +85,9 @@ jobs:
 
       - name: Load-bearing packages have not moved in the lock
         run: uv run --no-project python tools/check_lock_pin.py
+
+      - name: Every target syncs the same environment
+        run: uv run --no-project python tools/check_sync_lists.py
 
       - name: The layer's platform-independent invariants
         run: uv run python tools/test_runtime_contract.py

@@ -47,6 +47,13 @@ def extras_in(text: str) -> list:
 
 
 def dry_run(target: str, environment: dict | None = None) -> str:
+    """`make -n <target>`, or raise. Failing OPEN here would be worse than useless.
+
+    An earlier version returned stdout and discarded the exit code, so a Makefile
+    that could not even be parsed produced empty output, no disagreement, and a
+    cheerful "OK: targets agree on the environment" -- asserting agreement it had
+    never observed.
+    """
     completed = subprocess.run(  # noqa: S603
         ["make", "-n", target],
         cwd=ROOT,
@@ -55,6 +62,11 @@ def dry_run(target: str, environment: dict | None = None) -> str:
         check=False,
         env=environment,
     )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"`make -n {target}` failed ({completed.returncode}): "
+            f"{(completed.stderr or '').strip().splitlines()[-1] if completed.stderr else 'no output'}"
+        )
     return completed.stdout
 
 
@@ -68,7 +80,16 @@ def main() -> int:
         environment = {**os.environ, **overrides}
         seen: dict = {}
         for target in TARGETS:
-            for extras in extras_in(dry_run(target, environment)):
+            try:
+                lines = extras_in(dry_run(target, environment))
+            except RuntimeError as error:
+                failures.append(f"[{label}] {error}")
+                continue
+            if not lines:
+                # Each of these targets is known to contain a sync; zero means the
+                # expansion broke, not that they agree.
+                failures.append(f"[{label}] target `{target}` expanded to NO `uv sync` line")
+            for extras in lines:
                 seen.setdefault(frozenset(extras), []).append(target)
         if len(seen) > 1:
             rendered = "; ".join(

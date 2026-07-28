@@ -21,10 +21,19 @@ which is the whole point: the diff becomes a sentence someone had to type.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
-import tomllib
+# tomllib is 3.11+, and BOTH Makefile gates invoke this with a bare `python3` on
+# purpose -- the cheap invariants run without a venv, so they also run on
+# whatever interpreter the machine ships. macOS ships 3.9.6 and Ubuntu 22.04
+# ships 3.10, so importing it at module scope crashed the gate with a traceback
+# BEFORE the `uv sync` that could have repaired anything.
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - depends on the host interpreter
+    tomllib = None
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCK = ROOT / "uv.lock"
@@ -64,14 +73,31 @@ PINNED = {
 }
 
 
+_PACKAGE = re.compile(
+    r"^\[\[package\]\]\s*$(?P<body>.*?)(?=^\[\[|\Z)", re.MULTILINE | re.DOTALL
+)
+_FIELD = re.compile(r'^(name|version)\s*=\s*"([^"]+)"\s*$', re.MULTILINE)
+
+
 def resolved_versions() -> dict:
-    payload = tomllib.loads(LOCK.read_text(encoding="utf-8"))
+    """name -> {versions}. Falls back to a regex when tomllib is unavailable.
+
+    The lock's `[[package]]` blocks are machine-generated and flat, so the regex
+    is exact for this file rather than a general TOML parser -- and it keeps the
+    checker runnable on the interpreter the gate actually uses.
+    """
+    text = LOCK.read_text(encoding="utf-8")
     versions: dict = {}
-    for package in payload.get("package", []):
-        name = package.get("name")
-        version = package.get("version")
-        if name and version:
-            versions.setdefault(name, set()).add(version)
+    if tomllib is not None:
+        for package in tomllib.loads(text).get("package", []):
+            name, version = package.get("name"), package.get("version")
+            if name and version:
+                versions.setdefault(name, set()).add(version)
+        return versions
+    for block in _PACKAGE.finditer(text):
+        fields = dict(_FIELD.findall(block.group("body")))
+        if fields.get("name") and fields.get("version"):
+            versions.setdefault(fields["name"], set()).add(fields["version"])
     return versions
 
 

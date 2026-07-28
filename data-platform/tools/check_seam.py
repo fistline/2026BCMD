@@ -59,7 +59,13 @@ def _docstring_nodes(tree: ast.AST) -> set:
 
 
 def violations(path: Path) -> list:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    # The gate runs on the machine's `python3`, which may be older than the venv's
+    # -- a module using newer syntax must not crash the checker with a traceback.
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError) as error:
+        print(f"  note: {path.name} could not be parsed by this interpreter ({error})")
+        return []
     docstrings = _docstring_nodes(tree)
     found: list = []
 

@@ -29,16 +29,24 @@ Three decisions worth stating, because each has a wrong-looking cheaper option:
     `data/processed`; `make clean-index` deliberately does not, so wiping the
     index to rebuild it stays cheap.
 
-Bit-stability is preserved exactly, and that took a second fix. The cache stores
-the same float32 blob the index stores (`serialize_vector`), so a reused vector
-re-packs to the identical bytes a freshly encoded one would. But that alone was
-not enough: `pending` holds only the MISSING passages, so a passage's batch
-NEIGHBOURS depended on which others happened to be absent -- and under dynamic
-padding the neighbours change the vector (measured: cosine 0.992142 for the same
-passage alone versus beside its corpus neighbours). The index was therefore a
-function of build history, invisibly. The encoder now pads to a FIXED length
-(build_rag), which makes a vector a function of its passage alone, and the
-padding mode is recorded in both signatures.
+WHAT THIS CACHE DOES NOT PRESERVE, AND WHY THAT IS DELIBERATE. The stored blob is
+the same float32 the index stores (`serialize_vector`), so a reused vector
+re-packs to identical bytes. But `pending` holds only the MISSING passages, so a
+passage's batch NEIGHBOURS depend on which others happened to be absent -- and
+the int8 graph is dynamically quantised, so neighbours change the vector
+(measured: cosine 0.9904). An incrementally-grown index and a cold-built one
+therefore hold DIFFERENT vectors for the same corpus, while index_signature stays
+byte-identical.
+
+That is not fixed here, on purpose. Batch 1 is the only history-independent
+configuration and it was implemented, rebuilt and measured WORSE at retrieval
+(vector MRR@10 0.476 -> 0.417) [M:batch1-quality] -- a larger batch calibrates the
+quantisation scale better. Fixed-length padding does not help either: the
+difference survives at 0.9904, because the dependence is on neighbouring VALUES,
+not on shape. So the hazard is accepted where it is harmless (querying) and
+blocked where it is not: `index_meta.build_kind` records how an index was built,
+and `make eval-baseline` refuses to record a floor from an incremental one.
+`make index-canonical` produces one that is safe to record from.
 
 A cache failure is never a build failure: a corrupt or unreadable cache file is
 reported and bypassed.
