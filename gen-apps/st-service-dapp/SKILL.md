@@ -1,7 +1,7 @@
 ---
 name: st-service-dapp
 description: Security Token(RWA) 서비스 dApp을 ST_SERVICE_DAPP_PROMPT.md 템플릿으로 실제 생성한다. 템플릿의 Q1~Q5(서비스 비전)가 비어 있으면 사용자에게 질의해 채우되, 답변을 dApp 전문가 관점에서 구체적으로 확장·프롬프트화해 기입하고, 답변이 없거나 부적절하면 5가지 서비스 예시를 제시해 결정하게 한다. Q1~Q5가 확정되면 전체 프롬프트를 PHASE 0~5 순서로 실행해 Scaffold-ETH 2 기반 dApp을 끝까지 생성한다. 사용자가 RWA/증권형 토큰 dApp 생성, ST_SERVICE_DAPP_PROMPT 실행, 조각투자·부동산·미술품·펀드·로열티·탄소배출권 등의 온체인 서비스 구현, "이 프롬프트 채워서 실행", "dapp 만들어줘"를 언급하면 반드시 이 스킬을 사용할 것. 이 gen-apps 저장소에서는 "앱 만들어줘 / 앱 만들어보자 / 서비스 앱 만들자" 같은 범용 앱 생성 요청도 이 스킬로 처리한다(gen-apps는 ST/RWA 서비스 dApp 생성 전용 영역이므로). 도메인이 불명확하면 곧바로 PHASE B의 5가지 예시 질의로 진입한다.
-compatibility: Node >= 22.10, Foundry(forge·anvil), yarn 또는 npm, 패키지 설치를 위한 네트워크 접근이 필요하다. 로컬 anvil과 MockUSDC로만 동작하며 실제 체인에 배포하지 않는다.
+compatibility: Node >= 22.10, Foundry(forge·anvil), yarn 또는 npm, 패키지 설치를 위한 네트워크 접근이 필요하다. 기본은 로컬 anvil + MockUSDC이고 인수 검증도 로컬에서 한다. 프롬프트 §2가 sepolia를 대상 체인으로 함께 두지만, 배포는 사용자가 명시적으로 요청할 때만 한다 — 스킬이 알아서 공개 테스트넷에 올리지 않는다.
 ---
 
 # ST Service dApp Generator
@@ -34,7 +34,10 @@ compatibility: Node >= 22.10, Foundry(forge·anvil), yarn 또는 npm, 패키지 
 - **한 번에 몰아서 묻는다.** 항목을 하나씩 쪼개 되묻지 않는다. 보통
   **"무엇을 만들고 싶은가?"** 한 질문이면 나머지는 역산할 수 있다.
 - **답이 없거나(“아무거나”·“알아서”) 부적절하거나 표준 축을 가를 수 없을 만큼 모호하면
-  `references/archetypes.md`의 5가지 예시를 `AskUserQuestion`으로 제시한다.**
+  `references/archetypes.md`의 기본 5개(A1~A5)를 선택지로 제시한다.**
+  `AskUserQuestion`이 있으면 그것으로, **없으면 같은 내용을 표로 적어 답변에 싣는다** —
+  도구 유무가 질의 내용을 바꾸지는 않는다. 되물을 수 없는 실행(단일 턴)에서는 질문을
+  본문에 쓰는 것이 곧 산출물이다.
   그래도 못 정하면 가장 단순하고 시연이 명확한 하나를 **추천하고 진행한다.** 무한정 되묻지 않는다.
 - **부분 답변이면 답한 것만 반영**하고 나머지는 PHASE C에서 추론한다.
   단 **Q4(자격 제한)만은 표준을 뒤집으므로** 모호하면 명시적으로 확인하고,
@@ -138,7 +141,7 @@ PHASE 0 설계 → 0.5 스캐폴딩 → 1 컨트랙트 → 2 배포·시드 → 
 | `../ST_SERVICE_DAPP_PROMPT.md` | 항상 | 실행 대상 원본 프롬프트 |
 | `references/intake.md` | PHASE B | 질의 프로토콜, 5가지 예시 제시·부적절 답변 처리 규칙 |
 | `references/field-guide.md` | PHASE C | Q1~Q5 항목별 확장 루브릭, 품질 기준, §5 정합 체크 |
-| `references/archetypes.md` | PHASE B의 5예시 | 표준이 서로 다른 5+개 완성형 서비스 예시(각각 Q1~Q5 시드) |
+| `references/archetypes.md` | PHASE B의 5예시 | 완성형 서비스 예시. **선택지로 제시하는 것은 A1~A5**(S2·S3·S4 커버). A6·A7은 보너스이고 A7이 유일한 1물1권(S6) 예시다 — 사용자가 "한 명이 통째로 갖고 자격자에게만 넘긴다"고 하면 그때 꺼낸다 |
 
 ---
 
