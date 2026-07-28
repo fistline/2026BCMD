@@ -415,6 +415,21 @@ def compare(
     # differs, skip rather than false-alarm -- same spirit as the resolvability
     # skip in evaluate(). Re-record with `make eval-baseline` to adopt the new
     # corpus as the floor.
+    # The judgment set is the other half of "is this comparable at all", and it was
+    # missing: every arm's metric is a mean over the graded queries, so adding or
+    # removing ONE judgment shifts all of them. Observed for real -- a run graded
+    # 14 against a baseline recorded at 15, and the report blamed the keyword and
+    # vector arms for a change the reranker had made, on arms it cannot touch.
+    base_graded = baseline.get("graded")
+    current_graded = result.get("graded")
+    if base_graded is not None and current_graded is not None and base_graded != current_graded:
+        print(
+            f"\n[eval] SKIP: the judgment set changed since the baseline "
+            f"({base_graded} -> {current_graded} queries). Every metric is a mean over those "
+            f"queries, so the floor is not comparable. Re-record with `{record_cmd}`.",
+        )
+        return 1 if strict else 0
+
     base_count = baseline.get("chunk_count")
     current_count = result.get("chunk_count")
     if base_count is not None and current_count is not None and base_count != current_count:

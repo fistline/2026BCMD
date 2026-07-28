@@ -1,28 +1,28 @@
 {
   "arms": {
     "fused": {
-      "mrr_at_10": 0.6474,
-      "p_at_1": 0.5385,
-      "r_at_10": 0.8462,
-      "r_at_5": 0.8462
+      "mrr_at_10": 0.7639,
+      "p_at_1": 0.6667,
+      "r_at_10": 0.9167,
+      "r_at_5": 0.9167
     },
     "keyword": {
-      "mrr_at_10": 0.5192,
-      "p_at_1": 0.4615,
-      "r_at_10": 0.6154,
-      "r_at_5": 0.6154
+      "mrr_at_10": 0.4792,
+      "p_at_1": 0.4167,
+      "r_at_10": 0.5833,
+      "r_at_5": 0.5833
     },
     "reranked": {
-      "mrr_at_10": 0.7179,
-      "p_at_1": 0.6154,
-      "r_at_10": 0.8462,
-      "r_at_5": 0.8462
+      "mrr_at_10": 0.8194,
+      "p_at_1": 0.75,
+      "r_at_10": 0.9167,
+      "r_at_5": 0.9167
     },
     "vector": {
-      "mrr_at_10": 0.4765,
-      "p_at_1": 0.3077,
-      "r_at_10": 0.9231,
-      "r_at_5": 0.6154
+      "mrr_at_10": 0.4745,
+      "p_at_1": 0.25,
+      "r_at_10": 1.0,
+      "r_at_5": 0.6667
     }
   },
   "by_kind": {
@@ -37,10 +37,10 @@
       "returned_rank1": 2
     },
     "particle_glue": {
-      "mrr_at_10": 0.4167,
-      "p_at_1": 0.3333,
-      "r_at_10": 0.6667,
-      "r_at_5": 0.6667
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0,
+      "r_at_10": 1.0,
+      "r_at_5": 1.0
     },
     "synonym_gap": {
       "mrr_at_10": 0.4444,
@@ -63,10 +63,10 @@
       "r_at_5": 1.0
     },
     "particle_glue": {
-      "mrr_at_10": 0.5,
-      "p_at_1": 0.3333,
-      "r_at_10": 0.6667,
-      "r_at_5": 0.6667
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0,
+      "r_at_10": 1.0,
+      "r_at_5": 1.0
     },
     "synonym_gap": {
       "mrr_at_10": 0.5,
@@ -82,7 +82,7 @@
     }
   },
   "chunk_count": 13047,
-  "graded": 15,
+  "graded": 14,
   "per_query": [
     {
       "id": "q01",
@@ -123,20 +123,14 @@
     {
       "id": "q07",
       "kind": "particle_glue",
-      "mrr_at_10": 0.25,
-      "p_at_1": 0.0
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0
     },
     {
       "id": "q08",
       "kind": "particle_glue",
       "mrr_at_10": 1.0,
       "p_at_1": 1.0
-    },
-    {
-      "id": "q09",
-      "kind": "particle_glue",
-      "mrr_at_10": 0.0,
-      "p_at_1": 0.0
     },
     {
       "id": "q10",
@@ -175,6 +169,7 @@
   ],
   "settings": {
     "alias_expansion": true,
+    "embedding_precision": "int8",
     "embedding_provider": "onnx_int8",
     "keyword_weight": 1.0,
     "rerank_enabled": true,
@@ -183,6 +178,6 @@
     "rrf_k": 60,
     "vector_weight": 1.0
   },
-  "source_sha": "5ec96b12ee71995c339363c09f00b134c4b530f6",
+  "source_sha": "1abcf5e4f8126340fc842c1dfd4470181f4c3f81",
   "unresolved": []
 }

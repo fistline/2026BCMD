@@ -149,7 +149,7 @@ class VectorCache:
         # CLOSED before the failure propagates, or the process keeps the file open.
         # On POSIX that is invisible (an open file can still be unlinked); on
         # Windows the file cannot be deleted at all, which is how CI found it:
-        # `PermissionError: [WinError 32] ... being used by another process`.
+        # `PermissionError: [WinError 32]`, the file being used by another process.
         self._connection = sqlite3.connect(str(self.path))
         try:
             self._connection.execute(

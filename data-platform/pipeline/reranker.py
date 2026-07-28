@@ -26,6 +26,7 @@ reuses onnxruntime / tokenizers / huggingface_hub.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Sequence
 from functools import cache
 
@@ -42,7 +43,22 @@ _ASSETS = {
     "fp16": "onnx/model_fp16.onnx",
 }
 _MAX_TOKENS = 512
-_BATCH = 16   # mirror the embedder's cap so per-call batch memory stays bounded (8GB)
+# Candidates for one query are RANKED AGAINST EACH OTHER, so they must be scored
+# in ONE batch. This graph is dynamically quantised -- the int8 scale is computed
+# over the whole input tensor -- so a pair's logit depends on which other pairs
+# share its batch. Measured on this corpus: the same pair scores -8.4216 alone and
+# -7.8296 inside a batch of 16 (delta 0.59), and 0.065 apart in two DIFFERENT
+# batches of 16 [M:rerank-batch]. The differences survive the 4-decimal rounding
+# that ranking uses.
+#
+# The old cap of 16 against a default RERANK_CANDIDATES of 20 therefore scored
+# candidates 1-16 and 17-20 under different scales and then sorted them into ONE
+# order -- comparing numbers that were not comparable. Measured: the shipped
+# 16+4 split and a single batch of 20 produce DIFFERENT top-5 orders.
+#
+# Cost of scoring them together, measured: at 20 candidates one batch is 3%
+# FASTER than the split; at 40 it is 7% slower. Peak RSS 4.40 GB at 40.
+_COMPARABLE_CEILING = 64  # above this, memory wins and the warning below fires
 _ROUND = 4    # round CE logits before ranking -> ties break on chunk_id -> deterministic
 
 
@@ -121,11 +137,28 @@ class OnnxReranker:
         return [float(x) for x in logits.reshape(-1)]
 
     def score(self, pairs: Sequence) -> list:
-        """Cross-encoder logit per (query, doc) pair, sub-batched for memory."""
+        """Cross-encoder logit per (query, doc) pair, scored in ONE batch.
+
+        One batch because the caller ranks these against each other and this graph
+        is dynamically quantised (see _COMPARABLE_CEILING above). Splitting makes
+        the halves incomparable, silently, in the values the ranking is built from.
+
+        Above the ceiling memory wins and the split returns -- with a warning,
+        because at that point the scores really are not comparable and the operator
+        should lower RERANK_CANDIDATES rather than trust the tail.
+        """
         pairs = list(pairs)
+        if len(pairs) <= _COMPARABLE_CEILING:
+            return self._score_batch(pairs) if pairs else []
+        print(
+            f"[rerank] {len(pairs)} candidates exceeds the {_COMPARABLE_CEILING} that can be "
+            f"scored in one batch. They will be scored in separate batches, and this model's "
+            f"scores are NOT comparable across batches -- lower RERANK_CANDIDATES.",
+            file=sys.stderr,
+        )
         out: list = []
-        for start in range(0, len(pairs), _BATCH):
-            out.extend(self._score_batch(pairs[start : start + _BATCH]))
+        for start in range(0, len(pairs), _COMPARABLE_CEILING):
+            out.extend(self._score_batch(pairs[start : start + _COMPARABLE_CEILING]))
         return out
 
 
