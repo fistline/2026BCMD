@@ -24,6 +24,10 @@ check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매�
 	@$(PY) data-platform/tools/check_seam.py
 	@echo "== 폐기된 측정치가 되돌아오지 않았는가 (MEASUREMENTS.md 가 정본) =="
 	@$(PY) data-platform/tools/check_retired_numbers.py
+	@echo "== 노브: 읽는 것은 문서화돼 있고, 문서화된 것은 읽히는가 =="
+	@$(PY) data-platform/tools/check_knobs.py
+	@echo "== 모든 타깃이 같은 환경을 sync 하는가 (확장식 비교) =="
+	@cd data-platform && $(PY) tools/check_sync_lists.py
 	@echo "== skill frontmatter (루트 + data-platform) =="
 	@$(PY) $(SKILL_CHECK) .agents/skills data-platform/.agents/skills
 	@echo "== sto-filing dist/ 가 스킬 정본과 일치하는가 =="

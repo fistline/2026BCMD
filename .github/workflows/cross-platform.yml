@@ -63,6 +63,9 @@ jobs:
       - name: Retired measurements have not come back
         run: uv run --no-project python tools/check_retired_numbers.py
 
+      - name: Knobs and their documentation agree
+        run: uv run --no-project python tools/check_knobs.py
+
       - name: The layer's platform-independent invariants
         run: uv run python tools/test_runtime_contract.py
 
