@@ -49,7 +49,7 @@ dApp을 만든다.
 ├── data-platform/         # ── 코퍼스(문서 색인) 파이프라인
 │   ├── README.md          #    셋업·아키텍처·근거 (이 영역의 정본)
 │   ├── Makefile           #    make build / query / ask / impact / graph 등
-│   ├── source/            #    실제 코퍼스 (법안·법령·감독규정·증권신고서) — git 추적 대상
+│   ├── source/            #    실제 코퍼스 70건 — git 추적 대상 (구성은 아래 라이선스 절)
 │   └── pipeline/ transform/ agent/ 등
 ├── gen-docs/
 │   └── st_prospectus/
@@ -89,9 +89,10 @@ FTS(키워드)·Graph(관계) **3계로 나눠 `index.sqlite`를 색인**한다.
 - **Python 3.12 권장(≥3.10) + [uv](https://docs.astral.sh/uv/)** — data-platform
   파이프라인용. 버전 플로어의 정본은 `data-platform/README.md`의 *Version floors*.
 - **Node.js 22.10+** — gen-apps 산출물(Scaffold-ETH 2 dApp)을 실제로 띄울 때만.
-  저장소에 `.nvmrc`가 있어 `nvm use`면 맞는 버전으로 붙는다. **최신 Node를 쓰면 오히려
-  막힐 수 있다** — 네이티브 모듈(`better-sqlite3`)에 그 버전용 prebuilt가 아직 없으면
-  소스 빌드로 떨어져 실패한다.
+  `.nvmrc`가 `22`라 `nvm use`는 22 계열로 붙여 주지만 **22.10 이상까지 보장하지는
+  않는다**(플로어는 `create-eth`가 요구한다). `node -v`로 한 번 확인한다. 반대로
+  **최신 Node를 쓰면 오히려 막힐 수 있다** — 네이티브 모듈(`better-sqlite3`)에 그
+  버전용 prebuilt가 아직 없으면 소스 빌드로 떨어져 실패한다.
 - **[Foundry](https://getfoundry.sh)** (`forge`·`anvil`·`cast`) — gen-apps에서만.
   **`forge`가 PATH에 없으면 스캐폴딩 자체가 중단된다**(`create-eth`가 검증한다).
   설치돼 있어도 PATH에 없으면 같으니 `forge --version`으로 먼저 확인한다
@@ -99,7 +100,17 @@ FTS(키워드)·Graph(관계) **3계로 나눠 `index.sqlite`를 색인**한다.
 
 ### 0. 에이전트 열기 (스킬을 쓰는 법)
 
-저장소 루트(또는 작업할 하위 폴더)에서 에이전트를 연다 — Claude Code는 터미널에서
+clone 직후 **한 번만** 실행한다:
+
+```bash
+make skills     # 에이전트가 읽는 스킬 디렉터리를 만든다 (python3 하나면 되고, uv·venv 불필요)
+```
+
+스킬 정본은 `.agents/skills/`에 추적되지만, 각 도구가 실제로 읽는 경로는 저장소가
+아니라 **여기서 만든다**. 건너뛰면 에이전트에 스킬이 하나도 뜨지 않는다 — 고장이 아니라
+아직 안 세운 것이다.
+
+그다음 저장소 루트(또는 작업할 하위 폴더)에서 에이전트를 연다 — Claude Code는 터미널에서
 `claude`, Codex·Antigravity는 이 폴더를 작업 폴더로 연다. 그 세션 안에서 **자연어로
 요청**하면 에이전트가 요청에 맞는 스킬을 자동 로드한다. 아래 예시의 따옴표 문장이
 그대로 입력이다.
@@ -209,12 +220,14 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   것을 각 사본에서 세우는 일이다 — 앞은 `core.hooksPath`를 가리켜 커밋 시 `make check`가
   돌게 하고, 뒤는 벤더 어댑터를 만든다. 어댑터가 없어도 게이트는 막지 않고 알려만 준다.
   급하면 `git commit --no-verify`로 건너뛴다.
-- **커밋 전에 `make check`.** 저장소 루트에서 몇 초면 끝난다 — `ruff` 린트, 스킬
-  프론트매터를 **YAML 파서로** 확인(`name`↔디렉터리 일치 포함), `dist/`가 스킬 정본과
-  어긋나지 않았는지 확인. 자동수정은 `make fmt`(import 정렬·표기 현대화만 건드린다).
-  data-platform까지 포함한 전체 게이트는 `make verify`(빌드가 돌아 느리다).
-  린트 규칙은 `ruff.toml`에 얇게 두었다 — 줄 길이는 강제하지 않고, 의도적인 광범위
-  `except`도 규칙으로 막지 않는다.
+- **커밋 전에 `make check`.** 저장소 루트에서 몇 초면 끝난다. 린트·스킬 프론트매터·
+  생성물 최신성부터 "측정치가 코퍼스를 밝히는가" 같은 저장소 고유 불변식까지, **어느
+  영역에도 속하지 않아 지금까지 아무도 검사하지 않던 것들**을 본다. 무엇을 보는지는
+  게이트마다 자기 이름을 출력하니 한 번 돌려보면 되고, 목록의 정본은 루트 `Makefile`이다
+  (여기 옮겨 적지 않는 이유는 게이트가 계속 늘기 때문이다). 자동수정은
+  `make fmt`(import 정렬·표기 현대화만 건드린다). data-platform까지 포함한 전체 게이트는
+  `make verify`(빌드가 돌아 느리다). 린트 규칙은 `ruff.toml`에 얇게 두었다 — 줄 길이는
+  강제하지 않고, 의도적인 광범위 `except`도 규칙으로 막지 않는다.
 - **sto-filing 패키징** — `sto-filing/` 또는 `prompt-templates/`를 고쳤으면
   `make prompts`(= `python3 build_prompts.py`)로 `dist/` 프롬프트 3종을 재생성한다.
   잊으면 배포본이 옛 버전을 조용히 서빙하는데, 이제 `make check`가 그걸 잡는다.
@@ -226,8 +239,8 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 > **저장소 경계·상태:** 루트 `26bmdc/` 전체가 **하나의 git 저장소**로
 > `data-platform`·`gen-docs`·`gen-apps`를 함께 추적한다(원격
 > `github.com/fistline/2026BCMD`, branch `main`). `data-platform/source/`의 코퍼스
-> 원본(법안 hwp/pdf, 법령·감독규정·증권신고서 txt)은 추적·커밋되어 clone에 함께 실린다.
-> `data/`·`.venv`·`.meltano`는 재생성물이라 gitignore 대상이다.
+> 원본 70건은 추적·커밋되어 clone에 함께 실린다. `data/`·`.venv`·`.meltano`는
+> 재생성물이라 gitignore 대상이고, **색인은 그 안에 있어 clone으로 오지 않는다.**
 
 ---
 

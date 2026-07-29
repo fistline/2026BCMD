@@ -21,7 +21,7 @@ flowchart LR
   end
   subgraph GA["gen-apps — 서비스 dApp (Agent Skill)"]
     direction TB
-    fd["filing-to-dapp<br/>신고서→사양 매핑 + 게이트 승계"] --> sd["st-service-dapp<br/>Q1~Q5 → 표준판정 → PHASE 0–5"]
+    fd["filing-to-dapp<br/>신고서→사양 매핑 + 게이트 승계"] --> sd["st-service-dapp<br/>Q1~Q7 → 표준판정 → PHASE 0–5"]
     sd --> dp2["dApp (Scaffold-ETH 2)<br/>gen-apps/&lt;slug&gt;/"]
   end
   tl -. "법령 근거 인용 (선택)" .-> sf
@@ -67,11 +67,11 @@ flowchart TD
   subgraph BR["filing-to-dapp — 브리지 (얇은 오케스트레이터)"]
     fdoc["완성된 증권신고서"] --> gate{"게이트 승계<br/>발행 불가 / 미확정 / 저신뢰?"}
     gate -->|"YES"| stop["dApp 생성 차단"]
-    gate -->|"NO"| map["매핑: 신고서 → Q1~Q5 + 표준 초안<br/>references/mapping.md"]
+    gate -->|"NO"| map["매핑: 신고서 → Q1~Q7 + 표준 초안<br/>references/mapping.md"]
   end
   map --> ssd
   subgraph SSD["st-service-dapp — ST_SERVICE_DAPP_PROMPT.md 실행"]
-    ssd["§1 Service Vision<br/>Q1 서비스 · Q2 여정 · Q3 자산·수익<br/>Q4 이전제약 · Q5 화면 (사람이 채움)"] --> std["§5 표준판정<br/>축1 이전제약 필요? · 축2 자산 다중성"]
+    ssd["§1 Service Vision (사람이 채움)<br/>Q1 서비스 · Q2 여정 · Q3 자산·수익<br/>Q4 이전제약 · Q5 화면<br/>Q6 운영·관리자 범위 · Q7 발행 단위"] --> std["§5 표준판정<br/>축1 이전제약 필요? · 축2 자산 다중성"]
     std --> mtx["S1~S6 매트릭스<br/>ERC-20 / ERC-6909 / ERC-721<br/>(제약 필요 시 + ERC-7943)"]
     mtx --> ph["PHASE 0–5 (게이트 순서)<br/>0 설계(DECISION.md) → 1 컨트랙트(forge test)<br/>→ 2 배포·시드 → 3 데이터계층 → 4 프론트 → 5 검수"]
   end
@@ -125,7 +125,7 @@ flowchart TD
     d1["corpus-search · corpus-graph"]
     d2["document-drafting · code-impact-analysis"]
     d3["doctype-profile-authoring · legal-schema-authoring"]
-    d4["source-onboarding · hitl-review · correction-harvesting · graph-viz"]
+    d4["source-onboarding · hitl-review<br/>correction-harvesting · graph-viz · retrieval-tuning"]
   end
   r4 -. "루트에서 코퍼스 조회 시" .-> d1
 ```
