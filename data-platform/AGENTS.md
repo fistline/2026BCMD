@@ -310,6 +310,10 @@ Task procedures (these call the tools above as steps):
 - `.agents/skills/correction-harvesting/SKILL.md` — turn a retrieval miss or a
   corrected answer into a heading-anchored eval, then a measured `aliases.tsv` row
   or an `excluded.tsv` rejection (offline; default outcome is an eval + a rejection)
+- `.agents/skills/retrieval-tuning/SKILL.md` — change a retrieval knob or the
+  chunking and prove the change was an improvement rather than a coincidence:
+  pre-declared reading rules, sweep-edge and mechanism checks, snapshot before the
+  rebuild, and the `M:` citation the new default has to carry
 - `.agents/skills/graph-viz/SKILL.md` — see the corpus graph in the browser:
   `make graph-serve` (live viewer, DB picker, auto-refresh) or `make graph`
   (standalone offline HTML). Renderer in `tools/viz/`, stdlib-only like `tools/hitl/`

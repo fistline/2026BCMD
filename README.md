@@ -167,10 +167,9 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 
 **루트 스킬** (`.agents/skills/`): `sto-filing`, `st-service-dapp`, `filing-to-dapp`,
 그리고 루트에서 코퍼스를 조회하는 얇은 래퍼 `corpus-lookup`.
-**data-platform 스킬** (`data-platform/.agents/skills/`, **cwd=data-platform 전제**):
-`corpus-search`, `corpus-graph`, `code-impact-analysis`, `document-drafting`,
-`doctype-profile-authoring`, `source-onboarding`, `hitl-review`,
-`correction-harvesting`, `graph-viz`, `legal-schema-authoring`. 루트에서 코퍼스가
+**data-platform 스킬** (`data-platform/.agents/skills/`, **cwd=data-platform 전제**) —
+코퍼스 조회(`corpus-search`·`corpus-graph`), 문서 작성, 코드 영향 분석, 새 출처 온보딩,
+검색 품질 튜닝 등. 각각의 용도는 `data-platform/AGENTS.md`가 정본이다. 루트에서 코퍼스가
 필요하면 원본 대신 `corpus-lookup` 래퍼를 쓴다.
 
 ---
@@ -249,15 +248,28 @@ clone 직후 실제로 걸리는 것들이다. 대부분 **git이 실어 보내�
 빌드 게이트·버전 플로어의 정본은 `data-platform/README.md`(*Verification*·*Version
 floors*)와 `data-platform/AGENTS.md`다.
 
-## 라이선스·유의
+## 라이선스
 
-이 프로젝트는 **MIT 라이선스**다 — `LICENSE` 참조(저작권자: aileaf / 김정한). MIT가 덮는
-것은 **이 저장소의 코드와 문서**이고, `data-platform/source/`의 코퍼스 70건은 각 발행
-기관에 저작권이 있는 **공개 자료를 원문 그대로 담은 것**이다: 국가법령정보센터 28(법령·
-행정규칙) · 국회 의안 20(법안 hwp/pdf) · 금융투자협회 6(모범규준·표준약관) · DART
-전자공시 4(투자계약증권 증권신고서) · 금융위원회·금융보안원 3(가이드라인) · 혁신금융
-사업자 플랫폼 2(신탁수익증권 공시 — DART 대상이 아니다) · 기업 공개자료 3. 나머지 4건은
-이 저장소가 쓴 요약이다. 파일별 sha256과 출처는 `source/CORPUS_MANIFEST.tsv`가 **70건
-전부** 기재한다. 생성되는 증권신고서·dApp은 **참고용 초안**이며
-법률자문·투자권유가 아니다 — 실제 제출·발행 전 법률의견서 확보와 금융감독원
-사전협의를 권고한다.
+**MIT** — `LICENSE` 참조. 저작권자 **aileaf / 김정한**.
+
+MIT가 덮는 것은 **이 저장소의 코드와 문서**다. `data-platform/source/`의 코퍼스는 각
+발행 기관에 저작권이 있는 **공개 자료를 원문 그대로** 담은 것이므로 MIT의 대상이 아니다.
+
+| 출처 | 건수 | 무엇 |
+|---|---:|---|
+| 국가법령정보센터 | 28 | 법령 · 행정규칙 |
+| 국회 의안 | 20 | 법안 원문 (hwp/pdf) |
+| 금융투자협회 | 6 | 모범규준 · 표준약관 |
+| DART 전자공시 | 4 | 투자계약증권 증권신고서 |
+| 금융위원회 · 금융보안원 | 3 | 가이드라인 |
+| 혁신금융 사업자 플랫폼 | 2 | 신탁수익증권 공시 — **DART 대상이 아니다** |
+| 기업 공개자료 | 3 | 표준약관 · 내부통제기준 사본 |
+| *이 저장소가 쓴 요약* | *4* | *원문 아님* |
+| **합계** | **70** | |
+
+파일별 sha256과 출처는 `source/CORPUS_MANIFEST.tsv`가 **70건 전부** 기재한다.
+
+## 유의
+
+> 생성되는 증권신고서·dApp은 **참고용 초안**이며 **법률자문·투자권유가 아니다.**
+> 실제 제출·발행 전에는 법률의견서 확보와 금융감독원 사전협의를 권고한다.
