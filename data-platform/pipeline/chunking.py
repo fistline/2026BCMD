@@ -39,6 +39,15 @@ from dataclasses import dataclass, field
 #
 # Re-derive this if the embedder, its tokenizer, or the embed_text prefix changes:
 # tokenise `# {title}\n## {heading}\n{content}` for every chunk and take the max.
+#
+# It is DERIVED, so it is only right for text that tokenises the way this corpus
+# does -- Korean legal prose at roughly 1.7 chars/token. English or source code run
+# near 2.9, where the same 650 characters is barely 220 tokens against a 512 cap.
+# That condition is asserted by `tools/check_chunk_fit.py`, not claimed here: a
+# sentence in a comment is what let `_MAX_TOKENS = 512  # a 1200-char chunk fits
+# well under this` go unexamined while 28 % of the corpus was truncating. A gate
+# stays silent while the condition holds and fails when the data stops matching it;
+# prose only ever agrees with itself.
 MAX_CHUNK_CHARS = 650
 CHUNK_OVERLAP_CHARS = 150
 MIN_CHUNK_CHARS = 40

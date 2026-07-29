@@ -65,7 +65,12 @@ TUNING_KNOBS = {
 
 _ROW = re.compile(r"^\|\s*`(M:[a-z0-9-]+)`\s*\|(.*)\|\s*$")
 _CITATION = re.compile(r"\[(M:[a-z0-9-]+)\]")
-_CORPUS_CELL = re.compile(r"^(unknown|c:[0-9a-f]{12})$")
+# `c:<id>` names the documents; `j:<id>` the judgment set, and a number that came
+# from an eval needs BOTH -- the same queries scored over different documents, or
+# the same documents scored by different judgments, are different measurements.
+# BEIR calls a result meaningless without corpus, queries and qrels all named;
+# this is that rule in one cell.
+_CORPUS_CELL = re.compile(r"^(unknown|c:[0-9a-f]{12}( j:[0-9a-f]{12})?)$")
 
 
 def defined_rows() -> dict:

@@ -254,6 +254,8 @@ verify: ## Run the full verification gate
 	@python3 tools/check_evasion.py
 	@echo "== tuning values cite a measurement, measurements name a corpus =="
 	@python3 tools/check_citations.py
+	@echo "== does the derived chunk ceiling still fit this corpus? =="
+	$(PY) tools/check_chunk_fit.py
 	@echo "== document-type profile gate =="
 	$(PY) -m pipeline.doctypes.gate
 	@echo "== toolchain =="
