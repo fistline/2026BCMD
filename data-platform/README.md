@@ -444,15 +444,22 @@ path natively:
 | Google Antigravity | `<workspace>/.agents/skills/` (`.agent/` still works, deprecated) |
 | Claude Code | `.claude/skills/` only |
 
-So `.claude/skills/<name>` is a **symlink** into `.agents/skills/<name>`. The
-Claude Code docs explicitly support this: a skill entry "can be a symlink to a
-directory elsewhere on disk", and the same target reachable twice is loaded
-once. Zero duplication, so the two can never drift.
+So `.claude/skills/<name>` points into `.agents/skills/<name>` — normally a
+**symlink**, which the Claude Code docs explicitly support: a skill entry "can be
+a symlink to a directory elsewhere on disk", and the same target reachable twice
+is loaded once. Zero duplication, so the two cannot drift.
 
-If you are on Windows without Developer Mode, git checks symlinks out as plain
-text files. Run `make sync-skills` to copy instead, and re-run it after editing
-a skill. `make verify` compares the two directories byte-for-byte, so a stale
-copy fails the gate rather than silently serving old instructions.
+That directory is **generated and git-ignored**: run `make sync-skills` (or
+`make skills` from the repo root) once per clone, alongside `make hooks`. It is
+not committed because git carrying symlinks is a trap on Windows — a
+`core.symlinks=false` clone turns each one into a text file holding a path, and
+the skills then fail to load with no error at all. Generating instead means the
+mechanism is chosen on the machine that will use it: symlinks where the OS allows
+them, a copy where it does not, and a copy is promoted back to a symlink the next
+time one can be made. `make verify` checks the adapter whenever it exists — a
+drifted copy fails the gate rather than silently serving old instructions — and
+reports "not built yet" rather than failing when it does not, so a fresh clone
+can still commit.
 
 - `.agents/skills/document-drafting/SKILL.md` — draft grounded in the corpus.
 - `.agents/skills/code-impact-analysis/SKILL.md` — trace a change's blast radius.

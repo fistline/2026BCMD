@@ -232,13 +232,22 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 
 ---
 
-## 트러블슈팅 · 더 읽기
+## 트러블슈팅
 
-- 빌드/검증 실패, Windows 심링크, 버전 플로어 → `data-platform/README.md`의
-  *Verification*·*Version floors* 절과 `data-platform/AGENTS.md`.
-- 각 영역 절차의 정본: `gen-docs/st_prospectus/sto-filing/SKILL.md`,
-  `gen-apps/st-service-dapp/SKILL.md`, `gen-apps/filing-to-dapp/SKILL.md`.
-- 전체 구조를 그림으로: **`ARCHITECTURE.md`** (주요 서비스·스킬·파이프라인 다이어그램).
+clone 직후 실제로 걸리는 것들이다. 대부분 **git이 실어 보내지 않는 것**을 아직 안 세운
+상태이며, 고장이 아니다.
+
+| 증상 | 왜 | 조치 |
+|---|---|---|
+| 에이전트에 스킬이 안 보인다 | `.claude/skills/`는 생성물이라 clone에 없다 | `make skills` |
+| 커밋이 `make check`에서 멈춘다 | 훅이 게이트를 돌린다 | 훅이 실패 원인과 대응 명령을 그 자리에 출력한다. ruff는 `make fmt`, `dist/` 낡음은 `make prompts`, 어댑터는 `make skills` |
+| `... does not exist. Build it with 'make build'` | **색인은 git으로 오지 않는다** — `index.sqlite`는 `data/` 아래고, 그건 불변식 1이다 | `make -C data-platform setup` → `build`. 최초 빌드는 수십 분 걸린다(실측치는 `data-platform/MEASUREMENTS.md`의 `M:chunk-650`) |
+| 검색은 되는데 품질이 문서의 수치와 다르다 | `.env.example`의 기본값은 `EMBEDDING_PROVIDER=hashing`이다. **모델 없이도 빌드가 완주되게 하려는 의도된 기본값**이지 오류가 아니다 | 실측 품질을 쓰려면 `.env`에 `onnx_int8` + `EMBEDDING_MODEL=Xenova/bge-m3`. 바꾸면 `index_signature`가 달라져 **재빌드가 필요**하고, 다음 질의는 그때까지 큰 소리로 실패한다 |
+| Windows에서 스킬이 열리지 않는다 | 심링크를 만들 수 없는 환경이다 | `make skills`가 복사로 떨어뜨린다. **정본을 고치면 다시 실행**해야 하고, 잊으면 `make check`가 잡는다 |
+| 폴더를 옮긴 뒤 전부 깨진다 | `.venv`·`.meltano`가 절대경로를 박아 둔다 | `make -C data-platform reset` |
+
+빌드 게이트·버전 플로어의 정본은 `data-platform/README.md`(*Verification*·*Version
+floors*)와 `data-platform/AGENTS.md`다.
 
 ## 라이선스·유의
 
