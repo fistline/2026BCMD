@@ -105,7 +105,7 @@ flowchart LR
 
 ---
 
-## 5. 스킬 구조 — 정본과 미러
+## 5. 스킬 구조 — 정본과 생성 어댑터
 
 ```mermaid
 flowchart TD
@@ -117,9 +117,9 @@ flowchart TD
     r3["filing-to-dapp"]
     r4["corpus-lookup (루트 코퍼스 래퍼)"]
   end
-  SRC ==>|"심링크 미러"| MIR
-  subgraph MIR[".claude/skills/ — 미러 (심링크, 드리프트 없음)"]
-    m["같은 대상을 Claude Code에 재노출"]
+  SRC ==>|"make skills (생성)"| MIR
+  subgraph MIR[".claude/skills/ — 벤더 어댑터 (생성물, git 미추적)"]
+    m["Claude Code가 읽는 경로에 재노출<br/>심링크, 불가한 환경에서는 복사"]
   end
   subgraph DPS["data-platform/.agents/skills/ (cwd=data-platform 전제)"]
     d1["corpus-search · corpus-graph"]
@@ -130,7 +130,10 @@ flowchart TD
   r4 -. "루트에서 코퍼스 조회 시" .-> d1
 ```
 
-- `.agents/skills/`가 **정본**, `.claude/skills/`는 그 심링크 미러 — 두 벌이 드리프트하지 않는다.
+- `.agents/skills/`가 **정본이고 유일한 추적 대상**. `.claude/skills/`는 `make skills`가
+  만드는 벤더 어댑터라 커밋 트리에는 벤더 이름이 남지 않는다 — `make hooks`와 같은
+  "clone 마다 한 번". 심링크로 만들어 드리프트가 불가능하고, 심링크를 못 만드는
+  환경에서는 복사로 떨어지되 `make check`가 내용 해시로 갈라짐을 잡는다.
 - 루트 스킬은 루트 cwd 전제, data-platform 스킬은 **cwd=data-platform** 전제. 루트에서
   코퍼스가 필요하면 원본 대신 `corpus-lookup` 래퍼를 쓴다.
 

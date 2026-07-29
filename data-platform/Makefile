@@ -192,14 +192,13 @@ graph: ## Render the corpus graph to a standalone offline HTML (data/serving/gra
 graph-serve: ## Live graph viewer in the browser: auto-refresh + DB picker. Usage: make graph-serve [PORT=8777]
 	$(PY) tools/viz/server.py $(if $(PORT),--port $(PORT),)
 
-sync-skills: ## Windows fallback: copy .agents/skills -> .claude/skills (symlinks are the default)
-	@rm -rf .claude/skills
-	@mkdir -p .claude/skills
-	@cp -R .agents/skills/. .claude/skills/
-	@echo "copied .agents/skills -> .claude/skills. Re-run after editing any skill."
-	@echo "On macOS/Linux prefer symlinks instead, which never drift:"
-	@echo "  rm -rf .claude/skills && mkdir -p .claude/skills"
-	@echo "  for d in .agents/skills/*/; do ln -s \"../../\$$d\" \".claude/skills/\$$(basename \$$d)\"; done"
+sync-skills: ## Build .claude/skills from .agents/skills (symlinks; copies where symlinks are unavailable)
+	# One implementation, not a platform fork. The old target here always COPIED
+	# and `rm -rf`d the directory first, so a macOS user who ran it silently traded
+	# a mirror that cannot drift for two trees that can. tools/sync_skills.py picks
+	# symlinks when the OS allows them and falls back to copying when it does not,
+	# and `--check` catches a copy that has since drifted.
+	@$(PY) tools/sync_skills.py .
 
 clean-index: ## Delete only the serving index
 	rm -f data/serving/index.sqlite
@@ -269,5 +268,9 @@ verify: ## Run the full verification gate
 	@test -f AGENTS.md && test -f CLAUDE.md && echo "OK"
 	@echo "== skill frontmatter (Agent Skills standard) =="
 	$(PY) tools/check_skills.py .agents/skills
-	@echo "== Claude Code sees the same skills =="
-	@for d in .agents/skills/*/; do n=$$(basename "$$d"); cmp -s "$$d/SKILL.md" ".claude/skills/$$n/SKILL.md" || { echo "FAIL: .claude/skills/$$n differs from the source. Run: make sync-skills"; exit 1; }; done; echo OK
+	@echo "== the vendor adapter agrees with the canon (.claude/skills/ is generated) =="
+	# The loop this replaces compared SKILL.md with `cmp` against a directory that
+	# is now git-ignored, so on a fresh clone it did not report "not built yet" --
+	# it reported "differs from the source" and failed the whole gate. Absent is
+	# not a violation; present-and-wrong is.
+	@$(PY) tools/sync_skills.py --check .

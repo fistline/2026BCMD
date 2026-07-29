@@ -45,7 +45,7 @@ dApp을 만든다.
 ├── CLAUDE.md              # @AGENTS.md 포인터 (Claude Code 진입점)
 ├── docs/                  # 아키텍처 다이어그램 (overview.svg · architecture.svg · system.svg)
 ├── .agents/skills/        # 루트 스킬 정본 (sto-filing·st-service-dapp·filing-to-dapp·corpus-lookup)
-├── .claude/skills/        # 위를 미러 (심링크)
+│                          #   ↳ .claude/skills/ 는 `make skills` 로 만드는 생성물 — 추적하지 않는다
 ├── data-platform/         # ── 코퍼스(문서 색인) 파이프라인
 │   ├── README.md          #    셋업·아키텍처·근거 (이 영역의 정본)
 │   ├── Makefile           #    make build / query / ask / impact / graph 등
@@ -200,10 +200,15 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 - **AGENTS.md가 에이전트 지침의 정본이다.** 루트 `AGENTS.md`는 지도와 영역 간 규약만
   담고, 각 영역의 세부는 그 영역 문서가 지배한다. `CLAUDE.md`는 `@AGENTS.md` 한 줄
   포인터다(Claude Code만 `CLAUDE.md`를 읽으므로). 규약은 `AGENTS.md`에서만 고친다.
-- **스킬은 `.agents/skills/`에서만 편집**하고 `.claude/skills/`는 미러다.
-  Windows에서 심링크가 깨지면 `data-platform`의 `make sync-skills`로 복사한다.
-- **clone 후 한 번 `make hooks`.** 커밋할 때 `make check`가 자동으로 돌게 한다
-  (`core.hooksPath`는 git이 clone에 딸려 보내지 않아 각자 한 번은 실행해야 한다).
+- **스킬은 `.agents/skills/`에서만 편집**한다. 추적되는 것도 이것뿐이고,
+  `.claude/skills/`는 `make skills`가 만드는 **벤더 어댑터**다 — Claude Code가 읽는
+  경로일 뿐 내용이 없다. 커밋하지 않는 이유는 두 가지다: 벤더 이름이 형상관리에 남고,
+  `core.symlinks=false`로 클론한 Windows에서 링크가 **경로가 적힌 텍스트 파일**로
+  떨어져 스킬이 오류 없이 로드되지 않는다. `make skills`는 심링크를 쓰되 만들 수 없는
+  환경에서는 복사로 떨어지고, 복사본이 갈라지면 `make check`가 잡는다.
+- **clone 후 한 번 `make hooks && make skills`.** 둘 다 git이 clone에 실어 보내지 않는
+  것을 각 사본에서 세우는 일이다 — 앞은 `core.hooksPath`를 가리켜 커밋 시 `make check`가
+  돌게 하고, 뒤는 벤더 어댑터를 만든다. 어댑터가 없어도 게이트는 막지 않고 알려만 준다.
   급하면 `git commit --no-verify`로 건너뛴다.
 - **커밋 전에 `make check`.** 저장소 루트에서 몇 초면 끝난다 — `ruff` 린트, 스킬
   프론트매터를 **YAML 파서로** 확인(`name`↔디렉터리 일치 포함), `dist/`가 스킬 정본과

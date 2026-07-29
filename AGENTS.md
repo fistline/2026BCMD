@@ -11,8 +11,12 @@
 
 ## Skills
 
-루트 스킬의 정본 위치는 `.agents/skills/`이고 `.claude/skills/`가 같은 대상을 미러한다
+루트 스킬의 정본 위치는 `.agents/skills/`이고, **git이 추적하는 것은 이것뿐이다**
 (개방 SKILL.md 표준 — Codex·Claude Code·Antigravity 공용. data-platform과 동일한 관습).
+`.claude/skills/`는 Claude Code가 읽는 경로일 뿐 내용이 없어 **`make skills`로 만드는
+생성물**이다 — 커밋하면 벤더 이름이 형상관리에 남고, `core.symlinks=false`로 클론한
+Windows에서 링크가 경로 문자열이 담긴 텍스트 파일로 떨어져 스킬이 **오류 없이** 로드되지
+않는다. 스킬은 `.agents/skills/`에서만 편집하고, 어댑터를 손으로 만들지 않는다.
 
 | 스킬 | 소스 | 하는 일 |
 |---|---|---|
@@ -35,8 +39,12 @@ data-platform 자체 스킬(corpus-search·corpus-graph 등)은 `data-platform/.
 - **sto-filing 패키징** — 정본 1벌(`sto-filing/` + `prompt-templates/`)에서 단독 실행
   프롬프트 3종(`dist/`)을 생성한다. **소스 수정 후 반드시 `make prompts`**(= `python3 build_prompts.py`)로
   재생성하고, `dist/`는 손으로 고치지 않는다. 절차는 `gen-docs/st_prospectus/PACKAGING.md`.
-- **clone 후 한 번 `make hooks`** — 커밋 시 `make check`를 자동으로 돌린다. git이
-  `core.hooksPath`를 clone에 딸려 보내지 않으므로 각 사본에서 한 번은 실행해야 한다.
+- **clone 후 한 번 `make hooks && make skills`** — 둘 다 git이 clone에 실어 보내지 않는
+  것을 각 사본에서 세우는 일이다. `make hooks`는 `core.hooksPath`를 가리켜 커밋 시
+  `make check`가 돌게 하고, `make skills`는 `.agents/skills/`에서 벤더 어댑터
+  (`.claude/skills/`)를 만든다. 어댑터가 없으면 `make check`는 **막지 않고 알려만 준다** —
+  없는 것은 규약 위반이 아니라 아직 안 만든 상태이고, 여기서 막으면 clone 직후 첫 커밋이
+  불가능해진다. 있는데 정본과 어긋나면 실패다.
 - **커밋 전에 `make check`** (루트, 수 초). `ruff` 린트 + 스킬 프론트매터를 **YAML 파서로**
   검증하고(`name`↔디렉터리 일치 포함) `dist/` 최신성을 본다. 자동수정은 `make fmt`. 이 둘은 어느 영역에도 속하지 않아
   지금까지 게이트가 없던 자리다. 전체 게이트는 `make verify`(data-platform 빌드 포함).

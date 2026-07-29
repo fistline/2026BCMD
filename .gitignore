@@ -52,6 +52,13 @@ gen-apps/energyasset-gas-station-1/
 # (docs/*.svg diagrams stay tracked; only this subfolder is ignored.)
 docs/design/
 
+# Vendor adapter directories — GENERATED, never committed. `.agents/skills/` is the
+# canon and the only tracked copy; `.claude/skills/` is the path Claude Code happens
+# to read, holding no content of its own. Tracking it cost two things: a vendor name
+# in version control, and a Windows trap — a `core.symlinks=false` clone turns each
+# link into a text file holding a path, and the skills then fail to load with no
+# error. So it is built locally instead: `make skills`, once per clone, exactly like
+# `make hooks`. `make check` verifies it whenever it exists.
+.claude/skills/
 # Claude Code — local workspace settings, kept per-machine (plugin enablement).
-# (.claude/skills/ stays tracked; only this one file is local.)
 .claude/settings.json

@@ -280,7 +280,10 @@ it into a win. See `.agents/skills/doctype-profile-authoring/`.
 Task procedures and tool entry points live as Agent Skills and load on demand
 rather than sitting in this file, so the same ones work in Codex, Claude Code and
 Antigravity — every one reads the open SKILL.md standard. `.agents/skills/` is the
-source of truth; `.claude/skills/` links to it. Edit only the former.
+source of truth and the only tracked copy; `.claude/skills/` is a vendor adapter
+built by `make sync-skills` (or `make skills` from the repo root) and git-ignored,
+so a Windows clone cannot turn its links into text files that silently fail to
+load. Edit only the canon; never hand-build the adapter.
 
 Tool entry points (reach for these first on any question):
 
