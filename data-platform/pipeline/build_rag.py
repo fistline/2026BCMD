@@ -1366,12 +1366,15 @@ fused AS (
 --
 -- KNOWN, and this is the place to read it before tuning the cap: it is currently
 -- doing a second job nobody asked it to do. 8.3% of the index is 별표·서식 appendix
--- TABLES carried through as prose -- box-drawing characters, no retrievable content
--- [M:table-noise] -- and because a 696 k-character appendix sits under ONE heading,
--- the cap is what keeps it to a single slot. Filtering that content at the source
--- is the real fix and is deliberately NOT done here: it changes chunking, so it
--- costs a full rebuild plus both floors, and the threshold (20 %? 30 %? 40 %?) is a
--- judgement that could delete a real 수수료율표. Measured first, cut later.
+-- material where box-drawing characters take a fifth to two fifths of the token
+-- budget, and because a 696 k-character appendix sits under ONE heading, the cap is
+-- what keeps it to a single slot [M:table-noise].
+--
+-- DO NOT "fix" that by dropping those chunks. It was scoped, and the chunks the
+-- most aggressive threshold would have deleted are 위험액 산정 tables, the 인가
+-- 절차 flowchart, the 등록 요건 table -- real answers wearing bad formatting. The
+-- tractable version is to strip the drawing characters and keep the text, which
+-- changes chunking and so costs a rebuild plus both floors; it is not done here.
 scoped AS (
     SELECT
         chunks.chunk_id AS chunk_id,
