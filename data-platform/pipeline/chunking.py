@@ -21,10 +21,31 @@ from dataclasses import dataclass, field
 # Tunables. Sizes are in characters, not model tokens: chunking must not depend
 # on a tokenizer download, because the build has to run with no network.
 # --------------------------------------------------------------------------
-MAX_CHUNK_CHARS = 1200
+# 650, sized against the EMBEDDER's 512-token cap rather than guessed. Sizing in
+# characters is deliberate (above), but that makes the chars-per-token conversion
+# load-bearing, and for years it was an English BPE ratio applied to a Korean
+# corpus: at 1200 chars a chunk ran to ~584 tokens, so 28.1% of the corpus was
+# silently truncated by the embedder and 4.22% of all chunk text ended up in NO
+# vector at all [M:token-density]. Measured on this corpus, 650 is the largest
+# ceiling at which nothing exceeds 512 (observed max 488, so 24 tokens spare), and
+# it is CHEAPER to encode than 1200 despite the extra chunks, because attention is
+# quadratic in sequence length. Anything above 700 puts chunks back over the cap.
+#
+# Re-derive this if the embedder, its tokenizer, or the embed_text prefix changes:
+# tokenise `# {title}\n## {heading}\n{content}` for every chunk and take the max.
+MAX_CHUNK_CHARS = 650
 CHUNK_OVERLAP_CHARS = 150
 MIN_CHUNK_CHARS = 40
-CHARS_PER_TOKEN_ESTIMATE = 4
+# 2, not 4: measured 1.91 chars/token on this corpus under the bge-m3 sentencepiece
+# (1.31 at its densest) [M:token-density]. Nothing reads `token_estimate` today, so
+# this column being wrong caused no failure of its own -- it just meant the number
+# a future context budget would trust was half the truth.
+CHARS_PER_TOKEN_ESTIMATE = 2
+# The smallest step the sliding window may take. Named, because the implementation
+# and the smoke test each used to carry their own idea of "meaningful advance" --
+# the code settled for any advance above zero while the test demanded a third of a
+# window, and the two only agreed by luck at the old chunk size.
+MIN_ADVANCE_CHARS = MAX_CHUNK_CHARS // 3
 
 
 class ChunkingError(RuntimeError):
@@ -337,7 +358,14 @@ def _split_window(text: str, start_offset: int) -> Iterator[tuple[str, int, int]
             # advances the cursor by exactly 1 and the same break is chosen
             # again, forever. A 3 KB body with a single blank line produced 114
             # chunks of lengths 1159, 150, 149, 148 before this guard.
-            if break_at != -1 and break_at - CHUNK_OVERLAP_CHARS > cursor:
+            # `> cursor` was too weak: it only bought advance >= 1. Shrinking
+            # MAX_CHUNK_CHARS to 650 surfaced the rest of the same bug -- a blank
+            # line landing just past the cursor gave an advance of 40 on the very
+            # fixture this guard was written for. The contract the test asserts is
+            # a MEANINGFUL advance, so require that here instead of restating a
+            # weaker one: reject the break and take the full window, which always
+            # advances by MAX_CHUNK_CHARS - CHUNK_OVERLAP_CHARS.
+            if break_at != -1 and break_at - CHUNK_OVERLAP_CHARS >= cursor + MIN_ADVANCE_CHARS:
                 window_end = break_at
         piece = text[cursor:window_end]
         yield piece, start_offset + cursor, start_offset + window_end

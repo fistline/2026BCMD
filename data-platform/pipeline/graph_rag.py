@@ -51,6 +51,7 @@ from pipeline import Paths, Settings, get_paths, get_settings
 from pipeline.aliases import expand_query
 from pipeline.build_rag import (
     COLLECTION_CANDIDATES,
+    SECTION_CAP_UNLIMITED,
     _features,
     _fixture_doc_ids,
     _search_once,
@@ -486,6 +487,12 @@ def _select_chunks(
             settings,
             collection=None,
             include_fixtures=include_fixtures,
+            # NOT settings.section_cap. This tier scores per CHUNK across query
+            # variants, so several fragments of one section landing in the list are
+            # the evidence it runs on -- the opposite of what they mean in an answer.
+            # Measured: capping here cost related_recall 1.0 -> 0.8, with g02's expected
+            # 제13조(준비자산 구성 및 관리) replaced by 제9조(백서).
+            section_cap=SECTION_CAP_UNLIMITED,
         )
         for rank, row in enumerate(rows, start=1):
             if row["doc_id"] in doc_ids:
@@ -535,6 +542,12 @@ def _select_chunks(
                 settings,
                 collection=None,
                 include_fixtures=include_fixtures,
+                # NOT settings.section_cap. This tier scores per CHUNK across query
+                # variants, so several fragments of one section landing in the list are
+                # the evidence it runs on -- the opposite of what they mean in an answer.
+                # Measured: capping here cost related_recall 1.0 -> 0.8, with g02's expected
+                # 제13조(준비자산 구성 및 관리) replaced by 제9조(백서).
+                section_cap=SECTION_CAP_UNLIMITED,
             )
             for rank, row in enumerate(rows, start=1):
                 if row["doc_id"] == doc_id:

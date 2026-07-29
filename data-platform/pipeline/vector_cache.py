@@ -69,6 +69,9 @@ CACHE_LAYOUT = "v1"
 # Passages per cache commit. Small enough that an interrupted cold build keeps
 # almost all of its work, large enough that the commit itself is noise.
 CHECKPOINT = 256
+# The embedder token cap every cache written before that slot existed was built
+# with. Kept here rather than imported from build_rag, which imports THIS module.
+DEFAULT_MAX_TOKENS = 512
 
 
 def embed_key(text: str) -> str:
@@ -105,6 +108,17 @@ def vector_signature(embedder, dimensions: int) -> str:
     # so their signature is unchanged by the existence of this field.
     precision = getattr(embedder, "precision", "") or ""
     parts = [CACHE_LAYOUT, embedder.name, model, str(dimensions), precision]
+    # The token cap decides how much of a passage is encoded AT ALL, and it is
+    # invisible to everything else here: `embed_key` hashes the TEXT, so raising
+    # the cap leaves every key byte-identical while every long passage's vector
+    # changes. Demonstrated rather than theorised -- an aborted build at 768 left
+    # 2560 vectors in this cache under a signature indistinguishable from a 512
+    # one, and the next ordinary `make index` would have mixed them into one
+    # index with nothing raising. Appended only when it differs from the
+    # historical 512, so no existing cache is invalidated by this slot existing.
+    max_tokens = getattr(embedder, "_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+    if max_tokens and max_tokens != DEFAULT_MAX_TOKENS:
+        parts.append(f"tok{max_tokens}")
     # The padding mode decides the vectors, so a cache filled under dynamic
     # padding must not be served to a fixed-padding encoder.
     suffix = getattr(embedder, "vector_space_suffix", "") or ""

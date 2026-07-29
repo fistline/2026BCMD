@@ -58,8 +58,10 @@ from pipeline.build_rag import (
 from pipeline.chunking import (
     _KO_SECTION_RE,
     BINARY_SUFFIXES,
+    CHUNK_OVERLAP_CHARS,
     FORMAT_PRIORITY,
     MAX_CHUNK_CHARS,
+    MIN_ADVANCE_CHARS,
     SUPPORTED_SUFFIXES,
     ChunkingError,
     _split_window,
@@ -288,10 +290,31 @@ def test_korean_retrieval() -> None:
     #    query for 가상자산 also retrieves the 디지털자산 bills, which is correct
     #    behaviour but would let this assertion pass for the wrong reason.
     compound = hybrid_search("가상자산", limit=5, expand=False)
+    # Asserted against chunks_fts directly rather than against the fused top-5.
+    # The mechanism under test is the bigram expansion -- does a substring query
+    # reach INSIDE 가상자산사업자는 -- and that lives in the FTS half. Reading it
+    # through a top-5 made it hostage to corpus growth instead: shrinking
+    # MAX_CHUNK_CHARS to 650 handed every real statute's chunk a BM25
+    # length-normalisation gain and pushed this fixture past rank 30 with the
+    # mechanism itself untouched (its four sections are ~110 chars and were never
+    # windowed at either size). A ranking assertion cannot answer a mechanism
+    # question once a real corpus is indexed; the sibling assertion below already
+    # says so in its own comment.
+    _fts = connect_index(get_paths().index_sqlite, read_only=True)
+    try:
+        matched = [
+            row[0]
+            for row in _fts.execute(
+                "SELECT chunk_id FROM chunks_fts WHERE chunks_fts MATCH ?",
+                (build_fts_query("가상자산"),),
+            )
+        ]
+    finally:
+        _fts.close()
     check(
         "'가상자산' matches inside 가상자산사업자는 / 가상자산이용자보호법",
-        any(hit["doc_id"] == "korean-terms" for hit in compound),
-        [hit["doc_id"] for hit in compound],
+        any(chunk_id.startswith("korean-terms#") for chunk_id in matched),
+        f"{len(matched)} FTS matches, none of them from korean-terms",
     )
     check(
         "the keyword half found the substring, not just the vector half",
@@ -577,14 +600,20 @@ def test_chunking() -> None:
     body = ("x" * 39 + "\n") * 29 + "\n" + ("y" * 39 + "\n") * 50
     pieces = list(_split_window(body, 0))
     starts = [piece[1] for piece in pieces]
+    # Expressed against the constants, not against a number that happened to be
+    # right at one chunk size: `<= 4` was arithmetic for MAX_CHUNK_CHARS=1200 and
+    # became unsatisfiable at 650 while the chunker was behaving correctly. This
+    # bound is what full-window stepping gives, plus one for a partial tail, so it
+    # still catches the 114-chunk explosion the comment above describes.
+    window_bound = -(-len(body) // (MAX_CHUNK_CHARS - CHUNK_OVERLAP_CHARS)) + 1
     check(
         "sliding window terminates in a sane number of chunks",
-        len(pieces) <= 4,
-        f"{len(pieces)} pieces of lengths {[len(p[0]) for p in pieces[:6]]}",
+        len(pieces) <= window_bound,
+        f"{len(pieces)} pieces (bound {window_bound}) of lengths {[len(p[0]) for p in pieces[:6]]}",
     )
     check(
         "every window advances by a meaningful amount",
-        all(later - earlier >= MAX_CHUNK_CHARS // 3 for earlier, later in pairwise(starts)),
+        all(later - earlier >= MIN_ADVANCE_CHARS for earlier, later in pairwise(starts)),
         [later - earlier for earlier, later in pairwise(starts)][:6],
     )
 

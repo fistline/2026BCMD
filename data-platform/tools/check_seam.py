@@ -39,7 +39,21 @@ EXEMPT = {"runtime.py", "smoke_test.py"}
 # Assembled rather than written out, so this file does not trip its own rule 3 --
 # the same trick data-platform/Makefile uses for its evasion-token pattern.
 _EP_SUFFIX = "Execution" + "Provider"
-_TARGET = "onnx" + "runtime"
+# Every module whose whole job is to select or drive an accelerator. The check
+# used to name exactly one of them, which made the seam a rule about a SPELLING
+# rather than about hardware: an `import coremltools` in build_rag.py passed it
+# clean, and the proposal that surfaced this wanted to add precisely that.
+# `sentence_transformers` is deliberately absent -- it is a model framework and a
+# legitimate EMBEDDING_PROVIDER, not a hardware API.
+_TARGETS = (
+    "onnx" + "runtime",
+    "coremltools",
+    "openvino",
+    "tensorrt",
+    "mlx",
+    "torch_directml",
+    "pycuda",
+)
 
 
 def _docstring_nodes(tree: ast.AST) -> set:
@@ -58,6 +72,13 @@ def _docstring_nodes(tree: ast.AST) -> set:
     return found
 
 
+def _hardware_module(name) -> bool:
+    """Is `name` one of the accelerator APIs, or a submodule of one?"""
+    if not isinstance(name, str):
+        return False
+    return any(name == target or name.startswith(target + ".") for target in _TARGETS)
+
+
 def violations(path: Path) -> list:
     # The gate runs on the machine's `python3`, which may be older than the venv's
     # -- a module using newer syntax must not crash the checker with a traceback.
@@ -72,18 +93,22 @@ def violations(path: Path) -> list:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == _TARGET or alias.name.startswith(_TARGET + "."):
+                if _hardware_module(alias.name):
                     found.append((node.lineno, f"imports {alias.name}"))
         elif isinstance(node, ast.ImportFrom):
-            if node.module and (node.module == _TARGET or node.module.startswith(_TARGET + ".")):
+            if node.module and _hardware_module(node.module):
                 found.append((node.lineno, f"imports from {node.module}"))
         elif isinstance(node, ast.Call):
             name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
             if name == "find_spec":
                 for argument in node.args:
-                    if isinstance(argument, ast.Constant) and argument.value == _TARGET:
+                    if isinstance(argument, ast.Constant) and _hardware_module(argument.value):
                         found.append(
-                            (node.lineno, "probes for onnxruntime; use runtime.have_onnx()")
+                            (
+                                node.lineno,
+                                f"probes for {argument.value}; availability is runtime.py's "
+                                "question, and have_onnx() answers it without importing",
+                            )
                         )
         elif isinstance(node, ast.Constant):
             value = node.value

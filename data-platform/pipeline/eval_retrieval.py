@@ -463,7 +463,7 @@ def compare(
         )
         return 1 if strict else 0
 
-    # ...and the count is only half of "did the judgments change". A judgment can be
+    # The count above is only half of "did the judgments change". A judgment can be
     # RE-ANCHORED without the count moving, which is the case that got through: q08's
     # anchor was three bare nouns resolving to 1411 chunks -- 10.8% of the index, so
     # its MRR 1.0 was arithmetic, not retrieval -- and narrowing it to 7 left `graded`

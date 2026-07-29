@@ -41,7 +41,7 @@ import sqlite_vec
 
 from pipeline import Paths, Settings, get_paths, get_settings, runtime
 from pipeline.aliases import expand_query
-from pipeline.vector_cache import encode_with_cache
+from pipeline.vector_cache import DEFAULT_MAX_TOKENS, encode_with_cache
 
 # Allocation failures surface as different exception types per execution provider
 # (onnxruntime's Fail/RuntimeException, a DirectML HRESULT, a CUDA OOM), so they
@@ -102,6 +102,10 @@ CJK_NGRAM_SIZES = (2, 3)
 FTS_NGRAM_SIZE = 2
 
 MIN_EMBEDDING_DIM = 512
+
+# Passed as `section_cap` by a caller that must NOT have the per-section cap.
+# A number, not None, because None already means "use the setting".
+SECTION_CAP_UNLIMITED = 1_000_000
 
 
 def normalise(text: str) -> str:
@@ -375,7 +379,20 @@ class OnnxEmbedder:
         "int8": "onnx/sentence_transformers_int8.onnx",
         "fp16": "onnx/sentence_transformers_fp16.onnx",
     }
-    _MAX_TOKENS = 512  # a 1200-char chunk fits well under this; bounds CPU cost.
+    # 512 is the standard cap for this model family and it is NOT the thing that
+    # was wrong. The chunker was: it sized chunks at 1200 chars believing that to
+    # be ~300 tokens (CHARS_PER_TOKEN_ESTIMATE=4, an ENGLISH BPE ratio), while
+    # Korean legal text measures 1.91 chars/token here and 1.31 at its densest, so
+    # a full chunk ran to ~584 tokens and 28.1% of the corpus truncated silently
+    # [M:token-density]. The fix belongs in chunking.py (MAX_CHUNK_CHARS), which is
+    # where the wrong number lived -- so this cap stays put and every chunk now
+    # fits under it with room to spare.
+    #
+    # Raising this to 768 was tried first and is the WRONG lever twice over: it
+    # leaves the miscalibrated chunker in place, and attention is QUADRATIC in
+    # sequence length, so it measured 11.4x slower on this corpus, not the 1.24x
+    # a token-count estimate predicts [M:cap-768-cost].
+    _MAX_TOKENS = 512
     # How many tokenised batches may sit ahead of the session. Tier A of the
     # hybrid design: the CPU tokenises batch N+1 while the device runs batch N,
     # which costs nothing in determinism because the work is still ordered.
@@ -1195,6 +1212,14 @@ def index_signature(embedder, dimensions: int) -> str:
     batch = getattr(embedder, "_batch", runtime.ENCODE_BATCH_DEFAULT)
     if batch != runtime.ENCODE_BATCH_DEFAULT:
         parts = parts + (f"batch{batch}",)
+    # And the token cap, for the third time the same reason: it changes the
+    # PERSISTED vectors without changing a query vector (a query is never long
+    # enough for the cap to bind), so an index built at one cap and topped up at
+    # another holds two kinds of passage vector and nothing else can tell.
+    # Appended only when it differs from the historical 512.
+    max_tokens = getattr(embedder, "_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+    if max_tokens != DEFAULT_MAX_TOKENS:
+        parts = parts + (f"tok{max_tokens}",)
     return "|".join(parts)
 
 
@@ -1317,37 +1342,74 @@ fused AS (
     FROM candidate_ids
     LEFT JOIN vector_hits ON vector_hits.chunk_id = candidate_ids.chunk_id
     LEFT JOIN keyword_hits ON keyword_hits.chunk_id = candidate_ids.chunk_id
+),
+-- One section must not fill the answer with its own fragments. AGENTS.md already
+-- names the neighbouring case -- a 약관 clause copied into dozens of filings lets
+-- N identical hits fill every top-K and bury the distinctive article -- and the
+-- build path solves THAT one by collapsing identical `content` to a single
+-- representative. This is the same failure with a different origin: one long
+-- article windowed into several chunks, all of which match, none of which is a
+-- duplicate of another. Measured on the 14 eval queries, 29 of 140 top-10 slots
+-- (20.7 %) went to a repeat (doc_id, heading); one query spent 6 of its 10 on a
+-- single 조문. Shrinking the chunk size makes it worse, so it has to be capped
+-- here rather than tuned around.
+--
+-- Applied BEFORE the reranker sees the pool (`_search_once` is what feeds it), so
+-- it changes the rerank batch composition -- and that graph is dynamically
+-- quantised, so every CE score moves with the batch [M:rerank-batch]. Both floors
+-- are re-recorded together or neither is.
+scoped AS (
+    SELECT
+        chunks.chunk_id AS chunk_id,
+        chunks.doc_id AS doc_id,
+        chunks.rel_path AS rel_path,
+        chunks.collection AS collection,
+        chunks.title AS title,
+        chunks.heading AS heading,
+        chunks.doc_type AS doc_type,
+        chunks.chunk_index AS chunk_index,
+        chunks.content AS content,
+        fused.vector_rank AS vector_rank,
+        fused.vector_distance AS vector_distance,
+        fused.keyword_rank AS keyword_rank,
+        fused.rrf_score AS rrf_score,
+        ROW_NUMBER() OVER (
+            PARTITION BY chunks.doc_id, chunks.heading
+            ORDER BY fused.rrf_score DESC, chunks.chunk_id
+        ) AS section_rank
+    FROM fused
+    JOIN chunks ON chunks.chunk_id = fused.chunk_id
+    -- Collection scoping is applied AFTER fusion on the over-fetched candidate set
+    -- (the caller raises `candidates` when a collection is set), not inside the vec0
+    -- KNN, which has no collection column. NULL means every collection.
+    WHERE (:collection IS NULL OR chunks.collection = :collection)
+      -- Smoke fixtures share the serving index (the smoke test needs them there) but
+      -- must not surface in a real answer; hidden by default on the read path via a
+      -- doc_id denylist -- no schema column, so no rebuild. :include_fixtures re-admits
+      -- them for the fixture-dependent smoke assertions.
+      AND (:include_fixtures OR chunks.doc_id NOT IN (SELECT value FROM json_each(:fixture_ids)))
 )
 SELECT
-    chunks.chunk_id,
-    chunks.doc_id,
-    chunks.rel_path,
-    chunks.collection,
-    chunks.title,
-    chunks.heading,
-    chunks.doc_type,
-    chunks.chunk_index,
-    chunks.content,
-    fused.vector_rank,
+    chunk_id,
+    doc_id,
+    rel_path,
+    collection,
+    title,
+    heading,
+    doc_type,
+    chunk_index,
+    content,
+    vector_rank,
     -- Raw L2 distance from the vector arm, surfaced so a caller can see how far
     -- away a "hit" actually is. There is no threshold applied: sqlite-vec's
     -- `k = :candidates` returns exactly that many rows however distant they are,
     -- so a query about something absent from the corpus still fills the list.
-    fused.vector_distance,
-    fused.keyword_rank,
-    fused.rrf_score
-FROM fused
-JOIN chunks ON chunks.chunk_id = fused.chunk_id
--- Collection scoping is applied AFTER fusion on the over-fetched candidate set
--- (the caller raises `candidates` when a collection is set), not inside the vec0
--- KNN, which has no collection column. NULL means every collection.
-WHERE (:collection IS NULL OR chunks.collection = :collection)
-  -- Smoke fixtures share the serving index (the smoke test needs them there) but
-  -- must not surface in a real answer; hidden by default on the read path via a
-  -- doc_id denylist -- no schema column, so no rebuild. :include_fixtures re-admits
-  -- them for the fixture-dependent smoke assertions.
-  AND (:include_fixtures OR chunks.doc_id NOT IN (SELECT value FROM json_each(:fixture_ids)))
-ORDER BY fused.rrf_score DESC, chunks.chunk_id
+    vector_distance,
+    keyword_rank,
+    rrf_score
+FROM scoped
+WHERE section_rank <= :section_cap
+ORDER BY rrf_score DESC, chunk_id
 LIMIT :limit
 """
 
@@ -1441,8 +1503,19 @@ def _search_once(
     settings: Settings,
     collection: str | None = None,
     include_fixtures: bool = False,
+    section_cap: int | None = None,
 ) -> list:
-    """One retrieval: the weighted RRF of the vector and keyword arms."""
+    """One retrieval: the weighted RRF of the vector and keyword arms.
+
+    `section_cap` defaults to the setting. It is a parameter and not only a
+    setting because ONE caller must not have it: graph_rag's related tier runs
+    this repeatedly over query variants and accumulates 1/(k + rank) PER CHUNK,
+    so several fragments of one section landing in the list is EVIDENCE there,
+    not noise -- the opposite of what it means in an answer. Capping it there
+    measurably lost the thing the related section exists for: g02's expected
+    제13조(준비자산 구성 및 관리) fell out of `related` and was replaced by
+    제9조(백서), dropping related_recall 1.0 -> 0.8.
+    """
     embedder = get_embedder(settings)
     query_vector = embedder.encode([query])[0]
     assert_index_present(connection)
@@ -1473,6 +1546,7 @@ def _search_once(
             "collection": collection,
             "include_fixtures": 1 if include_fixtures else 0,
             "fixture_ids": _fixture_ids_json(),
+            "section_cap": settings.section_cap if section_cap is None else section_cap,
             "limit": limit,
         },
     ).fetchall()

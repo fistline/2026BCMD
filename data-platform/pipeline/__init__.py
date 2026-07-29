@@ -107,6 +107,8 @@ class Settings:
     vector_weight: float
     keyword_weight: float
     alias_expansion: bool
+    # How many chunks ONE (doc_id, heading) may occupy in a fused answer.
+    section_cap: int
     graph_depth: int
     # Optional cross-encoder reranker (RERANK=1). Default OFF: the baseline
     # (no reranker) is the M1-8GB target; this is the heavier opt-in path.
@@ -142,6 +144,11 @@ def get_settings() -> Settings:
         vector_weight=float(os.environ.get("VECTOR_WEIGHT", "0.3")),
         keyword_weight=float(os.environ.get("KEYWORD_WEIGHT", "1.0")),
         alias_expansion=os.environ.get("ALIAS_EXPANSION", "1").strip() not in {"0", "false", "no"},
+        # One long article windows into several chunks and every one of them
+        # matches, so without a cap a single 조문 fills the answer with itself:
+        # measured 29 of 140 top-10 slots on the eval set, 6 of 10 on one query.
+        # Query-time only -- it moves no vector, so it is not in index_signature.
+        section_cap=_section_cap(),
         graph_depth=_graph_depth(),
         # Reranker: opt-in, default off. Candidates 16, because that is the number
         # that fits ONE comparable batch. This model is dynamically quantised, so
@@ -177,6 +184,23 @@ def _precision(variable: str) -> str:
 
 def _embedding_precision() -> str:
     return _precision("EMBEDDING_PRECISION")
+
+
+def _section_cap() -> int:
+    """SECTION_CAP: chunks one (doc_id, heading) may occupy in a fused answer.
+
+    Validated on read like GRAPH_DEPTH. 0 is rejected rather than treated as
+    "unlimited": a cap of zero would return nothing, and a knob whose off switch
+    silently empties the result is worse than no knob. Set it high to disable.
+    """
+    raw = os.environ.get("SECTION_CAP", "1").strip()
+    try:
+        cap = int(raw)
+    except ValueError as error:
+        raise ValueError(f"SECTION_CAP must be a positive integer, got {raw!r}") from error
+    if cap < 1:
+        raise ValueError(f"SECTION_CAP must be at least 1, got {cap}")
+    return cap
 
 
 def _graph_depth() -> int:
