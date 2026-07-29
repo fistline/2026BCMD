@@ -54,8 +54,13 @@ mistakes; everything else is recoverable.
    first subfolder as its inbox path, so `source/norms/x.txt → inbox/norms/x.txt`
    stays in collection `norms` on a fresh clone. Add corpus originals to `source/`
    (in the subfolder that names their collection) and fixtures to
-   `pipeline/fixtures/`, never to `data/`. `source/CORPUS_MANIFEST.tsv` records each
-   document's sha256 + source URL so the corpus can be re-fetched deterministically.
+   `pipeline/fixtures/`, never to `data/`. `source/CORPUS_MANIFEST.tsv` covers **every**
+   file under `source/`: sha256 + bytes to check a copy, and where it came from to
+   re-fetch it. Add the row with the file — provenance that lives only in the session
+   that did the download is provenance nobody else can verify, and this manifest ran
+   for months describing 48 of 70 files while claiming to describe all of them. Where
+   `source` is not a URL it says so in words (the issuing system, or that this repo
+   authored the summary); it is never left blank.
 
 2. **Never edit `data/raw/` or `data/inbox/` in place.** They are append-only
    landing zones; the watcher preserves superseded bytes under
