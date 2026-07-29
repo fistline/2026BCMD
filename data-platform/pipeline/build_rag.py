@@ -776,8 +776,13 @@ class OnnxEmbedder:
         # onnxruntime releases the GIL during run() and Run() is thread-safe, so
         # independent batches encode on separate cores while each stays single-
         # threaded (intra_op=1). ThreadPoolExecutor.map preserves batch order, so
-        # the assembled result is bit-identical to the sequential path (verified by
-        # the ENCODE_WORKERS=1 vs N equality check).
+        # the assembled result is bit-identical to the sequential path.
+        #
+        # That last sentence used to end "(verified by the ENCODE_WORKERS=1 vs N
+        # equality check)", and no such check existed anywhere in the repo -- a
+        # citation to a witness that was never called, on the one claim where the
+        # branch is chosen by CORE COUNT and so differs across a fleet. It is now
+        # `tools/check_workers_equality.py` and measured [M:workers-equality].
         from concurrent.futures import ThreadPoolExecutor
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -1358,6 +1363,15 @@ fused AS (
 -- it changes the rerank batch composition -- and that graph is dynamically
 -- quantised, so every CE score moves with the batch [M:rerank-batch]. Both floors
 -- are re-recorded together or neither is.
+--
+-- KNOWN, and this is the place to read it before tuning the cap: it is currently
+-- doing a second job nobody asked it to do. 8.3% of the index is 별표·서식 appendix
+-- TABLES carried through as prose -- box-drawing characters, no retrievable content
+-- [M:table-noise] -- and because a 696 k-character appendix sits under ONE heading,
+-- the cap is what keeps it to a single slot. Filtering that content at the source
+-- is the real fix and is deliberately NOT done here: it changes chunking, so it
+-- costs a full rebuild plus both floors, and the threshold (20 %? 30 %? 40 %?) is a
+-- judgement that could delete a real 수수료율표. Measured first, cut later.
 scoped AS (
     SELECT
         chunks.chunk_id AS chunk_id,

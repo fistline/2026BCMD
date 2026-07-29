@@ -162,9 +162,17 @@ def get_settings() -> Settings:
         rerank_model=os.environ.get("RERANK_MODEL", "onnx-community/bge-reranker-v2-m3-ONNX"),
         rerank_candidates=int(os.environ.get("RERANK_CANDIDATES", "16")),
         # Retrieval PRIOR weight in the rerank fusion (CE weight is fixed at 1.0):
-        # lower = more cross-encoder-dominant. 0.15 lets CE reorder while retrieval
-        # only breaks near-ties. Tune via `make eval-rerank`.
-        rerank_weight=float(os.environ.get("RERANK_WEIGHT", "0.15")),
+        # lower = more cross-encoder-dominant. It was 0.15, which made the CE the
+        # PRIMARY signal, and that stopped paying the moment SECTION_CAP lifted the
+        # fused arm: at 0.15 the reranked arm scored BELOW plain fusion.
+        #
+        # 3.0 is the measured peak of a swept curve, not the edge of one
+        # [M:rerank-weight]: MRR@10 climbs 0.758 -> 0.926 from 0.15 to 3.0, sits flat
+        # at 4.0 (0.925), and by 8.0 has converged to the fused number exactly, which
+        # is what `w/(k + retr_rank) + 1/(k + ce_rank)` must do as w grows. So the
+        # cross-encoder earns its keep as a TIE-BREAKER and loses it as a primary
+        # ranker. Re-sweep with `make eval-rerank` after anything that moves fusion.
+        rerank_weight=float(os.environ.get("RERANK_WEIGHT", "3.0")),
         rerank_threads=int(os.environ.get("RERANK_THREADS", "1")),
         rerank_precision=_precision("RERANK_PRECISION"),
     )

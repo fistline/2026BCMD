@@ -13,10 +13,10 @@
       "r_at_5": 0.5833
     },
     "reranked": {
-      "mrr_at_10": 0.7583,
-      "p_at_1": 0.6667,
+      "mrr_at_10": 0.9259,
+      "p_at_1": 0.9167,
       "r_at_10": 1.0,
-      "r_at_5": 0.8333
+      "r_at_5": 0.9167
     },
     "vector": {
       "mrr_at_10": 0.6481,
@@ -57,8 +57,8 @@
   },
   "by_kind_reranked": {
     "cross_bill": {
-      "mrr_at_10": 0.8333,
-      "p_at_1": 0.6667,
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0,
       "r_at_10": 1.0,
       "r_at_5": 1.0
     },
@@ -69,16 +69,16 @@
       "r_at_5": 1.0
     },
     "synonym_gap": {
-      "mrr_at_10": 0.7,
+      "mrr_at_10": 0.7037,
       "p_at_1": 0.6667,
       "r_at_10": 1.0,
       "r_at_5": 0.6667
     },
     "vocabulary_match": {
-      "mrr_at_10": 0.625,
-      "p_at_1": 0.5,
+      "mrr_at_10": 1.0,
+      "p_at_1": 1.0,
       "r_at_10": 1.0,
-      "r_at_5": 0.75
+      "r_at_5": 1.0
     }
   },
   "chunk_count": 20344,
@@ -175,10 +175,10 @@
     "keyword_weight": 1.0,
     "rerank_enabled": true,
     "rerank_model": "onnx-community/bge-reranker-v2-m3-ONNX",
-    "rerank_weight": 0.15,
+    "rerank_weight": 3.0,
     "rrf_k": 60,
     "vector_weight": 1.0
   },
-  "source_sha": "af8747bcf75848155d7f7c05ef006f7d3ac30c16",
+  "source_sha": "3d31ee3a9911dbabed0bf8f289b35cb1c328ae8a",
   "unresolved": []
 }

@@ -27,9 +27,15 @@ from dataclasses import dataclass, field
 # corpus: at 1200 chars a chunk ran to ~584 tokens, so 28.1% of the corpus was
 # silently truncated by the embedder and 4.22% of all chunk text ended up in NO
 # vector at all [M:token-density]. Measured on this corpus, 650 is the largest
-# ceiling at which nothing exceeds 512 (observed max 488, so 24 tokens spare), and
-# it is CHEAPER to encode than 1200 despite the extra chunks, because attention is
-# quadratic in sequence length. Anything above 700 puts chunks back over the cap.
+# ceiling at which nothing exceeds 512 (observed max 488, so 24 tokens spare).
+# Anything above 700 puts chunks back over the cap.
+#
+# It COSTS more to build, and an earlier version of this comment claimed the
+# opposite from an estimate rather than a measurement: 1.36x the wall clock, because
+# the 0.87x per-vector saving does not cover 1.57x the vectors [M:chunk-650]. The
+# `C^2/(C - overlap)` model that predicted 0.62x was wrong in both terms -- most
+# chunks were already shorter than 650, so neither the count nor the sequence length
+# moved the way a full-window model expects.
 #
 # Re-derive this if the embedder, its tokenizer, or the embed_text prefix changes:
 # tokenise `# {title}\n## {heading}\n{content}` for every chunk and take the max.

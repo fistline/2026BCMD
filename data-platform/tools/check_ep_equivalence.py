@@ -23,6 +23,19 @@ Usage (needs both providers registered on this machine):
 It is skipped, not failed, when the second provider is not available: most
 machines have exactly one, and a CI runner with no GPU must still be able to run
 the rest of the gate.
+
+Two limits worth knowing before citing this file as a guarantee, both open:
+
+  * It parameterises on PROVIDER STRINGS and imports `OnnxEmbedder` directly, so
+    it compares one implementation against itself on two execution providers. Two
+    different embedder BACKENDS -- an ONNX one against a native Core ML one, say --
+    cannot be passed to it at all. Any proposal that adds a backend needs this to
+    take two embedder specs instead of two provider names first, or the backend's
+    central claim (same tokenizer, same pooling, same output) has no instrument.
+  * It has never run against CUDA or DirectML. Every row in MEASUREMENTS.md was
+    recorded on one macOS box, where the only non-CPU provider is the demoted
+    CoreML one -- so on two of the three platforms the cross-hardware promise
+    rests on, this check has zero recorded runs.
 """
 
 from __future__ import annotations

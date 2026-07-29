@@ -208,8 +208,6 @@ clean: ## Delete every regenerable artefact. data/raw and data/inbox are untouch
 # The evasion-token pattern is assembled at runtime rather than written out, so
 # this Makefile does not match its own check. `[.]{3}` is the same regex as the
 # literal three-dot form.
-EVASION_PATTERN = $(shell printf 'TO%s|FI%s|%s for brevity|[.]{3}' DO XME omitted)
-
 ocr-compare: ## Do the paddle and onnx OCR backends read a page the same way? Usage: make ocr-compare FILE=scan.pdf
 	@test -n "$(FILE)" || (echo "usage: make ocr-compare FILE=<scan.pdf|page.png>" && exit 1)
 	$(PY) tools/ocr/compare_backends.py "$(FILE)"
@@ -229,8 +227,7 @@ verify: ## Run the full verification gate
 	# floors while the twelve invariants it all rests on were never checked locally.
 	$(PY) tools/test_runtime_contract.py
 	@echo "== no evasion tokens =="
-	@! grep -rInE '$(EVASION_PATTERN)' pipeline transform agent .agents Makefile meltano.yml || (echo "FAIL: evasion token found" && exit 1)
-	@echo "OK"
+	@python3 tools/check_evasion.py
 	@echo "== document-type profile gate =="
 	$(PY) -m pipeline.doctypes.gate
 	@echo "== toolchain =="
