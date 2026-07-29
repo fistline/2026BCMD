@@ -110,6 +110,26 @@ def check(base: Path) -> tuple[int, int]:
     return failed, checked
 
 
+def symlinks_work(directory: Path) -> bool:
+    """이 디렉터리에서 심링크를 만들 수 있는가. 한 번만 물어보고 재사용한다.
+
+    복사본은 `--check` 를 통과하는 한 영원히 복사본으로 남는다 — 내용이 같으면
+    link_ok 가 참이기 때문이다. 그러면 심링크를 쓸 수 있는 기계에서도 드리프트할 수
+    있는 형태가 유지되고, 실제로 그렇게 됐다: 폴백 경로를 시험한 뒤 남은 복사본이
+    정본을 다음에 고칠 때까지 조용히 기다렸다가 게이트를 깨웠다. 만들 수 있으면
+    올려붙인다.
+    """
+    probe = directory / ".symlink-probe"
+    try:
+        probe.symlink_to(Path("."))
+    except (OSError, NotImplementedError):
+        return False
+    finally:
+        if probe.is_symlink():
+            probe.unlink()
+    return True
+
+
 def sync(base: Path) -> int:
     """어댑터를 정본에 맞춘다. 반환값은 손댄 항목 수."""
     canon = base / CANON
@@ -120,10 +140,14 @@ def sync(base: Path) -> int:
     for adapter in ADAPTERS:
         target = base / adapter
         target.mkdir(parents=True, exist_ok=True)
+        linkable = symlinks_work(target)
         for name in names:
             entry = target / name
             wanted = BACK / CANON / name
             ok, _ = link_ok(entry, canon / name)
+            # 심링크를 쓸 수 있는데 복사본이면, 내용이 같아도 다시 심는다.
+            if ok and linkable and not entry.is_symlink():
+                ok = False
             # 해석 결과가 같아도 링크 **문자열**이 다르면 다시 심는다. 루트의 세 스킬은
             # 정본이 다시 심링크라(.agents/skills/sto-filing -> gen-docs/...) 어댑터가
             # 정본을 건너뛰고 최종 대상을 직접 가리켜도 resolve() 는 같은 곳에 닿는다.
