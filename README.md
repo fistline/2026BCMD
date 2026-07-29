@@ -267,7 +267,10 @@ floors*)와 `data-platform/AGENTS.md`다.
 
 ## 라이선스
 
-**MIT** — `LICENSE` 참조. 저작권자 **aileaf / 김정한**.
+**MIT** — 상업적 이용을 포함해 자유롭게 쓰고, 고치고, 재배포할 수 있다. 조건은 하나뿐이다.
+**사본에 아래 저작권 표시와 라이선스 전문을 함께 넣어야 한다.** 전문은 `LICENSE`에 있다.
+
+> Copyright (c) 2026 **aileaf (김정한 / Junghan Kim)**
 
 **MIT가 적용되는 범위는 이 저장소가 직접 만든 코드와 문서까지다.**
 `data-platform/source/`에 있는 코퍼스는 각 기관이 공개한 자료를 원문 그대로 옮겨 둔
