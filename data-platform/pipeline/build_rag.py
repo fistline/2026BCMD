@@ -1356,8 +1356,16 @@ fused AS (
 -- article windowed into several chunks, all of which match, none of which is a
 -- duplicate of another. Measured on the 14 eval queries, 29 of 140 top-10 slots
 -- (20.7 %) went to a repeat (doc_id, heading); one query spent 6 of its 10 on a
--- single 조문. Shrinking the chunk size makes it worse, so it has to be capped
--- here rather than tuned around.
+-- single 조문.
+--
+-- IT IS COUPLED TO THE CHUNK SIZE, and that is measured, not assumed: at
+-- MAX_CHUNK_CHARS=1200 this same cap makes retrieval WORSE (fused MRR@10 0.764
+-- uncapped against 0.701 capped, with `vocabulary_match` taking the loss at
+-- 0.708 -> 0.521), while at 650 it is what turns 0.744 into 0.801
+-- [M:cap-chunk-coupling]. The cap is a corrective for the fragmentation small
+-- chunks create, not a free improvement -- larger chunks fragment less, so
+-- capping them to one throws away diversity instead of duplication. Anyone
+-- moving MAX_CHUNK_CHARS has to re-measure this knob with it.
 --
 -- Applied BEFORE the reranker sees the pool (`_search_once` is what feeds it), so
 -- it changes the rerank batch composition -- and that graph is dynamically
