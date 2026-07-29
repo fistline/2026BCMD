@@ -80,6 +80,9 @@ jobs:
       - name: Retired measurements have not come back
         run: uv run --no-project python tools/check_retired_numbers.py
 
+      - name: Tuning values cite a measurement, measurements name a corpus
+        run: uv run --no-project python tools/check_citations.py
+
       - name: No token standing in for work not done
         # Lived only inside `make verify`, which nothing runs automatically, so an
         # ellipsis landed on 2026-07-28 and three commits stacked on top of a red

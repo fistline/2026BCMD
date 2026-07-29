@@ -34,7 +34,7 @@ else
 SYNC_EXTRAS := --extra gpu-$(strip $(GPU)) --extra kiwi --extra web
 endif
 
-.PHONY: help index-canonical setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
+.PHONY: help corpus-id index-canonical setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -69,6 +69,9 @@ setup-gpu: ## Install an accelerator wheel. Usage: make setup-gpu STACK=cuda|dir
 	@echo
 	@echo "== does it actually work? =="
 	$(PY) -m pipeline.runtime --save
+
+corpus-id: ## Which documents is this? A hash over the manifest, refused if it disagrees with the files
+	@python3 tools/corpus_id.py
 
 gpu-probe: ## What execution provider will this machine use, and would fp16 help? Writes the device profile.
 	$(PY) -m pipeline.runtime --save
@@ -228,6 +231,8 @@ verify: ## Run the full verification gate
 	$(PY) tools/test_runtime_contract.py
 	@echo "== no evasion tokens =="
 	@python3 tools/check_evasion.py
+	@echo "== tuning values cite a measurement, measurements name a corpus =="
+	@python3 tools/check_citations.py
 	@echo "== document-type profile gate =="
 	$(PY) -m pipeline.doctypes.gate
 	@echo "== toolchain =="

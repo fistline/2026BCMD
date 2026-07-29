@@ -26,6 +26,8 @@ check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매�
 	@$(PY) data-platform/tools/check_retired_numbers.py
 	@echo "== 일하지 않은 자리를 가리는 토큰이 없는가 =="
 	@cd data-platform && $(PY) tools/check_evasion.py
+	@echo "== 튜닝값이 출처를 인용하고, 측정치가 코퍼스를 밝히는가 =="
+	@cd data-platform && $(PY) tools/check_citations.py
 	@echo "== 노브: 읽는 것은 문서화돼 있고, 문서화된 것은 읽히는가 =="
 	@$(PY) data-platform/tools/check_knobs.py
 	@echo "== 모든 타깃이 같은 환경을 sync 하는가 (확장식 비교) =="

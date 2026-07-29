@@ -140,8 +140,20 @@ def get_settings() -> Settings:
         ),
         embedding_precision=_embedding_precision(),
         rrf_k=int(os.environ.get("RRF_K", "60")),
-        # Measured on 45 Korean queries; flat across 0.3-0.5, so no knife-edge.
-        vector_weight=float(os.environ.get("VECTOR_WEIGHT", "0.3")),
+        # 1.0, not the 0.3 this shipped with. That 0.3 was measured under the
+        # HASHING embedder on a 45-query judgment set that no longer exists, and it
+        # survived the move to onnx_int8 unexamined. Measured now: 0.3 → fused
+        # MRR@10 0.750, 1.0 → 0.801 [M:arm-weighting]. Every recorded floor was
+        # taken at 1.0 through a git-IGNORED .env while this said 0.3.
+        #
+        # Who that bit, precisely: NOT a bare clone -- with no .env the provider
+        # falls back to `hashing` and index_signature refuses the index loudly,
+        # which is that guard working. It bit the node that sets the embedder
+        # correctly and inherits the fusion weight, which is what a spoke does.
+        # That node missed the floor by 0.051 fused MRR@10 with nothing to say so:
+        # index_signature, chunk_count and judgment_sha are all blind here, because
+        # a fusion weight moves no vector and touches no judgment.
+        vector_weight=float(os.environ.get("VECTOR_WEIGHT", "1.0")),
         keyword_weight=float(os.environ.get("KEYWORD_WEIGHT", "1.0")),
         alias_expansion=os.environ.get("ALIAS_EXPANSION", "1").strip() not in {"0", "false", "no"},
         # One long article windows into several chunks and every one of them
