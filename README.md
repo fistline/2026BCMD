@@ -59,7 +59,7 @@ dApp을 만든다.
 │       ├── dist/          #    생성물: 단독 실행 프롬프트 3종
 │       └── <slug>/        #    생성된 증권신고서가 쌓이는 곳
 └── gen-apps/
-    ├── ST_SERVICE_DAPP_PROMPT.md  # dApp 생성 대형 프롬프트 (Q1~Q5만 사람이 채움)
+    ├── ST_SERVICE_DAPP_PROMPT.md  # dApp 생성 대형 프롬프트 (Q1~Q7만 사람이 채움)
     ├── st-service-dapp/   #    스킬 소스
     ├── filing-to-dapp/    #    신고서→dApp 브리지 스킬 소스
     └── <slug>/            #    생성된 dApp이 쌓이는 곳
@@ -120,7 +120,7 @@ FTS(키워드)·Graph(관계) **3계로 나눠 `index.sqlite`를 색인**한다.
 - **신고서에서 이어서** — `filing-to-dapp`: 완성된 신고서를 dApp 사양으로 역매핑하고
   게이트를 승계한 뒤 생성으로 이어붙인다.
   > "신고서 다 썼으니 이어서 앱 만들어줘"
-- **직접** — `st-service-dapp`: 서비스 비전(Q1~Q5)을 확정한 뒤
+- **직접** — `st-service-dapp`: 서비스 비전·운영 범위·발행 단위(Q1~Q7)를 확정한 뒤
   `ST_SERVICE_DAPP_PROMPT.md`를 실행해 Scaffold-ETH 2 기반 dApp을 끝까지 생성한다.
   > "부동산 조각투자 dApp 만들어줘"
 
@@ -189,7 +189,7 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   빌드돼 있어야 한다. 검색 규칙·랭킹 해석의 정본은 `data-platform/AGENTS.md`와
   `corpus-search` 스킬이다.
 - **gen-docs→gen-apps 브리지** — `filing-to-dapp`가 담당한다: 완성된 신고서에서
-  서비스 사실(기초자산·수익구조·전매제한·적격투자자 요건)을 뽑아 dApp의 Q1~Q5와 토큰
+  서비스 사실(기초자산·수익구조·전매제한·적격투자자 요건)을 뽑아 dApp의 Q1~Q7과 토큰
   표준으로 역매핑하고, 신고서의 **발행 불가 판정을 dApp 게이트로 승계**해 발행 불가한
   증권은 dApp 생성도 막는다.
 

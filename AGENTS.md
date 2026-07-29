@@ -17,7 +17,7 @@
 | 스킬 | 소스 | 하는 일 |
 |---|---|---|
 | `sto-filing` | `gen-docs/st_prospectus/sto-filing/` | 증권 유형 판정 → 증권신고서 작성 → 자기심사 |
-| `st-service-dapp` | `gen-apps/st-service-dapp/` | Q1~Q5 확정 → Scaffold-ETH 2 dApp 생성 |
+| `st-service-dapp` | `gen-apps/st-service-dapp/` | Q1~Q7(서비스 비전 + 운영 범위 + 발행 단위) 확정 → Scaffold-ETH 2 dApp 생성 |
 | `filing-to-dapp` | `gen-apps/filing-to-dapp/` | 증권신고서 → dApp 브리지 (매핑 + 게이트 승계) |
 | `corpus-lookup` | `.agents/skills/corpus-lookup/` | 루트 cwd에서 코퍼스를 조회하는 얇은 래퍼 |
 
