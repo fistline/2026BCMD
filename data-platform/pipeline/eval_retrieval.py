@@ -356,6 +356,19 @@ def evaluate(paths: Paths | None = None, settings: Settings | None = None) -> di
 
 def render(result: dict) -> None:
     print(f"graded {result['graded']} queries  {result['settings']}")
+    # TREC and BEIR both hold topics back so a system is never reported on what it
+    # was tuned on. This repo does not: every knob swept today -- SECTION_CAP,
+    # RERANK_WEIGHT, RRF_K, VECTOR_WEIGHT, ALIAS_EXPANSION -- was chosen on these
+    # queries, and the floor is recorded from them too. Saying so on every run is
+    # cheap and is the only honest thing available until the set is big enough to
+    # split: at this size a 70/30 stratified split leaves ~1 query per kind, which
+    # is not a held-out set, it is a coin.
+    answerable = sum(1 for entry in result.get("per_query", []) if "p_at_1" in entry)
+    print(
+        f"  note: no held-out split -- these {result['graded']} queries are both the tuning set "
+        f"and the floor, and the arm means are over the {answerable} answerable ones, so one "
+        f"query moves P@1 by {1 / max(1, answerable):.3f}. Widen with correction-harvesting."
+    )
     if result["unresolved"]:
         print(f"  unresolved judgments: {', '.join(result['unresolved'])}")
     print()

@@ -72,3 +72,7 @@ docs/plans/
 .claude/memory/
 memory/
 .gpu-stack
+
+# `make snapshot` state, saved before an expensive rebuild so the undo is free.
+# 1.7 GB of index and lake -- the same reason `data/` is ignored (invariant 1).
+.snapshot/

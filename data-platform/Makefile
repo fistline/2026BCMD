@@ -34,7 +34,7 @@ else
 SYNC_EXTRAS := --extra gpu-$(strip $(GPU)) --extra kiwi --extra web
 endif
 
-.PHONY: help corpus-id index-canonical setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
+.PHONY: help corpus-id snapshot restore chunk-ceiling index-canonical setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -107,6 +107,28 @@ transform: ## SQLMesh bronze -> silver -> gold, with blocking audits
 
 index: ## Build data/serving/index.sqlite (vectors + FTS5 + graph)
 	$(PY) pipeline/run.py --only index
+
+SNAPSHOT ?= .snapshot
+
+snapshot: ## Save data/serving + data/processed before an expensive rebuild (APFS clone: instant, no extra disk)
+	# A chunk-size experiment costs a rebuild to run and ANOTHER to undo. Cloning
+	# the state first makes the undo free -- measured 0.045 s each way against the
+	# ~105 min a rebuild-to-restore cost, which is the difference between an
+	# experiment being worth running and not.
+	@rm -rf "$(SNAPSHOT)" && mkdir -p "$(SNAPSHOT)"
+	@cp -Rc data/serving data/processed "$(SNAPSHOT)"/ 2>/dev/null \
+	  || { echo "[snapshot] no clonefile on this filesystem; copying"; cp -R data/serving data/processed "$(SNAPSHOT)"/; }
+	@echo "[snapshot] saved to $(SNAPSHOT) -- restore with \`make restore\`"
+
+restore: ## Put back the state saved by `make snapshot`
+	@test -d "$(SNAPSHOT)/serving" || (echo "no snapshot at $(SNAPSHOT); nothing to restore" && exit 1)
+	@rm -rf data/serving data/processed
+	@cp -Rc "$(SNAPSHOT)"/serving "$(SNAPSHOT)"/processed data/ 2>/dev/null \
+	  || cp -R "$(SNAPSHOT)"/serving "$(SNAPSHOT)"/processed data/
+	@echo "[restore] state restored. Re-run 'make eval' to confirm it reproduces."
+
+chunk-ceiling: ## Largest MAX_CHUNK_CHARS that truncates nothing, computed from the token distribution (no rebuild)
+	$(PY) tools/chunk_ceiling.py
 
 index-canonical: ## Rebuild the index with EVERY vector re-encoded. Required before recording an eval baseline.
 	# The graph is dynamically quantised, so a cached vector was encoded beside
