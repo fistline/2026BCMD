@@ -47,7 +47,7 @@ import math
 import sqlite3
 from collections.abc import Sequence
 
-from pipeline import Paths, Settings, get_paths, get_settings
+from pipeline import Paths, Settings, get_paths, get_settings, no_index_message
 from pipeline.aliases import expand_query
 from pipeline.build_rag import (
     COLLECTION_CANDIDATES,
@@ -622,9 +622,7 @@ def graph_rag_search(
     owns_connection = connection is None
     if connection is None:
         if not paths.index_sqlite.exists():
-            raise FileNotFoundError(
-                f"{paths.index_sqlite} does not exist. Build it with `make build`."
-            )
+            raise FileNotFoundError(no_index_message(paths.index_sqlite))
         connection = connect_index(paths.index_sqlite, read_only=True)
 
     try:

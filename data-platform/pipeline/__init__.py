@@ -20,6 +20,29 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 
+def no_index_message(path) -> str:
+    """What to tell someone who asked a question and has no index to answer it.
+
+    Five call sites raised the same sentence, and all five said `make build` --
+    ~32 min of encoding [M:chunk-650] -- when a published index installs in 64 s
+    [M:index-fetch]. The moment the error fires is the moment that choice is
+    actionable, so it is offered here rather than only in a README nobody is
+    reading at that instant.
+
+    It is offered ONLY when `index_release.json` is present: a fork that has never
+    published has nothing to fetch, and sending someone to a command that answers
+    "nothing has been published" is worse than not mentioning it.
+    """
+    if not (PROJECT_ROOT / "index_release.json").exists():
+        return f"{path} does not exist. Build it with `make build` (~32 min, encodes the corpus)."
+    return (
+        f"{path} does not exist. Two ways to get one:\n"
+        "  make fetch-index   install the published index -- ~92 MB, ~1 min, sha256-verified\n"
+        "                     against index_release.json (.env must name the same embedder)\n"
+        "  make build         encode the corpus here -- ~32 min, no network"
+    )
+
+
 @dataclass(frozen=True)
 class Paths:
     """Every path the platform touches, rooted at the data plane."""

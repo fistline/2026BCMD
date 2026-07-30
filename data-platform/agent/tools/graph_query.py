@@ -25,7 +25,7 @@ import argparse
 import json
 from collections.abc import Sequence
 
-from pipeline import get_paths
+from pipeline import get_paths, no_index_message
 from pipeline.build_graph import DIRECTIONS, graph_query, resolve_node
 from pipeline.build_rag import connect_index
 
@@ -54,9 +54,7 @@ def graph_query_tool(
     """
     paths = get_paths()
     if not paths.index_sqlite.exists():
-        raise FileNotFoundError(
-            f"{paths.index_sqlite} does not exist. Build it with `make build`."
-        )
+        raise FileNotFoundError(no_index_message(paths.index_sqlite))
 
     connection = connect_index(paths.index_sqlite, read_only=True)
     try:

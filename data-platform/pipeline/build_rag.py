@@ -39,7 +39,7 @@ from pathlib import Path
 import duckdb
 import sqlite_vec
 
-from pipeline import Paths, Settings, get_paths, get_settings, runtime
+from pipeline import Paths, Settings, get_paths, get_settings, no_index_message, runtime
 from pipeline.aliases import expand_query
 from pipeline.vector_cache import DEFAULT_MAX_TOKENS, encode_with_cache
 
@@ -1616,9 +1616,7 @@ def multi_hybrid_search(
     owns_connection = connection is None
     if connection is None:
         if not paths.index_sqlite.exists():
-            raise FileNotFoundError(
-                f"{paths.index_sqlite} does not exist. Build it with `make build`."
-            )
+            raise FileNotFoundError(no_index_message(paths.index_sqlite))
         connection = connect_index(paths.index_sqlite, read_only=True)
 
     depth = max(candidates, COLLECTION_CANDIDATES) if collection else candidates

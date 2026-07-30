@@ -25,7 +25,7 @@ import shutil
 
 from pydantic import BaseModel, Field
 
-from pipeline import Paths, get_paths
+from pipeline import Paths, get_paths, no_index_message
 from pipeline.build_rag import open_lake
 
 SCHEMA_VERSION = "1"
@@ -143,7 +143,7 @@ def load_document(doc_id: str, paths: Paths | None = None) -> DocumentChunks:
     paths = paths or get_paths()
     path = paths.processed / "chunks" / f"{doc_id}.json"
     if not path.exists():
-        raise FileNotFoundError(f"{path} does not exist. Build it with `make build`.")
+        raise FileNotFoundError(no_index_message(path))
     return DocumentChunks.model_validate_json(path.read_text(encoding="utf-8"))
 
 

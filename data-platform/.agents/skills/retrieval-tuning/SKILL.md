@@ -93,6 +93,24 @@ enforces it in the pre-commit hook, CI and `make verify`: every tuning knob's
 every measurement must name its corpus (`make corpus-id`). Add the row with the
 command that reproduces it — a row is only added by someone who ran it.
 
+## 8. If the index changed, the published one is now stale
+
+A knob that moves `index_signature` (the embedder, the tokenizer, the n-gram
+widths) makes the release named by `index_release.json` un-installable on the tree
+you just changed — `make fetch-index` will refuse it before downloading, with both
+signatures printed. That refusal is correct, but leaving it there means every
+consumer builds for 32 minutes instead of one.
+
+So a landed change ends with `make publish-index YES=1` and a commit of
+`index_release.json` — the pointer is the only checksum anyone trusts, and it is
+worth nothing until it is committed. Publishing refuses anything but a canonical
+index and re-runs all three floors first, so it also double-checks §6.
+
+Chunk size is the case that catches people: `MAX_CHUNK_CHARS` does NOT move the
+signature, so a stale release stays installable and simply answers from different
+chunks than the tree expects. Republish on any rebuild that changes what is in the
+index, not only on the ones the signature notices.
+
 ## What this skill will not do
 
 Choose the knob for you, or judge whether a citation is the RIGHT one. And it does

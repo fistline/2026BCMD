@@ -9,7 +9,7 @@ description: >-
   fusion; `make ask` additionally returns passages from graph-connected documents (같은 법령에 위임하는 다른
   법안의 관련 조문) with edge provenance.
 allowed-tools: Bash(uv run python -m agent.tools.hybrid_search *), Bash(make query *), Bash(uv run python -m agent.tools.graph_rag *), Bash(make ask *)
-compatibility: data-platform 색인(data/serving/index.sqlite)이 빌드되어 있어야 하며 uv 로 실행한다. 색인이 없으면 make build 가 선행되어야 한다.
+compatibility: data-platform 색인(data/serving/index.sqlite)이 있어야 하며 uv 로 실행한다. 색인이 없으면 make fetch-index(발행된 색인 설치, 약 92MB·1분) 또는 make build(직접 인코딩, 약 32분)가 선행되어야 한다.
 ---
 
 # Corpus search

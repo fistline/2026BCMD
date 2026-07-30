@@ -34,7 +34,9 @@ data-platform 자체 스킬(corpus-search·corpus-graph 등)은 `data-platform/.
   `gen-docs/st_prospectus/<slug>/`(문서) ↔ `gen-apps/<slug>/`(dApp). 발행사+증권명에서 파생.
   **예약어**(슬러그로 금지): `st-service-dapp`, `filing-to-dapp`, `sto-filing`.
   이 슬러그는 data-platform의 node-id 슬러그(한글·언더스코어 유지)와 **별개 체계**다.
-- **루트에서 코퍼스 조회** — `make -C data-platform query Q="..."`. 색인이 빌드돼 있어야 하며,
+- **루트에서 코퍼스 조회** — `make -C data-platform query Q="..."`. 색인이 있어야 하며, 없으면
+  `make -C data-platform fetch-index`(발행된 색인을 받아 설치, 약 1분)나 `build`(직접 인코딩,
+  약 32분) 중 하나가 선행된다 — **둘 다 사용자 확인 후에** 돌린다(전자는 네트워크, 후자는 무겁다).
   검색 규칙·랭킹 해석의 정본은 `data-platform/AGENTS.md`와 corpus-search 스킬이다(여기 재서술 금지).
 - **sto-filing 패키징** — 정본 1벌(`sto-filing/` + `prompt-templates/`)에서 단독 실행
   프롬프트 3종(`dist/`)을 생성한다. **소스 수정 후 반드시 `make prompts`**(= `python3 build_prompts.py`)로

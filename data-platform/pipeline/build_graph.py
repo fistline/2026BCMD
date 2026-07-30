@@ -24,7 +24,7 @@ import json
 import sqlite3
 from collections.abc import Sequence
 
-from pipeline import Paths, get_paths
+from pipeline import Paths, get_paths, no_index_message
 from pipeline.build_rag import connect_index, open_lake
 
 DIRECTIONS = {
@@ -210,9 +210,7 @@ def graph_query(
     owns_connection = connection is None
     if connection is None:
         if not paths.index_sqlite.exists():
-            raise FileNotFoundError(
-                f"{paths.index_sqlite} does not exist. Build it with `make build`."
-            )
+            raise FileNotFoundError(no_index_message(paths.index_sqlite))
         connection = connect_index(paths.index_sqlite, read_only=True)
 
     from_column, to_column = DIRECTIONS[direction]
