@@ -456,8 +456,10 @@ def cmd_publish(args) -> int:
     )
     if exists.returncode == 0:
         raise SystemExit(
-            f"[publish] release {tag} already exists. Tags are never reused -- a pinned pointer must\n"
-            "  always name the same bytes. Delete it deliberately if it was a mistake."
+            f"[publish] release {tag} already exists, so it is not overwritten. A tag names a\n"
+            "  (corpus, settings, chunking, vector space) tuple; the sha256 in the tracked pointer\n"
+            "  names the bytes. Re-publishing the same tuple with different bytes is a deliberate\n"
+            "  act -- delete the release first if that is what you mean."
         )
 
     proof = _eval_proof()
