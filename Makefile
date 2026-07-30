@@ -38,6 +38,9 @@ check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매�
 	@cd data-platform && $(PY) tools/check_sync_lists.py
 	@echo "== lock: 벡터·자산 로딩에 영향 주는 패키지가 움직였는가 =="
 	@$(PY) data-platform/tools/check_lock_pin.py
+	@echo "== 색인 릴리스 포인터가 자기 필드와 일치하는가 (git이 나르는 해시) =="
+	@$(PY) data-platform/tools/index_release.py check
+	@$(PY) data-platform/tools/test_index_release.py
 	@echo "== skill frontmatter (루트 + data-platform) =="
 	@$(PY) $(SKILL_CHECK) .agents/skills data-platform/.agents/skills
 	@echo "== 스킬 어댑터가 정본과 일치하는가 (.claude/skills/ 는 생성물) =="

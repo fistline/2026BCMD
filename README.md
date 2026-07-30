@@ -34,7 +34,8 @@ dApp을 만듭니다.
 | **`gen-docs/`** | 유형 판정 → 작성 → 자기심사를 거쳐 조각투자·STO 증권신고서 초안을 자동 작성. `data-platform` 코퍼스를 근거로 인용·자기검열 | `gen-docs/st_prospectus/<slug>/` | Agent Skill (`sto-filing`) |
 | **`gen-apps/`** | 작성한 증권신고서와 `data-platform` 코퍼스를 근거로 토큰증권(RWA) 서비스 dApp 초안을 자동 생성 | `gen-apps/<slug>/` | Agent Skill (`st-service-dapp`, `filing-to-dapp`) |
 
-위 표의 "코퍼스를 근거로"는 **색인을 빌드해 둔 경우**에 해당합니다. `gen-docs`·`gen-apps`는
+위 표의 "코퍼스를 근거로"는 **색인을 갖춰 둔 경우**(직접 빌드하거나 `fetch-index`로 받아 둔
+경우)에 해당합니다. `gen-docs`·`gen-apps`는
 **코퍼스가 없어도 끝까지 동작**하며, 그때는 스킬이 자체 기준으로 작성하고 자기심사합니다.
 즉 코퍼스는 근거를 조문 단위까지 짚어 주는 **선택 요소**이면서, 그 자체로 법령을
 검색하는 도구이기도 합니다.
@@ -150,6 +151,13 @@ make build      # inbox → DuckLake → SQLMesh → index.sqlite, 그리고 smo
 ```
 
 `make build`는 멱등입니다 — 몇 번을 돌려도 행이 중복되지 않고 raw 영역도 건드리지 않습니다.
+
+빌드는 코퍼스를 전부 인코딩하므로 수십 분 걸립니다. **이미 만들어 둔 색인을 받아쓸 수도
+있습니다** — `make warm-models && make fetch-index`(약 92 MB). 색인 파일 자체는 여전히
+커밋하지 않고 릴리스 자산으로 나르며, git이 나르는 것은 그 sha256(`index_release.json`,
+추적 대상)입니다. 받은 바이트가 이 해시와 다르면 설치되지 않습니다. `.env`의 임베더가
+발행자와 달라도 거부합니다(다운로드 **전에** 두 시그니처를 나란히 보여 줍니다).
+
 빌드 후:
 
 ```bash
@@ -245,6 +253,9 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
 > `github.com/fistline/2026BCMD`, branch `main`). `data-platform/source/`의 코퍼스
 > 원본 70건은 추적·커밋되어 clone에 함께 실립니다. `data/`·`.venv`·`.meltano`는
 > 재생성물이라 gitignore 대상이고, **색인은 그 안에 있어 clone으로 오지 않습니다.**
+> 대신 릴리스 자산으로 받을 수 있으며(`make -C data-platform fetch-index`), 그 sha256을
+> 담은 `data-platform/index_release.json`은 추적됩니다 — 바이트는 릴리스가, 해시는 git이
+> 나릅니다.
 
 ---
 
@@ -257,7 +268,7 @@ clone 직후 실제로 자주 걸리는 것들입니다. 대부분은 **git으�
 |---|---|---|
 | 에이전트에 스킬이 안 보임 | `.claude/skills/`는 만들어 쓰는 폴더라 clone에 없습니다 | `make skills` |
 | 커밋이 `make check`에서 멈춤 | 커밋 훅이 검사를 돌립니다 | 실패한 검사와 대응 명령이 함께 출력됩니다. ruff는 `make fmt`, `dist/`가 낡았으면 `make prompts`, 스킬 폴더는 `make skills` |
-| `... does not exist. Build it with 'make build'` | **색인은 git으로 받을 수 없습니다** — `index.sqlite`는 `data/` 안에 있고, 이 폴더를 커밋하지 않는 것이 저장소의 첫 번째 원칙입니다 | `make -C data-platform setup` → `build`. 최초 빌드는 수십 분 걸립니다(실측치는 `data-platform/MEASUREMENTS.md`의 `M:chunk-650`) |
+| `... does not exist. Build it with 'make build'` | **색인은 git으로 오지 않습니다** — `index.sqlite`는 `data/` 안에 있고, 이 폴더를 커밋하지 않는 것이 저장소의 첫 번째 원칙입니다 | `make -C data-platform setup` 후 둘 중 하나: `make -C data-platform fetch-index`(약 92 MB를 릴리스에서 받아 검증 후 설치, `.env`가 발행자와 같은 임베더를 써야 합니다) 또는 `build`(수십 분, 실측치는 `data-platform/MEASUREMENTS.md`의 `M:chunk-650`) |
 | 검색은 되는데 품질이 문서의 수치와 다름 | `.env.example`의 기본값이 `EMBEDDING_PROVIDER=hashing`이기 때문입니다. **모델을 내려받지 않고도 빌드가 끝나도록 일부러 정해 둔 값**이지 오류가 아닙니다 | 문서에 적힌 품질을 쓰려면 `.env`에 `onnx_int8`과 `EMBEDDING_MODEL=Xenova/bge-m3`을 지정합니다. 값을 바꾸면 `index_signature`가 달라져 **다시 빌드해야 하며**, 그전까지는 질의가 조용히 옛 결과를 주는 대신 분명하게 실패합니다 |
 | Windows에서 스킬이 열리지 않음 | 심링크를 만들 수 없는 환경입니다 | `make skills`가 심링크 대신 복사본을 만들어 둡니다. 단 **원본을 고치면 다시 실행**해야 하고, 잊더라도 `make check`가 잡아냅니다 |
 | 폴더를 옮긴 뒤 전부 깨짐 | `.venv`·`.meltano`가 절대경로를 기억하고 있습니다 | `make -C data-platform reset` |

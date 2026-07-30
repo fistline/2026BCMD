@@ -40,13 +40,19 @@ This is the rule the whole design hangs on.
 | | Control plane | Data plane |
 | --- | --- | --- |
 | Contains | Code, models, config | Documents, Parquet, embeddings, the index |
-| Lives in | Git | `data/`, synced to S3/DVC or nowhere |
-| Tracked by Git | Yes | **Never** |
+| Lives in | Git | `data/`, synced to S3/DVC, a release asset, or nowhere |
+| Tracked by Git | Yes | **Never** — but its checksum is |
 
 `data/` is entirely git-ignored. If Git and the object store both claimed those
 bytes, a two-machine sync would hit binary merge conflicts and the planes would
 silently diverge. So the repo carries logic and the data plane carries bytes,
 and neither is authoritative for the other.
+
+The one thing Git does carry about the data plane is `index_release.json` — the
+sha256 of the published serving index. A release asset is mutable (the same tag
+can be re-uploaded with different bytes), so a checksum shipped beside the asset
+proves nothing; one that lives in Git does, because changing it is a commit.
+That is `make fetch-index`, below.
 
 Inside the data plane:
 
@@ -384,6 +390,84 @@ uv run python tools/ocr/ocr_prepare.py scans_dir/ -o draft.md
 A born-digital PDF needs none of this — `make build` reads its text layer
 directly. A PDF with no text layer raises rather than indexing an empty
 document, which is the signal to run OCR on it.
+
+## Getting an index without building one
+
+A fresh clone can answer nothing until it has `data/serving/index.sqlite`, and
+`make build` encodes the corpus in ~32 minutes [M:chunk-650]. The index can be
+downloaded instead:
+
+```bash
+make setup && make warm-models     # the embedder is still a one-time fetch
+make fetch-index                   # ~92 MB, verified against index_release.json
+make query Q="전매제한"
+```
+
+Your `.env` has to select the same embedder the publisher used, because that is
+half of what `index_signature` is. A tree still on the `.env.example` default
+(`EMBEDDING_PROVIDER=hashing`, chosen so a build never needs a model download)
+will be refused *before* the download with both signatures printed side by side —
+set `EMBEDDING_PROVIDER=onnx_int8` and `EMBEDDING_MODEL=Xenova/bge-m3` to match.
+
+It is not committed and never will be. Raw it is 186.4 MiB against GitHub's
+100 MiB blob limit, a SQLite file has no delta and no merge so every rebuild
+would park another whole copy in history, and invariant 9 promises byte-identical
+rebuilds only on the same machine and device profile — two people building the
+same corpus would produce two files Git could never reconcile. So the bytes go to
+a release asset and the checksum goes to Git.
+
+What `fetch-index` refuses to do: install an index built by different retrieval
+settings (checked against the local `index_signature` *before* the download, and
+again through the read path afterwards), install one whose sha256 disagrees with
+the tracked pointer, or leave you without an index if any of that fails — the
+previous one is kept until the new one has passed `smoke_test.py`. Replacing the
+file under a live query session is caught by the inode guard in `connect_index`,
+which fails loudly rather than answering from the file that was replaced.
+
+One case is deliberately not a rollback: a tree that has never run
+`make warm-models` has no embedder, so it cannot compute a signature to compare
+(invariant 7 forbids downloading one mid-fetch). The bytes are still proven —
+they matched a checksum that lives in git — so the index is kept and the gap is
+reported loudly rather than costing another 92 MB. The read path asks the same
+question on every query anyway.
+
+Downloading is also the *stronger* reproducibility story: nobody re-encodes, so
+the cross-hardware tolerance of invariant 9 never enters, and `make eval`
+reproduces the published floors exactly rather than within a tolerance —
+measured, along with the 64.1 s the whole install takes, in [M:index-fetch].
+
+### Adding a document after fetching
+
+A fetched tree has no vector cache, so its first build after landing a document
+would re-encode all 20 344 chunks. It does not have to: **the cache is already
+inside the index** — `chunks_vec` holds the vectors and the cache key is a pure
+function of columns `chunks` stores, so it can be derived rather than downloaded.
+
+```bash
+make warm-cache          # index -> vector_cache.sqlite, 4.8 s, no network
+# drop a file into source/<collection>/, add its CORPUS_MANIFEST.tsv row
+make build               # rebuilds the lake from source/, encodes only the new chunks
+```
+
+Measured: the derived cache is byte-identical to a real one (19 808 / 19 808) and
+turns a 1948.2 s cold build into 58.1 s [M:cache-from-index]. It only works from a
+**published** index, because the cache's validity key includes the execution
+provider and `index_signature` deliberately omits it — `index_release.json`
+carries the `vector_signature` the build recorded, and a locally built index
+carries no such record. A consumer whose provider differs loses nothing: their
+build sees the mismatch and drops the cache rather than mixing vector spaces.
+
+The result is marked `build_kind=incremental`, so it can be queried but cannot
+record an eval floor or be published. Publishing still means one canonical rebuild.
+
+Publishing (for whoever builds the canonical index):
+
+```bash
+make index-canonical               # every vector re-encoded; an incremental index is refused
+make publish-index                 # dry run: prints the pointer it would write
+make publish-index YES=1           # creates the release, writes index_release.json
+git commit index_release.json      # until this lands, the bytes have no trusted checksum
+```
 
 ## Enabling optional pieces
 

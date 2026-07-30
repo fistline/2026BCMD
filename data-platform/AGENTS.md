@@ -16,6 +16,8 @@ package reaches the pipeline only once the plugins are reinstalled.
 | Command | Purpose |
 | --- | --- |
 | `make build` | Full pipeline plus smoke test. **The default action.** |
+| `make fetch-index` | Install the published index instead of encoding one — ~1 min against ~32 [M:index-fetch]. Needs `.env` to name the same embedder as the publisher; refuses before downloading if it does not |
+| `make warm-cache` | Derive `vector_cache.sqlite` from that index so the next build encodes only what changed — 4.8 s, no download, byte-identical to a real cache [M:cache-from-index]. Published index only: the cache's validity key includes the execution provider and `index_signature` omits it |
 | `make watch` | Rebuild whenever `data/inbox/documents/` changes |
 | `make smoke` | Assert `hybrid_search` and `graph_query` still work |
 | `make query Q="..."` | Hybrid search from the shell |
@@ -61,6 +63,18 @@ mistakes; everything else is recoverable.
    for months describing 48 of 70 files while claiming to describe all of them. Where
    `source` is not a URL it says so in words (the issuing system, or that this repo
    authored the summary); it is never left blank.
+
+   The serving index is DISTRIBUTED without being committed. `make publish-index`
+   uploads `data/serving/index.sqlite` as a release asset and writes
+   `index_release.json`, which IS tracked and carries the sha256; `make fetch-index`
+   installs it (~92 MB against the ~32 min a rebuild costs). Git carries the
+   checksum, the release carries the bytes — a release asset can be re-uploaded
+   under the same tag, a tracked file cannot change without a commit, so the
+   checksum has to live in the plane that is already trusted. Committing the file
+   itself stays forbidden for the reason above plus two more: 186.4 MiB has no
+   delta and no merge, and invariant 9 promises byte-identical rebuilds only per
+   machine and device profile, so two people building the same corpus produce two
+   blobs Git can never reconcile.
 
 2. **Never edit `data/raw/` or `data/inbox/` in place.** They are append-only
    landing zones; the watcher preserves superseded bytes under

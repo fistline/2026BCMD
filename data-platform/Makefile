@@ -34,7 +34,7 @@ else
 SYNC_EXTRAS := --extra gpu-$(strip $(GPU)) --extra kiwi --extra web
 endif
 
-.PHONY: help corpus-id snapshot restore chunk-ceiling index-canonical setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
+.PHONY: help corpus-id snapshot restore chunk-ceiling index-canonical fetch-index warm-cache publish-index setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -186,6 +186,24 @@ export: ## Rewrite data/processed/chunks/*.json from the gold layer
 sync: ## Push the data plane to DATA_REMOTE (no-op when local_only)
 	$(PY) pipeline/run.py --only sync
 
+fetch-index: ## Install the published index instead of encoding one (~92 MB against ~32 min), verified against index_release.json
+	# Explicitly a target and never part of `build` or a query: invariant 7 keeps
+	# the read path offline, and this reaches the network. It still needs the
+	# embedder for the signature check, so a fresh clone runs `make warm-models`
+	# first -- the 32 minutes become ~2, not zero.
+	$(PY) tools/index_release.py fetch
+
+warm-cache: ## Rebuild the vector cache FROM the installed index, so a later build re-encodes only what changed
+	# No second download: the vectors are already in `chunks_vec` and the cache key
+	# is a pure function of columns `chunks` holds [M:cache-from-index]. Only from a
+	# published index -- a locally built one does not record which provider encoded it.
+	$(PY) tools/warm_cache.py
+
+publish-index: ## Upload data/serving/index.sqlite as a release asset. Prints a dry run unless YES=1
+	# Refuses an incrementally-built index, an unverified corpus, uncommitted
+	# pipeline/ or source/, a reused tag, or a failing eval floor. See the tool.
+	$(PY) tools/index_release.py publish $(if $(YES),--yes,)
+
 build: ## Full local pipeline: ingest -> transform -> index -> sync, then smoke test
 	$(PY) pipeline/run.py
 	$(PY) pipeline/smoke_test.py
@@ -245,6 +263,8 @@ verify: ## Run the full verification gate
 	@python3 tools/check_knobs.py
 	@python3 tools/check_sync_lists.py
 	@python3 tools/check_lock_pin.py
+	@python3 tools/index_release.py check
+	@python3 tools/test_index_release.py
 	@echo "== accelerator layer contract (no GPU, no model, no index needed) =="
 	# The only thing that ran this before was the CI workflow, so `make verify` went
 	# green through the EP report, the doctype gate, a full build and three eval
@@ -275,6 +295,11 @@ verify: ## Run the full verification gate
 	@echo "== build =="
 	$(MAKE) build
 	@test -f data/serving/index.sqlite || (echo "FAIL: no index.sqlite" && exit 1)
+	@echo "== can a cache still be derived from an index? (embed_text_of vs gold/chunks.sql) =="
+	# AFTER the build, because it asks the lake. The recomputation in warm_cache.py is
+	# a copy of a SQL expression, and a copy that drifts fails SILENTLY -- every key
+	# changes, every lookup misses, the build just gets slow again.
+	$(PY) tools/warm_cache.py --verify-against-lake
 	@echo "== cross-hardware provider contract (skips on a CPU-only box) =="
 	# AFTER the build, not before: `make clean` deletes data/serving, so running this
 	# first meant that on a clean tree it always measured its 5-sentence fallback
