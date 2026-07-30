@@ -22,6 +22,16 @@ is already a general fetcher (law / bill / dart). Only continue past Step 0 when
 the source will RECUR — an ongoing feed, or roughly five or more documents of a
 new shape. A connector is code someone maintains forever.
 
+**Before that first `make build` on a tree whose index came from `make
+fetch-index`, run `make warm-cache`.** A fetched tree has no vector cache, so
+adding one document re-encodes all 20 344 chunks (1948.2 s) instead of just the
+new ones. The cache does not have to be downloaded — it is derived from the index
+already installed, in 4.8 s, byte-identical to a real one [M:cache-from-index].
+Skipping it does not break anything; it just spends half an hour proving that.
+The build that follows is marked `build_kind=incremental`: queryable, but it
+cannot record an eval floor or be published, so a release still costs one
+`make index-canonical`.
+
 ## Procedure
 
 1. **Research: is there an API, and where does the data live?** Find the official
