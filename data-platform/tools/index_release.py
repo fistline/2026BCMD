@@ -520,7 +520,45 @@ def cmd_publish(args) -> int:
     archive.unlink()
     print(f"\n[publish] released {tag} and wrote {POINTER.name}.")
     print(f"[publish] COMMIT {POINTER.name} -- until it is committed the bytes have no trusted checksum.")
+    _report_release_inventory(repo, tag)
     return 0
+
+
+def _report_release_inventory(repo: str, current: str) -> None:
+    """Say what is now on the releases page. Never delete anything.
+
+    Each index release is ~92 MB and a new one lands on every corpus or settings
+    change, so they accumulate for nothing: the pointer names exactly one, and an
+    older one cannot be installed by anybody because `fetch` verifies against that
+    pointer. The rule is to keep two -- the current and the one before it, so a bad
+    publish can be undone by reverting a tracked file rather than rebuilding.
+
+    Printed rather than enforced, and that asymmetry is deliberate. Refusing to
+    publish over a full shelf would block the fix during exactly the incident that
+    filled it, and deleting automatically would remove a release someone may have
+    already downloaded -- an artifact that has left the building is not ours to
+    revoke silently. So this reports and names the command; a person runs it.
+    """
+    listing = subprocess.run(
+        ["gh", "release", "list", "--repo", repo, "--limit", "50", "--json", "tagName"],
+        capture_output=True,
+        text=True,
+    )
+    if listing.returncode != 0:
+        print("[publish] (could not list releases to check the retention rule; do it by hand)")
+        return
+    try:
+        tags = [row["tagName"] for row in json.loads(listing.stdout) if row["tagName"].startswith("index-")]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        print("[publish] (release listing was not readable; check the retention rule by hand)")
+        return
+
+    others = [tag for tag in tags if tag != current]
+    print(f"[publish] index releases now on {repo}: {len(tags)} ({current} is the one the pointer names)")
+    if len(tags) > 2:
+        print("[publish] the rule is to keep two -- this one and the previous. Stale:")
+        for tag in others[1:]:
+            print(f"[publish]     gh release delete {tag} --repo {repo} --cleanup-tag")
 
 
 # --------------------------------------------------------------------------

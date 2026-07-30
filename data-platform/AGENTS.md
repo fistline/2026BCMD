@@ -64,6 +64,15 @@ mistakes; everything else is recoverable.
    `source` is not a URL it says so in words (the issuing system, or that this repo
    authored the summary); it is never left blank.
 
+   Releases are kept to TWO: the one `index_release.json` names, and the one
+   before it. Each is ~92 MB and a new one lands on every corpus or settings
+   change, so an unpruned repo accumulates them for nothing — nobody can install
+   an old one anyway, because the pointer only ever names the current bytes. The
+   previous one is kept because a bad publish is discovered after the fact and
+   reverting the pointer is the fastest way back. Publishing PRINTS the inventory
+   and never deletes: a release someone has already downloaded is not ours to
+   remove silently, so the pruning is a human `gh release delete`.
+
    An index records WHICH CORPUS it was built from (`index_meta.corpus_id`, written
    by the build). Publishing compares that against the id computed from `source/`
    and refuses when they differ, because `make index-canonical` re-encodes from

@@ -59,6 +59,22 @@ record the promotion.
    takes documents an existing one was handling is a regression, not a feature.
    If an audit fails, fix the profile — never the audit.
 
+7. **Rebuild, then republish.** A profile decides section boundaries, so it is in
+   `index_signature` through `profile_signature()` — the whole point being that two
+   clones at different profile revisions must not silently share an index. Two
+   consequences, and the second is easy to miss:
+
+   - The rebuild is cheaper than it looks. The vector cache survives a profile
+     change (`vector_signature` does not include profiles), so only the chunks
+     whose text actually moved are re-encoded — the documents this profile does
+     not claim keep their keys and hit. On a tree that installed its index rather
+     than building one, run `make warm-cache` first or the rebuild encodes all
+     20 344 chunks to reshape a few [M:cache-from-index].
+   - The published index is now un-installable. Its signature no longer matches
+     this tree, so `make fetch-index` refuses it — correctly, and for every
+     consumer. Finish with `make index-canonical`, `make publish-index YES=1` and
+     a commit of `index_release.json`, or leave everyone on a 32-minute build.
+
 ## Constraints
 
 A profile is a pure function of bytes: no I/O, no clock, no randomness, no set
