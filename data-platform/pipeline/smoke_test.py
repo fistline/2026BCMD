@@ -1200,6 +1200,17 @@ def test_chunk_export() -> None:
 
     paths = get_paths()
     directory = paths.processed / "chunks"
+    # A tree that INSTALLED its index (`make fetch-index`) never ran a build, so
+    # there is no export to find and its absence is a state rather than a fault.
+    # The lake is the discriminator, because the export is a projection of it: no
+    # lake, no build, no export. `data/processed` itself is NOT the discriminator
+    # -- it is created empty by `Paths.ensure()`, which is exactly the wrong answer
+    # this check first shipped with. Getting it wrong is not theoretical: `fetch`
+    # runs this file as its acceptance test, so a hard failure here rolled back
+    # every install on a fresh clone until a real clone was measured.
+    if not paths.ducklake_catalog.exists():
+        skip("data/processed/chunks exists", "no lake: this index was installed, not built here")
+        return
     check("data/processed/chunks exists", directory.is_dir(), str(directory))
     if not directory.is_dir():
         return
