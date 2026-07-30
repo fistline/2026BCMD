@@ -55,18 +55,28 @@ quickstart: ## Clone -> queryable -> ready to add documents, in one command
 	@$(MAKE) warm-models
 	@echo
 	@echo "== 4/5 index =="
-	@$(MAKE) fetch-index
-	@echo
-	@echo "== 5/5 vector cache, so adding a document does not re-encode the corpus =="
-	@$(PY) tools/warm_cache.py --if-missing
-	@echo
-	@echo "Ready. Ask the corpus something:"
-	@echo "    make query Q=\"예치금 분리보관 의무\""
-	@echo "    make ask   Q=\"스테이블코인 발행자 준비자산\""
-	@echo
-	@echo "To add a document: drop it in source/<collection>/, add its row to"
-	@echo "source/CORPUS_MANIFEST.tsv (sha256 + bytes + where it came from), then"
-	@echo "\`make build\` -- only the new chunks are encoded."
+	# A fork that has never published has nothing to fetch, and steps 4 and 5 would
+	# then fail in sequence with messages pointing at each other. The fallback is a
+	# build, and saying so is the whole reason this target exists.
+	@if [ ! -f index_release.json ]; then \
+	  echo "[quickstart] no index_release.json: no index has been published for this repo."; \
+	  echo "[quickstart] Encode one here instead:"; \
+	  echo "[quickstart]     make build        # ~32 min, no network after setup"; \
+	  echo "[quickstart] Everything else is ready; skipping steps 4 and 5."; \
+	  exit 0; \
+	fi; \
+	$(MAKE) fetch-index && \
+	echo && \
+	echo "== 5/5 vector cache, so adding a document does not re-encode the corpus ==" && \
+	$(PY) tools/warm_cache.py --if-missing && \
+	echo && \
+	echo "Ready. Ask the corpus something:" && \
+	echo "    make query Q=\"예치금 분리보관 의무\"" && \
+	echo "    make ask   Q=\"스테이블코인 발행자 준비자산\"" && \
+	echo && \
+	echo "To add a document: drop it in source/<collection>/, add its row to" && \
+	echo "source/CORPUS_MANIFEST.tsv (sha256 + bytes + where it came from), then" && \
+	echo "\`make build\` -- only the new chunks are encoded."
 
 setup: ## Resolve dependencies (incl. configured extras) and install Meltano plugins
 	$(UV) sync $(SYNC_EXTRAS)

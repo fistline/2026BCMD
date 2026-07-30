@@ -1120,6 +1120,17 @@ def build_index(paths: Paths | None = None, settings: Settings | None = None) ->
                     # history rather than a retriever.
                     ("build_kind", "canonical" if not cache_stats["hits"] else "incremental"),
                     ("vectors_reused", str(cache_stats["hits"])),
+                    # WHICH DOCUMENTS this index was built from, written by the
+                    # build itself. Without it the index has no corpus identity at
+                    # all, and everything downstream has to take a stamp applied
+                    # from OUTSIDE on faith: `make publish-index` computes
+                    # `corpus_id` from `source/` on disk, so an index built from a
+                    # stale lake would be published under the id of a corpus it
+                    # does not contain -- a fabricated provenance wearing a
+                    # checksum. Recorded here, publish can compare the two and
+                    # refuse, and a consumer can be told their `source/` has moved
+                    # past the index they installed.
+                    ("corpus_id", _corpus_identity()),
                 ],
             )
     finally:
@@ -1166,6 +1177,37 @@ def build_fts_query(text: str) -> str:
         return ""
     unique = list(dict.fromkeys(terms))
     return " OR ".join('"' + term.replace('"', '""') + '"' for term in unique)
+
+
+def _corpus_identity() -> str:
+    """`corpus_id` for the documents this build indexed, or "" when it cannot be had.
+
+    Imported from `tools/` rather than `pipeline/`, which is the wrong direction
+    and is the lesser of two wrongs: `tools/corpus_id.py` is deliberately
+    stdlib-only so `make corpus-id` runs on a bare `python3` with no venv, and
+    moving it under `pipeline/` would drag `pipeline/__init__.py`'s dotenv import
+    in and break that. One hash function, one definition -- a second copy here
+    would be free to drift from the one the tool reports.
+
+    Empty rather than fatal when the manifest disagrees with the files or `source/`
+    is absent (a node that received `data/` but not the corpus). A build must not
+    fail over provenance metadata; `make publish-index` is where a missing id
+    becomes a refusal, and it should be, because that is where the id is claimed.
+    """
+    try:
+        from pipeline import PROJECT_ROOT
+
+        sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+        from corpus_id import corpus_id
+
+        return corpus_id()
+    except Exception as error:  # noqa: BLE001 -- provenance is never worth a failed build
+        _log_corpus_identity_gap(error)
+        return ""
+
+
+def _log_corpus_identity_gap(error: Exception) -> None:
+    print(f"[index] corpus_id unavailable, recording none: {error}", file=sys.stderr)
 
 
 def index_signature(embedder, dimensions: int) -> str:

@@ -403,11 +403,18 @@ make fetch-index                   # ~92 MB, verified against index_release.json
 make query Q="전매제한"
 ```
 
-Your `.env` has to select the same embedder the publisher used, because that is
-half of what `index_signature` is. A tree still on the `.env.example` default
-(`EMBEDDING_PROVIDER=hashing`, chosen so a build never needs a model download)
-will be refused *before* the download with both signatures printed side by side —
-set `EMBEDDING_PROVIDER=onnx_int8` and `EMBEDDING_MODEL=Xenova/bge-m3` to match.
+Your `.env` has to name the same retrieval settings the publisher used, because
+that is what `index_signature` is. A tree still on the `.env.example` defaults
+(`EMBEDDING_PROVIDER=hashing`, chosen so a build never needs a model download) is
+refused *before* the download, with both signatures printed side by side.
+
+`make quickstart` writes those settings for you when there is no `.env` yet,
+taking the keys AND the values from `index_release.json` (`env_for_index`). It
+is a set rather than a fixed list on purpose: the first version hardcoded the
+three embedder knobs, and a real fresh clone then wrote a correct-looking `.env`
+that `fetch-index` still refused, because `index_signature` also reads
+`KIWI_MORPH`. An existing `.env` is never overwritten — it holds secrets — so it
+is reported on instead, line by line.
 
 It is not committed and never will be. Raw it is 186.4 MiB against GitHub's
 100 MiB blob limit, a SQLite file has no delta and no merge so every rebuild
@@ -459,6 +466,22 @@ build sees the mismatch and drops the cache rather than mixing vector spaces.
 
 The result is marked `build_kind=incremental`, so it can be queried but cannot
 record an eval floor or be published. Publishing still means one canonical rebuild.
+
+### What ties an index to its corpus
+
+`index_meta.corpus_id` is written by the build, so an index says which documents
+it was built from rather than being told. Publishing compares that against the id
+computed from `source/` on disk and refuses when they differ — which is the only
+thing standing between a normal mistake and a fabricated provenance: adding a
+document and running `make index-canonical` without `make build` re-encodes every
+vector from a stale lake and still reports `canonical`, so the new corpus's id
+would be stamped on an index that does not contain it.
+
+The reverse direction is a warning, not a gate. When `source/` has moved past the
+published index, `make check` says so — anyone running `make fetch-index` would
+otherwise get the older corpus silently. It cannot block: publishing requires a
+clean `source/`, so a blocking check would leave no way to commit the new document
+*or* to republish.
 
 Publishing (for whoever builds the canonical index):
 

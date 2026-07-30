@@ -6,9 +6,12 @@ a machine that has never fetched anything. It also means a fresh clone's
 `index_signature` does not match the published index, and `make fetch-index`
 refuses it -- correctly, and confusingly, because nothing the user did was wrong.
 
-This writes the three lines that resolve it, taking the values from
-`index_release.json` rather than hardcoding them, so the file cannot drift from
-whatever was actually published.
+This writes the lines that resolve it, taking BOTH the keys and the values from
+`index_release.json` (`env_for_index`) rather than hardcoding either, so the file
+cannot drift from what was actually published. Hardcoding the keys is not
+hypothetical: the first version listed three, and a real fresh clone wrote a
+correct-looking .env that `make fetch-index` still refused, because
+`index_signature` also reads KIWI_MORPH.
 
 IT NEVER OVERWRITES AN EXISTING `.env`. That file holds secrets and local
 choices; the whole point of it being git-ignored is that nothing in the repo owns
@@ -34,21 +37,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The lines this file owns. Everything else in .env.example is copied through --
-# it is the only documentation of most knobs, and a stripped .env would cost the
-# reader that.
-KEYS = ("EMBEDDING_PROVIDER", "EMBEDDING_MODEL", "EMBEDDING_DIM")
-
 
 def wanted(pointer: dict) -> dict:
-    return {
-        "EMBEDDING_PROVIDER": str(pointer.get("embedding_provider", "")),
-        "EMBEDDING_MODEL": str(pointer.get("embedding_model", "")),
-        "EMBEDDING_DIM": str(pointer.get("embedding_dim", "")),
-    }
+    """The knobs the publisher recorded, whatever they are.
+
+    Not a list this file owns: `index_release.json` carries `env_for_index`, and
+    hardcoding a subset here is what broke a real fresh clone -- the .env was
+    written correctly and `make fetch-index` still refused, because the signature
+    also reads KIWI_MORPH and nothing had recorded it. Everything else in
+    .env.example is copied through: it is the only documentation of most knobs,
+    and a stripped .env would cost the reader that.
+    """
+    values = pointer.get("env_for_index") or {}
+    return {str(key): str(value) for key, value in values.items()}
 
 
-def read_settings(text: str) -> dict:
+def read_settings(text: str, keys) -> dict:
     """The uncommented assignments for the keys we care about."""
     found = {}
     for line in text.splitlines():
@@ -56,13 +60,13 @@ def read_settings(text: str) -> dict:
         if line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        if key.strip() in KEYS:
+        if key.strip() in keys:
             found[key.strip()] = value.strip()
     return found
 
 
 def rewrite(example: str, values: dict) -> str:
-    """Replace the three assignments in place; comment out nothing, add nothing.
+    """Replace those assignments in place; comment out nothing, add nothing.
 
     A commented `# EMBEDDING_MODEL=...` line in the example is replaced by a real
     one, because a model is required once the provider is not `hashing` and a
@@ -99,16 +103,15 @@ def main(argv=None) -> int:
 
     pointer = json.loads(args.pointer.read_text(encoding="utf-8"))
     values = wanted(pointer)
-    missing = [key for key, value in values.items() if not value]
-    if missing:
+    if not values:
         print(
-            f"[env] {args.pointer.name} does not record {', '.join(missing)} (an older publish).\n"
-            "[env] Leaving .env alone; re-publish to record them."
+            f"[env] {args.pointer.name} records no `env_for_index` (an older publish).\n"
+            "[env] Leaving .env alone; re-publish to record it."
         )
         return 0
 
     if args.env.exists():
-        current = read_settings(args.env.read_text(encoding="utf-8"))
+        current = read_settings(args.env.read_text(encoding="utf-8"), set(values))
         wrong = {key: (current.get(key), value) for key, value in values.items() if current.get(key) != value}
         if not wrong:
             print(f"[env] {args.env.name} already names the published embedder.")

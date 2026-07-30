@@ -64,6 +64,15 @@ mistakes; everything else is recoverable.
    `source` is not a URL it says so in words (the issuing system, or that this repo
    authored the summary); it is never left blank.
 
+   An index records WHICH CORPUS it was built from (`index_meta.corpus_id`, written
+   by the build). Publishing compares that against the id computed from `source/`
+   and refuses when they differ, because `make index-canonical` re-encodes from
+   whatever lake it finds and reports `canonical` either way — so without the
+   comparison, adding a document and skipping `make build` publishes a new corpus's
+   id stamped on an index that does not contain it. `make check` warns (never
+   blocks — publishing needs a clean `source/`, so blocking would deadlock the
+   commit) when `source/` has moved past the published index.
+
    The serving index is DISTRIBUTED without being committed. `make publish-index`
    uploads `data/serving/index.sqlite` as a release asset and writes
    `index_release.json`, which IS tracked and carries the sha256; `make fetch-index`

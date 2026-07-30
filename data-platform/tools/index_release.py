@@ -26,6 +26,15 @@ WHAT IS VERIFIED BEFORE PUBLISHING (each refusal names what it protects):
                             source/CORPUS_MANIFEST.tsv against the bytes on disk.
                             A declared-but-wrong manifest already happened here
                             twice (3d31ee3, 87c1ecd).
+  the index agrees with it  and this is the one that needed a build change to be
+                            possible at all. The id above describes the FILES ON
+                            DISK; `index_meta.corpus_id`, written by the build,
+                            describes what was actually indexed. They diverge when
+                            a document is added without refreshing the lake --
+                            `make index-canonical` re-encodes every vector from
+                            whatever lake it finds and still reports `canonical`.
+                            Without the comparison, that publishes a new corpus_id
+                            stamped on an index that does not contain the corpus.
   pipeline/ and source/ clean   Not the whole tree: the settings that shape an
                             index live in `.env`, which is not tracked at all, so
                             a commit sha never reproduces an index -- that is what
@@ -34,8 +43,13 @@ WHAT IS VERIFIED BEFORE PUBLISHING (each refusal names what it protects):
                             pipeline code would not.
   the three eval floors     Retrieval, graph reachability, related-section. The
                             artifact ships with proof, or it does not ship.
-  the tag does not exist    Tags are never reused, so a pinned pointer always
-                            names the same bytes.
+  the tag does not exist    A tag names a (corpus, retrieval settings, chunking,
+                            vector space) tuple, NOT a specific file: a build
+                            change that adds a metadata row moves the bytes
+                            without moving any of the four. So reuse is refused
+                            rather than impossible, and the identity of the bytes
+                            is the sha256 in the tracked pointer -- which is the
+                            whole reason git carries it.
 
 WHAT THE CONSUMER GETS. `fetch` compares the pointer's `index_signature` against
 the locally computed one BEFORE downloading 92 MiB, verifies sha256 of both the
@@ -220,7 +234,38 @@ def cmd_check(_args) -> int:
             print(f"  - {problem}")
         return 1
     print(f"[check] {POINTER.name} -> {pointer['tag']} ({pointer['bytes_xz'] / 1e6:.1f} MB asset)")
+    _warn_if_corpus_moved(pointer)
     return 0
+
+
+def _warn_if_corpus_moved(pointer: dict) -> None:
+    """Has `source/` moved past the index everyone is installing?
+
+    Nobody would notice otherwise. Add a document, rebuild locally, forget to
+    republish, and the next clone runs `make quickstart`, installs the OLD index,
+    and answers from a corpus that is not the one in the repo -- with no error
+    anywhere, because every checksum still agrees with itself.
+
+    A WARNING, not a failure, and the reason is a deadlock: publishing refuses a
+    dirty `source/`, so a blocking gate here would make it impossible to commit
+    the new document (blocked until republished) or to republish (blocked until
+    committed). Loud and non-blocking is the only shape that leaves a way forward.
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from corpus_id import corpus_id
+
+        current = corpus_id()
+    except Exception:
+        return  # no source/, or a manifest that disagrees -- other gates own that
+    if current != pointer.get("corpus_id"):
+        print(
+            f"[check] WARNING: source/ is now {current}, but the published index is "
+            f"{pointer.get('corpus_id')}.\n"
+            "[check]   Anyone running `make fetch-index` gets the older corpus, silently.\n"
+            "[check]   Republish when the change lands: `make index-canonical` then "
+            "`make publish-index YES=1`."
+        )
 
 
 # --------------------------------------------------------------------------
@@ -286,10 +331,19 @@ def _settings_that_reproduce(signature: str) -> dict:
             f"  settings: {computed}\n"
             "  Align .env with the build, or rebuild with `make index-canonical`."
         )
+    # A SET of knobs, not three fields, because `index_signature` reads more than
+    # the embedder: KIWI_MORPH appends its slot, and a fresh clone whose
+    # .env.example leaves it unset computes a signature that differs by exactly
+    # that suffix -- measured on a real clone, which is how this list stopped being
+    # three. Keep it in step with `index_signature()` and `vector_signature()`:
+    # anything they read from the environment belongs here, or a consumer gets a
+    # refusal they cannot act on.
     return {
-        "embedding_provider": settings.embedding_provider,
-        "embedding_model": settings.embedding_model,
-        "embedding_dim": settings.embedding_dim,
+        "EMBEDDING_PROVIDER": settings.embedding_provider,
+        "EMBEDDING_MODEL": settings.embedding_model,
+        "EMBEDDING_DIM": str(settings.embedding_dim),
+        "EMBEDDING_PRECISION": os.environ.get("EMBEDDING_PRECISION", "int8"),
+        "KIWI_MORPH": os.environ.get("KIWI_MORPH", "0"),
     }
 
 
@@ -359,6 +413,28 @@ def cmd_publish(args) -> int:
     except ValueError as error:
         raise SystemExit(f"[publish] the corpus does not verify, so no id can be issued: {error}") from error
 
+    # The id computed from source/ describes the FILES ON DISK; the one in the
+    # index describes what the build actually read. They diverge exactly when a
+    # document was added without refreshing the lake -- `make index-canonical`
+    # re-encodes every vector from the lake it finds, so it reports `canonical`
+    # while indexing a corpus that no longer exists. Publishing that would stamp a
+    # new corpus_id on an index that does not contain it.
+    indexed_corpus = meta.get("corpus_id", "")
+    if not indexed_corpus:
+        raise SystemExit(
+            "[publish] this index records no corpus_id: it was built before the build wrote one.\n"
+            "  Its contents cannot be tied to any corpus, so the id computed here would be a\n"
+            "  claim about it rather than a fact of it. Rebuild with `make index-canonical`."
+        )
+    if indexed_corpus != corpus:
+        raise SystemExit(
+            "[publish] the index was built from a different corpus than source/ now holds.\n"
+            f"  index:   {indexed_corpus}\n"
+            f"  source/: {corpus}\n"
+            "  Almost always a lake that was not refreshed: run `make build` (not `make index`),\n"
+            "  then `make index-canonical`."
+        )
+
     dirty = _git("status", "--porcelain", "--", "pipeline", "source")
     if dirty:
         raise SystemExit(
@@ -369,7 +445,7 @@ def cmd_publish(args) -> int:
     signature = meta["index_signature"]
     chunk_count = int(meta.get("chunk_count", 0))
     vector_signature = _vector_signature_of_the_build()
-    embedder_settings = _settings_that_reproduce(signature)
+    env_for_index = _settings_that_reproduce(signature)
     tag = tag_for(corpus, signature, chunk_count, vector_signature)
     repo = _repo_slug()
 
@@ -409,7 +485,7 @@ def cmd_publish(args) -> int:
         "nodes": int(meta.get("node_count", 0)),
         "edges": int(meta.get("edge_count", 0)),
         # The .env a consumer needs to be allowed to install this index at all.
-        **embedder_settings,
+        "env_for_index": env_for_index,
         "commit": _git("rev-parse", "HEAD"),
         "eval": proof,
     }
@@ -539,7 +615,14 @@ def _verify_through_read_path() -> None:
 
 def cmd_fetch(args) -> int:
     if not POINTER.exists():
-        raise SystemExit(f"[fetch] no {POINTER.name}: nothing has been published for this repo.")
+        # A fork that has never published lands here, and telling it only what is
+        # missing leaves it stuck: the point of this command is to save a build, so
+        # the fallback IS the answer, not a footnote.
+        raise SystemExit(
+            f"[fetch] no {POINTER.name}: nothing has been published for this repo.\n"
+            "  Encode an index here instead: `make build` (~32 min).\n"
+            "  To publish one from this repo afterwards: `make publish-index`."
+        )
     pointer = json.loads(POINTER.read_text(encoding="utf-8"))
     missing = [field for field in REQUIRED if field not in pointer]
     if missing:

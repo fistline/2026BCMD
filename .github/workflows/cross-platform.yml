@@ -98,6 +98,16 @@ jobs:
       - name: Every target syncs the same environment
         run: uv run --no-project python tools/check_sync_lists.py
 
+      # The release pointer is the only checksum anyone trusts when installing the
+      # published index, and it is validated on three platforms for the same reason
+      # the others are: the parsing is pure stdlib, so a difference here would be a
+      # platform difference, which is exactly the class this workflow exists to find.
+      - name: The release pointer derives from its own fields
+        run: uv run --no-project python tools/index_release.py check
+
+      - name: The pointer gate still refuses what it claims to
+        run: uv run --no-project python tools/test_index_release.py
+
       - name: The layer's platform-independent invariants
         run: uv run python tools/test_runtime_contract.py
 
