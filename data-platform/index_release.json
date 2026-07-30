@@ -1,0 +1,57 @@
+{
+  "tag": "index-9cb3690c0c9e-94b51235",
+  "asset": "index.sqlite.xz",
+  "repo": "fistline/2026BCMD",
+  "sha256_xz": "a11d77fd831db80393e6bc49331600b21d1f0c579a5c9cfe082ad115b638e9ef",
+  "sha256_sqlite": "58a5b4683af1a9f11eb9bf3e2a9fd34a7829b23f497fb68ea88bb201aca89f58",
+  "bytes_xz": 95994508,
+  "bytes_sqlite": 195440640,
+  "corpus_id": "c:9cb3690c0c9e",
+  "index_signature": "v4|bill:2/3/8/2,statute:1/5/4/1|onnx_int8|Xenova/bge-m3|1024|cjk2-3|fts2|unicode61 remove_diacritics 2 tokenchars '_'|kiwi-add-0.23.0",
+  "vector_signature": "v1|onnx_int8|Xenova/bge-m3|1024|int8",
+  "build_kind": "canonical",
+  "chunk_count": 20344,
+  "nodes": 96,
+  "edges": 76,
+  "embedding_provider": "onnx_int8",
+  "embedding_dim": 1024,
+  "commit": "25f4d18779d1d3e754a5887648a0769eb5656cfd",
+  "eval": {
+    "retrieval": [
+      "  vector       0.583   0.750   0.917    0.648",
+      "  keyword      0.500   0.583   0.583    0.521",
+      "  fused        0.667   0.917   1.000    0.801",
+      "",
+      "  fused, by kind:",
+      "    cross_bill         P@1 0.667  R@5 1.000  MRR@10 0.833",
+      "    negative           2/2 returned a top hit",
+      "    particle_glue      P@1 1.000  R@5 1.000  MRR@10 1.000",
+      "    synonym_gap        P@1 0.333  R@5 0.667  MRR@10 0.537",
+      "    vocabulary_match   P@1 0.750  R@5 1.000  MRR@10 0.875",
+      "",
+      "[eval] no regression vs baseline af8747bc (arm tolerance 0.02, per-kind 0.08)."
+    ],
+    "graph": [
+      "  p_at_1            0.571",
+      "  mrr               0.750",
+      "  path_strength     0.905",
+      "",
+      "  by kind:",
+      "    code_multihop        reach 1.000  p@1 0.000  mrr 0.500  strength 1.500",
+      "    delegation_downstream reach 1.000  p@1 1.000  mrr 1.000  strength 1.000",
+      "    doc_reach            reach 1.000  p@1 0.000  mrr 0.250  strength 1.333",
+      "    reference            reach 1.000  p@1 0.500  mrr 0.750  strength 0.500",
+      "    reference_upstream   reach 1.000  p@1 1.000  mrr 1.000  strength 0.500",
+      "",
+      "[eval-graph] no regression vs baseline 360aaac7 (tolerance 0.05)."
+    ],
+    "ask": [
+      "[eval_graph_rag] related_recall=1.0  (hit 5 / miss 0 / absorbed 2 / skipped 0)",
+      "  g01  [hit, absorbed]  예치금 분리보관 의무",
+      "  g02  [hit, hit]  스테이블코인 발행자의 준비자산 요건",
+      "  g03  [hit, hit]  디지털자산사업자 검사 및 처분 권한",
+      "  g04  [absorbed]  가상자산 불공정거래 조사",
+      "[eval_graph_rag] OK related_recall 1.0 >= 1.0 - 0.05"
+    ]
+  }
+}
