@@ -2,9 +2,9 @@
   "tag": "index-9cb3690c0c9e-94b51235",
   "asset": "index.sqlite.xz",
   "repo": "fistline/2026BCMD",
-  "sha256_xz": "a11d77fd831db80393e6bc49331600b21d1f0c579a5c9cfe082ad115b638e9ef",
-  "sha256_sqlite": "58a5b4683af1a9f11eb9bf3e2a9fd34a7829b23f497fb68ea88bb201aca89f58",
-  "bytes_xz": 95994508,
+  "sha256_xz": "3ef6aa759bde12d3e7730a45995485a3a1401b92dd583b7ee50d239bc41e699c",
+  "sha256_sqlite": "a8bb67d5361a18990142d790deaee4823dc834a5c236aa93e4d4bc2cfdbfda0c",
+  "bytes_xz": 95918452,
   "bytes_sqlite": 195440640,
   "corpus_id": "c:9cb3690c0c9e",
   "index_signature": "v4|bill:2/3/8/2,statute:1/5/4/1|onnx_int8|Xenova/bge-m3|1024|cjk2-3|fts2|unicode61 remove_diacritics 2 tokenchars '_'|kiwi-add-0.23.0",
@@ -13,10 +13,14 @@
   "chunk_count": 20344,
   "nodes": 96,
   "edges": 76,
-  "embedding_provider": "onnx_int8",
-  "embedding_model": "Xenova/bge-m3",
-  "embedding_dim": 1024,
-  "commit": "422e20cce0e06f3d9d03ba004bb468f74e84eb00",
+  "env_for_index": {
+    "EMBEDDING_PROVIDER": "onnx_int8",
+    "EMBEDDING_MODEL": "Xenova/bge-m3",
+    "EMBEDDING_DIM": "1024",
+    "EMBEDDING_PRECISION": "int8",
+    "KIWI_MORPH": "1"
+  },
+  "commit": "727aa704c6f4108bae6942c7418818ceb0b6051a",
   "eval": {
     "retrieval": [
       "  vector       0.583   0.750   0.917    0.648",
