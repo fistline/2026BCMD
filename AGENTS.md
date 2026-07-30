@@ -50,7 +50,8 @@ data-platform 자체 스킬(corpus-search·corpus-graph 등)은 `data-platform/.
   프롬프트 3종(`dist/`)을 생성한다. **소스 수정 후 반드시 `make prompts`**(= `python3 build_prompts.py`)로
   재생성하고, `dist/`는 손으로 고치지 않는다. 절차는 `gen-docs/st_prospectus/PACKAGING.md`.
 - **clone 후 한 번 `make quickstart`** — 훅·스킬을 세우고 코퍼스를 질의 가능 상태까지
-  올린다(약 88초. 색인을 직접 빌드하면 약 32분이고, quickstart는 발행본을 받아 설치한다).
+  올린다(빈 디렉터리 clone에서 질의까지 실측 89초 [M:clone-to-query]. 캐시가 따뜻한 기계
+  기준이고, 직접 빌드하면 약 32분이다 — quickstart는 발행본을 받아 설치한다).
   전부 멱등이라 다시 돌려도 안전하다. 훅·스킬만 필요하면 `make hooks && make skills`다 —
   둘 다 git이 clone에 실어 보내지 않는
   것을 각 사본에서 세우는 일이다. `make hooks`는 `core.hooksPath`를 가리켜 커밋 시
