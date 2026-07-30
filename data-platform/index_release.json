@@ -14,8 +14,9 @@
   "nodes": 96,
   "edges": 76,
   "embedding_provider": "onnx_int8",
+  "embedding_model": "Xenova/bge-m3",
   "embedding_dim": 1024,
-  "commit": "25f4d18779d1d3e754a5887648a0769eb5656cfd",
+  "commit": "422e20cce0e06f3d9d03ba004bb468f74e84eb00",
   "eval": {
     "retrieval": [
       "  vector       0.583   0.750   0.917    0.648",

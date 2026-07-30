@@ -259,6 +259,40 @@ def _vector_signature_of_the_build() -> str:
     return row[0]
 
 
+def _settings_that_reproduce(signature: str) -> dict:
+    """The three `.env` values a consumer needs, PROVEN rather than asserted.
+
+    `make fetch-index` refuses an index whose `index_signature` disagrees with the
+    local one, and the default in `.env.example` is `hashing` (chosen so a build
+    never needs a model download), so a fresh clone is refused until its `.env`
+    names the publisher's embedder. `make quickstart` writes those three lines
+    from this record.
+
+    Recording what the publisher HAPPENS to have configured would be a guess: the
+    settings can have moved since the build. So they are only recorded after
+    recomputing `index_signature` from them and finding it equal to the one the
+    index carries -- the same comparison the read path makes on every query.
+    """
+    from pipeline import get_settings
+    from pipeline.build_rag import get_embedder, index_signature
+
+    settings = get_settings()
+    computed = index_signature(get_embedder(settings), settings.embedding_dim)
+    if computed != signature:
+        raise SystemExit(
+            "[publish] this tree's settings do not reproduce the index being published, so\n"
+            "  the `.env` values a consumer needs cannot be recorded from them.\n"
+            f"  index:    {signature}\n"
+            f"  settings: {computed}\n"
+            "  Align .env with the build, or rebuild with `make index-canonical`."
+        )
+    return {
+        "embedding_provider": settings.embedding_provider,
+        "embedding_model": settings.embedding_model,
+        "embedding_dim": settings.embedding_dim,
+    }
+
+
 def _eval_proof() -> dict:
     """Run the three floors and keep what they printed. A failure stops the
     publish -- the artifact cannot ship unproven, so there is no flag here to skip
@@ -335,6 +369,7 @@ def cmd_publish(args) -> int:
     signature = meta["index_signature"]
     chunk_count = int(meta.get("chunk_count", 0))
     vector_signature = _vector_signature_of_the_build()
+    embedder_settings = _settings_that_reproduce(signature)
     tag = tag_for(corpus, signature, chunk_count, vector_signature)
     repo = _repo_slug()
 
@@ -373,8 +408,8 @@ def cmd_publish(args) -> int:
         "chunk_count": chunk_count,
         "nodes": int(meta.get("node_count", 0)),
         "edges": int(meta.get("edge_count", 0)),
-        "embedding_provider": meta.get("embedding_provider", ""),
-        "embedding_dim": int(meta.get("embedding_dim", 0)),
+        # The .env a consumer needs to be allowed to install this index at all.
+        **embedder_settings,
         "commit": _git("rev-parse", "HEAD"),
         "eval": proof,
     }

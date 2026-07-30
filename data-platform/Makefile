@@ -34,10 +34,39 @@ else
 SYNC_EXTRAS := --extra gpu-$(strip $(GPU)) --extra kiwi --extra web
 endif
 
-.PHONY: help corpus-id snapshot restore chunk-ceiling index-canonical fetch-index warm-cache publish-index setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
+.PHONY: help quickstart corpus-id snapshot restore chunk-ceiling index-canonical fetch-index warm-cache publish-index setup setup-gpu gpu-probe bench-ep bench-concurrent ep-equiv warm-models reset seed ingest transform index build sync watch smoke query ask collections impact graph graph-serve clean clean-index verify sync-skills export gate triage dupes dupes-twins dupes-controls eval eval-baseline eval-graph eval-graph-baseline eval-ask eval-ask-baseline warm-rerank eval-rerank eval-rerank-baseline ocr-compare
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+
+quickstart: ## Clone -> queryable -> ready to add documents, in one command
+	# The five steps a fresh clone needs, in the only order that works. Each is
+	# idempotent, so re-running this is cheap and safe.
+	@echo "== 1/5 dependencies =="
+	@$(MAKE) setup
+	@echo
+	@echo "== 2/5 .env: the published index is refused unless the embedder matches =="
+	# The default is `hashing` on purpose (no model download, so `make build` works
+	# offline), which is exactly why a fresh clone cannot install the published
+	# index until this runs. An existing .env is reported on, never overwritten.
+	@$(PY) tools/bootstrap_env.py
+	@echo
+	@echo "== 3/5 embedder (one-time online fetch) =="
+	@$(MAKE) warm-models
+	@echo
+	@echo "== 4/5 index =="
+	@$(MAKE) fetch-index
+	@echo
+	@echo "== 5/5 vector cache, so adding a document does not re-encode the corpus =="
+	@$(PY) tools/warm_cache.py --if-missing
+	@echo
+	@echo "Ready. Ask the corpus something:"
+	@echo "    make query Q=\"예치금 분리보관 의무\""
+	@echo "    make ask   Q=\"스테이블코인 발행자 준비자산\""
+	@echo
+	@echo "To add a document: drop it in source/<collection>/, add its row to"
+	@echo "source/CORPUS_MANIFEST.tsv (sha256 + bytes + where it came from), then"
+	@echo "\`make build\` -- only the new chunks are encoded."
 
 setup: ## Resolve dependencies (incl. configured extras) and install Meltano plugins
 	$(UV) sync $(SYNC_EXTRAS)

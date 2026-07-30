@@ -126,7 +126,7 @@ def verify_against_lake() -> int:
     return 0
 
 
-def warm() -> int:
+def warm(if_missing: bool = False) -> int:
     from pipeline import get_paths
 
     paths = get_paths()
@@ -136,6 +136,12 @@ def warm() -> int:
     if not index.exists():
         raise SystemExit(f"[warm-cache] no index at {index}. Run `make fetch-index` first.")
     if cache.exists():
+        # `make quickstart` runs this every time, and a second run must not fail on
+        # a state that is already correct. An explicit flag rather than a swallowed
+        # error: nothing else gets to decide that a refusal was not serious.
+        if if_missing:
+            print(f"[warm-cache] {cache.name} already exists; leaving it alone.")
+            return 0
         raise SystemExit(
             f"[warm-cache] {cache} already exists. It is not overwritten: a cache can hold\n"
             "  vectors from a model or provider this would not notice. Delete it deliberately\n"
@@ -242,8 +248,13 @@ def main(argv=None) -> int:
         action="store_true",
         help="Only check that embed_text_of() still matches gold/chunks.sql (needs the lake)",
     )
+    parser.add_argument(
+        "--if-missing",
+        action="store_true",
+        help="Succeed quietly when a cache already exists (for `make quickstart`)",
+    )
     args = parser.parse_args(argv)
-    return verify_against_lake() if args.verify_against_lake else warm()
+    return verify_against_lake() if args.verify_against_lake else warm(args.if_missing)
 
 
 if __name__ == "__main__":

@@ -18,10 +18,17 @@ SKILL_BASES := . data-platform
 # 코드가 오늘 실패한다. 올릴 때는 올리고 나서 한 번 돌려보고 커밋한다.
 RUFF := uvx ruff@0.16.0
 
-.PHONY: help check lint fmt hooks skills verify prompts
+.PHONY: help quickstart check lint fmt hooks skills verify prompts
 
 help: ## 이 목록
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
+
+quickstart: ## clone 직후 한 번: 훅·스킬을 세우고 코퍼스를 바로 쓸 수 있게 한다
+	# git 이 clone 에 실어 보내지 않는 것들(훅·스킬 어댑터)을 세우고,
+	# data-platform 을 질의 가능 상태까지 끌어올린다. 전부 멱등이다.
+	@$(MAKE) hooks
+	@$(MAKE) skills
+	@$(MAKE) -C data-platform quickstart
 
 check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매터 + dist 최신성 + 하드웨어 seam)
 	@echo "== hardware seam (pipeline/ 은 runtime.py 를 통해서만 가속기를 안다) =="
