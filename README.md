@@ -268,6 +268,10 @@ make impact NODE=<node>                      # 의존 그래프 상 영향 범�
   전부 git-ignore 대상입니다. 코퍼스 원본은 `data-platform/source/`에 두며(이곳은 git-ignore 대상이
   아니라 추적 대상입니다). 이렇게 나누는 이유는 `data-platform/README.md`의
   *control/data plane* 절에 있습니다.
+- **실행이 만들어 낸 산출물도 커밋하지 않습니다** — `gen-docs/st_prospectus/<slug>/`와
+  `gen-apps/<slug>/`에는 발행사의 증권신고서 초안과 투자자 데이터가 떨어집니다. 이 리모트는
+  공개이고, push된 커밋은 지워도 히스토리에 남습니다. `.gitignore`가 1차로 막고, 패턴을
+  넣는 것을 잊었을 때는 `make check`가 막습니다. 작업메모는 `docs/design/`에 둡니다.
 
 > **저장소 경계·상태:** 루트 `26bmdc/` 전체가 **하나의 git 저장소**로
 > `data-platform`·`gen-docs`·`gen-apps`를 함께 추적합니다(원격

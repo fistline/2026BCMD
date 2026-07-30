@@ -34,6 +34,14 @@ data-platform 자체 스킬(corpus-search·corpus-graph 등)은 `data-platform/.
   `gen-docs/st_prospectus/<slug>/`(문서) ↔ `gen-apps/<slug>/`(dApp). 발행사+증권명에서 파생.
   **예약어**(슬러그로 금지): `st-service-dapp`, `filing-to-dapp`, `sto-filing`.
   이 슬러그는 data-platform의 node-id 슬러그(한글·언더스코어 유지)와 **별개 체계**다.
+- **생성 산출물은 커밋하지 않는다** — 그 두 자리에 떨어지는 것은 발행사의 증권신고서
+  초안과 투자자 데이터이고, 이 저장소의 리모트는 공개다. push된 커밋은 지워도 히스토리에
+  남으니 이 실수는 되돌릴 수 없는 쪽이다. `.gitignore`의 패턴 목록은 여전히 손으로
+  유지하지만 **잊는 것이 조용하지는 않다** — `make check`(`tools/check_outputs.py`)가 두
+  루트에서 git이 추적도 ignore도 하지 않는 디렉터리를 실패로 잡고, `git add -A`로
+  스테이징해도 잡는다. 새로 쓰는 스킬(`SKILL.md`가 있는 디렉터리)은 커밋 대상으로 보고
+  통과시킨다. 작업메모·검토문서는 `docs/design/`(추적하지 않음)에 둔다 — 스킬 소스 옆에
+  두면 추적 대상이 되고, 실제로 그렇게 두 건이 공개 리모트로 나갔다.
 - **루트에서 코퍼스 조회** — `make -C data-platform query Q="..."`. 색인이 있어야 하며, 없으면
   `make -C data-platform fetch-index`(발행된 색인을 받아 설치, 약 1분)나 `build`(직접 인코딩,
   약 32분) 중 하나가 선행된다 — **둘 다 사용자 확인 후에** 돌린다(전자는 네트워크, 후자는 무겁다).

@@ -11,6 +11,9 @@
 PY ?= python3
 SKILL_CHECK := data-platform/tools/check_skills.py
 SKILL_SYNC := data-platform/tools/sync_skills.py
+OUTPUT_CHECK := data-platform/tools/check_outputs.py
+# 실행이 산출물을 떨어뜨리는 자리. 리모트가 공개라 여기서 새면 되돌릴 수 없다.
+OUTPUT_ROOTS := gen-apps gen-docs/st_prospectus
 # 스킬 정본이 있는 영역들. 각 영역의 `.agents/skills/` 가 정본이고 `.claude/skills/` 는
 # 여기서 만드는 어댑터다(추적하지 않는다 — 이유는 sync_skills.py 의 docstring).
 SKILL_BASES := . data-platform
@@ -52,6 +55,8 @@ check: lint ## 루트에 걸친 것만 빠르게 (린트 + 스킬 프론트매�
 	@$(PY) $(SKILL_CHECK) .agents/skills data-platform/.agents/skills
 	@echo "== 스킬 어댑터가 정본과 일치하는가 (.claude/skills/ 는 생성물) =="
 	@$(PY) $(SKILL_SYNC) --check $(SKILL_BASES)
+	@echo "== 생성 산출물이 커밋으로 새지 않는가 (리모트가 공개다) =="
+	@$(PY) $(OUTPUT_CHECK) $(OUTPUT_ROOTS)
 	@echo "== sto-filing dist/ 가 스킬 정본과 일치하는가 =="
 	@cd gen-docs/st_prospectus && $(PY) build_prompts.py --check
 

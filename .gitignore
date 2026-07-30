@@ -33,11 +33,25 @@ gen-apps/**/*.log
 #   - assembled prompts under dist/ (regenerated from source by build_prompts.py)
 # These are matched by explicit patterns rather than a blanket gen-*/*/ so a NEW
 # skill folder is never accidentally hidden. Add a new output folder's pattern here.
+#
+# Forgetting to is no longer silent: `make check` runs tools/check_outputs.py, which
+# fails on any directory under these roots that git neither tracks nor ignores. It
+# had to become a gate because this list is hand-maintained and the remote is public
+# — two dated working notes reached it before the gate existed, and a pushed commit
+# survives its own deletion in the history.
 gen-docs/**/dist/
 gen-docs/st_prospectus/*-workspace/
 gen-docs/st_prospectus/energyasset-gas-station-1/
 gen-apps/*-workspace/
 gen-apps/energyasset-gas-station-1/
+
+# Local databases anywhere in the tree. data-platform/.gitignore already carries
+# `*.sqlite`, but a nested .gitignore only governs its own directory, so it never
+# reached a generated dApp's store — `gen-apps/<slug>/packages/nextjs/data/*.sqlite`
+# holds investor and KYC records, which is the last thing that should be committable.
+*.sqlite
+*.sqlite3
+*.db
 
 # Auto-installed browser binaries (Playwright / Scrapling, used by fetch_web.py)
 .cache/ms-playwright/
